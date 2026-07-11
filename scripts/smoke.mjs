@@ -8,6 +8,7 @@ const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8
 
 const requiredFiles = [
   packageJson.main,
+  packageJson.icon,
   "README.md",
   "syntaxes/elfui-chain.tmLanguage.json",
   "dist/lsp-server.js",

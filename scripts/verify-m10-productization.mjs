@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(packageRoot, "..", "..");
-const uiKitComponentsRoot = path.join(repoRoot, "ui-kit", "src", "components");
+const uiKitComponentsRoot = resolveUiKitComponentsRoot();
 const smokeSuitePath = path.join(packageRoot, "test", "smoke", "suite", "extension.test.cjs");
 const languageServiceSpecPath = path.join(
   packageRoot,
@@ -164,6 +164,26 @@ function collectFiles(root, extensions) {
   }
 
   return files.sort();
+}
+
+function resolveUiKitComponentsRoot() {
+  const explicitRoot = process.env.ELFUI_UI_KIT_COMPONENTS_ROOT;
+  const candidates = [
+    explicitRoot,
+    path.join(packageRoot, "..", "ui-kit", "src", "components"),
+    path.join(repoRoot, "elfui", "ui-kit", "src", "components"),
+    path.join(repoRoot, "ui-kit", "src", "components")
+  ].filter(Boolean);
+
+  const match = candidates.find((candidate) => fs.existsSync(candidate));
+
+  if (match) {
+    return match;
+  }
+
+  throw new Error(
+    `Missing required ui-kit components directory. Checked: ${candidates.join(", ")}`
+  );
 }
 
 function readFiles(files) {

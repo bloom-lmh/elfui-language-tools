@@ -29,6 +29,7 @@
     "onLanguage:javascriptreact"
   ],
   "main": "./dist/extension.js",
+  "icon": "images/icon.png",
   "contributes": {
     "commands": [
       {
@@ -235,6 +236,7 @@
   },
   "files": [
     "dist",
+    "images",
     "LICENSE.txt",
     "snippets",
     "syntaxes",

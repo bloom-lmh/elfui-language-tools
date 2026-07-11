@@ -7,13 +7,13 @@ import { build, context } from "esbuild";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const packageRoot = path.resolve(scriptDir, "..");
-const repoRoot = path.resolve(packageRoot, "..", "..");
 const distDir = path.join(packageRoot, "dist");
 const bundledTypeScriptLibDir = path.join(distDir, "typescript-lib");
 const typeScriptPluginPackageDir = path.join(
   packageRoot,
   "elfui-language-features-typescript-plugin"
 );
+const typeScriptPluginPackageDistDir = path.join(typeScriptPluginPackageDir, "dist");
 const typeScriptPluginRuntimeDir = path.join(
   packageRoot,
   "node_modules",
@@ -31,7 +31,7 @@ const baseConfig = {
   platform: "node",
   sourcemap: true,
   target: "node20",
-  tsconfig: path.join(repoRoot, "tsconfig.base.json")
+  tsconfig: path.join(packageRoot, "tsconfig.json")
 };
 
 const buildConfigs = [
@@ -84,6 +84,13 @@ function copyTypeScriptLibFiles() {
 }
 
 function syncTypeScriptServerPlugin() {
+  fs.rmSync(typeScriptPluginPackageDistDir, { force: true, recursive: true });
+  fs.mkdirSync(typeScriptPluginPackageDistDir, { recursive: true });
+
+  ["typescript-plugin.js", "typescript-plugin.js.map"].forEach((fileName) => {
+    fs.copyFileSync(path.join(distDir, fileName), path.join(typeScriptPluginPackageDistDir, fileName));
+  });
+
   fs.rmSync(typeScriptPluginRuntimeDir, { force: true, recursive: true });
   fs.mkdirSync(typeScriptPluginRuntimeDir, { recursive: true });
 

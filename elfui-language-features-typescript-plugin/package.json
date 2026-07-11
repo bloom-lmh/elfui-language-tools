@@ -1,5 +1,17 @@
 {
   "name": "elfui-language-features-typescript-plugin",
   "version": "0.2.6",
-  "main": "./index.js"
+  "main": "./index.js",
+  "description": "TypeScript server plugin for ElfUI language features.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bloom-lmh/elfui-language-tools.git",
+    "directory": "elfui-language-features-typescript-plugin"
+  },
+  "files": [
+    "index.js",
+    "dist",
+    "LICENSE"
+  ]
 }

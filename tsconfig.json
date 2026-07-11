@@ -1,21 +1,17 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "include": [
-    "src",
-    "../../packages/compiler/src/codegen.ts",
-    "../../packages/compiler/src/diagnostic.ts",
-    "../../packages/compiler/src/macro-component.ts",
-    "../../packages/compiler/src/vite.ts",
-    "../../packages/compiler-template/src/**/*.ts"
-  ],
-  "exclude": [
-    "../../packages/compiler/src/__tests__/**",
-    "../../packages/compiler-template/src/__tests__/**"
-  ],
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["test/smoke/workspace/**"],
   "compilerOptions": {
-    "composite": true,
-    "rootDir": "../..",
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "vscode"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true
   }
 }

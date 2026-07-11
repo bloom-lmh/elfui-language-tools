@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { TextDocument } from "vscode-languageserver-textdocument";
@@ -48,6 +48,16 @@ const readCompletionNewText = (item: { insertText?: string; textEdit?: { newText
 
 const readDiagnosticMessages = (diagnostics: ReturnType<typeof createElfDiagnostics>): string[] =>
   diagnostics.map((item) => (typeof item.message === "string" ? item.message : item.message.value));
+
+const readUiKitComponent = (...segments: string[]) => {
+  const candidates = [
+    path.resolve(process.cwd(), "..", "elfui-kit", "src", "components", ...segments),
+    path.resolve(process.cwd(), "..", "..", "ui-kit", "src", "components", ...segments)
+  ];
+  const filePath = candidates.find((candidate) => existsSync(candidate));
+
+  return filePath ? readFileSync(filePath, "utf8") : null;
+};
 
 const readHoverText = (hover: Awaited<ReturnType<typeof createElfHover>>): string => {
   const contents = hover?.contents;
@@ -2188,20 +2198,12 @@ describe("ElfUI language service", () => {
   });
 
   it("does not report HTML scanner errors for the ui-kit Menu template", () => {
-    const source = readFileSync(
-      path.resolve(
-        process.cwd(),
-        "..",
-        "..",
-        "ui-kit",
-        "src",
-        "components",
-        "Navigation",
-        "Menu",
-        "index.ts"
-      ),
-      "utf8"
-    );
+    const source = readUiKitComponent("Navigation", "Menu", "index.ts");
+
+    if (!source) {
+      return;
+    }
+
     const document = TextDocument.create("file:///Menu.ts", "typescript", 0, source);
     const diagnostics = readDiagnosticMessages(createElfDiagnostics(document)).filter((item) =>
       item.includes("Unexpected character in tag")
@@ -2211,20 +2213,12 @@ describe("ElfUI language service", () => {
   });
 
   it("keeps useRef values valid in the ui-kit Dropdown template", () => {
-    const source = readFileSync(
-      path.resolve(
-        process.cwd(),
-        "..",
-        "..",
-        "ui-kit",
-        "src",
-        "components",
-        "Navigation",
-        "Dropdown",
-        "index.ts"
-      ),
-      "utf8"
-    );
+    const source = readUiKitComponent("Navigation", "Dropdown", "index.ts");
+
+    if (!source) {
+      return;
+    }
+
     const document = TextDocument.create("file:///Dropdown.ts", "typescript", 0, source);
     const diagnostics = readDiagnosticMessages(createElfDiagnostics(document)).filter((item) =>
       item.includes("Property 'value' does not exist")

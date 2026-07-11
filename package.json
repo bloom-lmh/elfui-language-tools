@@ -241,7 +241,8 @@
     "README.md"
   ],
   "dependencies": {
-    "typescript": "latest",
+    "@elfui/compiler": "0.1.0-beta.1",
+    "typescript": "^5.9.3",
     "vscode-css-languageservice": "latest",
     "vscode-html-languageservice": "latest",
     "vscode-languageclient": "^9.0.1",
@@ -249,10 +250,13 @@
     "vscode-languageserver-textdocument": "latest"
   },
   "devDependencies": {
+    "@types/node": "25.8.0",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.28.1",
     "mocha": "^11.7.5",
+    "vitest": "^4.1.10",
     "vscode-oniguruma": "2",
     "vscode-textmate": "9"
   },

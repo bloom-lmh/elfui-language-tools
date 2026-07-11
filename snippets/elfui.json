@@ -1,0 +1,35 @@
+{
+  "ElfUI macro component": {
+    "prefix": "elfc",
+    "body": [
+      "import { defineHtml, html } from \"elfui\";",
+      "",
+      "const ${1:MyComponent} = defineHtml(html`",
+      "  <div>$0</div>",
+      "`);",
+      "",
+      "export default ${1:MyComponent};"
+    ],
+    "description": "Create an ElfUI macro component."
+  },
+  "ElfUI init template": {
+    "prefix": "elfinit",
+    "body": [
+      "import { defineHtml, html, useRef } from \"elfui\";",
+      "",
+      "const ${1:title} = useRef(${2:\"Hello ElfUI\"});",
+      "",
+      "const ${3:handleClick} = () => {",
+      "  ${1:title}.set(${4:\"Hello ElfUI\"});",
+      "};",
+      "",
+      "export default defineHtml(html`",
+      "  <main class=\"${5:app}\">",
+      "    <h1>\\${${1:title}}</h1>",
+      "    <button type=\"button\" @click=\\${${3:handleClick}}>$0</button>",
+      "  </main>",
+      "`);"
+    ],
+    "description": "Create an ElfUI macro component with starter state and handler."
+  }
+}

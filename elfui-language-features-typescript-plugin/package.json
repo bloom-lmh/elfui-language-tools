@@ -1,0 +1,5 @@
+{
+  "name": "elfui-language-features-typescript-plugin",
+  "version": "0.2.6",
+  "main": "./index.js"
+}

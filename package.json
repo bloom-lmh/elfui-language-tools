@@ -1,0 +1,263 @@
+{
+  "name": "elfui-language-features",
+  "displayName": "ElfUI Language Tools",
+  "description": "VS Code language features for ElfUI macro components.",
+  "version": "0.2.6",
+  "license": "MIT",
+  "type": "commonjs",
+  "publisher": "elfui",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bloom-lmh/elfui-language-tools.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "elfui",
+    "web-components",
+    "language-server"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "elfui.restartLanguageServer",
+        "title": "ElfUI: Restart Language Server"
+      },
+      {
+        "command": "elfui.showOutputChannel",
+        "title": "ElfUI: Show Output Channel"
+      },
+      {
+        "command": "elfui.diagnoseIntegration",
+        "title": "ElfUI: Diagnose Integration"
+      },
+      {
+        "command": "elfui.showComponentStructure",
+        "title": "ElfUI: Show Component Structure"
+      },
+      {
+        "command": "elfui.showDynamicPoints",
+        "title": "ElfUI: Show Dynamic Points"
+      },
+      {
+        "command": "elfui.previewComponent",
+        "title": "ElfUI: Preview Component"
+      },
+      {
+        "command": "elfui.migrateTemplateBindings",
+        "title": "ElfUI: Migrate Template Bindings to Expressions"
+      },
+      {
+        "command": "elfui.showWorkspaceIndexReport",
+        "title": "ElfUI: Show Workspace Index Report"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "elfui.componentStructure",
+          "name": "ElfUI Components"
+        }
+      ]
+    },
+    "grammars": [
+      {
+        "scopeName": "elfui.chain.injection",
+        "path": "./syntaxes/elfui-chain.tmLanguage.json",
+        "injectTo": [
+          "source.ts",
+          "source.tsx",
+          "source.js",
+          "source.jsx"
+        ]
+      }
+    ],
+    "typescriptServerPlugins": [
+      {
+        "name": "elfui-language-features-typescript-plugin",
+        "enableForWorkspaceTypeScriptVersions": true
+      }
+    ],
+    "snippets": [
+      {
+        "language": "typescript",
+        "path": "./snippets/elfui.json"
+      },
+      {
+        "language": "typescriptreact",
+        "path": "./snippets/elfui.json"
+      },
+      {
+        "language": "javascript",
+        "path": "./snippets/elfui.json"
+      },
+      {
+        "language": "javascriptreact",
+        "path": "./snippets/elfui.json"
+      }
+    ],
+    "configuration": {
+      "title": "ElfUI",
+      "properties": {
+        "elfui.languageFeatures.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable ElfUI component language features."
+        },
+        "elfui.languageFeatures.formatOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Format ElfUI template and style strings when saving TS/TSX/JS/JSX files."
+        },
+        "elfui.languageFeatures.format.tabSize": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "description": "Tab size used when formatting ElfUI template and style strings."
+        },
+        "elfui.languageFeatures.format.wrapLineLength": {
+          "type": "number",
+          "default": 120,
+          "minimum": 0,
+          "description": "Maximum line length used when formatting ElfUI template and style strings. Set to 0 to disable wrapping."
+        },
+        "elfui.languageFeatures.completion.templateBindingStyle": {
+          "type": "string",
+          "default": "expression",
+          "enum": [
+            "expression",
+            "quoted"
+          ],
+          "enumDescriptions": [
+            "Complete template values as ElfUI expression bindings, for example :prop=${value}.",
+            "Complete template values as quoted strings, for example :prop=\"value\"."
+          ],
+          "description": "Controls snippet style for ElfUI directive and prop binding completions."
+        },
+        "elfui.languageFeatures.completion.eventBindingStyle": {
+          "type": "string",
+          "default": "expression",
+          "enum": [
+            "expression",
+            "quoted"
+          ],
+          "enumDescriptions": [
+            "Complete event handlers as ElfUI expression bindings, for example @click=${handler}.",
+            "Complete event handlers as quoted strings, for example @click=\"handler\"."
+          ],
+          "description": "Controls snippet style for ElfUI event binding completions."
+        },
+        "elfui.languageFeatures.semanticTokens.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable ElfUI semantic tokens. Disabled by default so TypeScript keeps its built-in semantic highlighting."
+        },
+        "elfui.languageFeatures.diagnostics.suppressNativeTemplateLocals": {
+          "type": "boolean",
+          "default": true,
+          "description": "Suppress native TypeScript missing-name diagnostics only for ElfUI template locals such as v-for items, slot scope variables, and $event."
+        },
+        "elfui.languageFeatures.workspace.maxScanFiles": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 1,
+          "description": "Maximum number of TS/JS source files scanned for workspace component metadata."
+        },
+        "elfui.languageFeatures.workspace.indexDebounceMs": {
+          "type": "number",
+          "default": 250,
+          "minimum": 0,
+          "description": "Debounce delay in milliseconds before rebuilding the workspace component index after file changes."
+        },
+        "elfui.languageFeatures.workspace.perfLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log workspace component index timing and cache statistics to the ElfUI language server output."
+        },
+        "elfui.languageFeatures.componentTagColor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "#4FC1FF",
+          "description": "Color used for ElfUI component tags in template strings. Set to null to stop managing the color."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[typescript]": {
+        "editor.quickSuggestions": {
+          "strings": "on"
+        }
+      },
+      "[typescriptreact]": {
+        "editor.quickSuggestions": {
+          "strings": "on"
+        }
+      },
+      "[javascript]": {
+        "editor.quickSuggestions": {
+          "strings": "on"
+        }
+      },
+      "[javascriptreact]": {
+        "editor.quickSuggestions": {
+          "strings": "on"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "bundle": "node ./scripts/build.mjs",
+    "build": "pnpm typecheck && pnpm bundle",
+    "clean": "rimraf dist",
+    "package:vsix": "node ./scripts/package-local.mjs",
+    "package:vsix:fast": "node ./scripts/package-local.mjs --skip-verify",
+    "smoke": "node ./scripts/smoke.mjs && node ./test/grammar/runGrammarTests.mjs",
+    "smoke:host": "pnpm build && node ./test/smoke/runTest.cjs",
+    "test": "vitest run --config vitest.config.ts",
+    "test:grammar": "node ./test/grammar/runGrammarTests.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify:m10": "node ./scripts/verify-m10-productization.mjs",
+    "vscode:prepublish": "pnpm build"
+  },
+  "files": [
+    "dist",
+    "LICENSE.txt",
+    "snippets",
+    "syntaxes",
+    "README.md"
+  ],
+  "dependencies": {
+    "typescript": "latest",
+    "vscode-css-languageservice": "latest",
+    "vscode-html-languageservice": "latest",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "latest",
+    "vscode-languageserver-textdocument": "latest"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "mocha": "^11.7.5",
+    "vscode-oniguruma": "2",
+    "vscode-textmate": "9"
+  },
+  "homepage": "https://github.com/bloom-lmh/elfui-language-tools",
+  "bugs": {
+    "url": "https://github.com/bloom-lmh/elfui-language-tools/issues"
+  }
+}

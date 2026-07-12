@@ -1,26 +1,63 @@
 name: Release VSIX
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  package:
+  publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with:
           version: 10.28.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm package:vsix
-      - uses: actions/upload-artifact@v4
-        with:
-          name: elfui-language-tools-vsix
-          path: "*.vsix"
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm smoke
+      - name: Resolve release metadata
+        id: release
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            test "$GITHUB_REF_NAME" = "v$version"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Package VSIX
+        run: pnpm package:vsix:fast
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        shell: bash
+        run: |
+          test -n "$VSCE_PAT" || { echo "VSCE_PAT is required to publish to VS Code Marketplace." >&2; exit 1; }
+          vsix=$(find .local-vsix -maxdepth 1 -name '*.vsix' -print -quit)
+          test -n "$vsix"
+          pnpm exec vsce publish --packagePath "$vsix" --pat "$VSCE_PAT" --skip-duplicate
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          vsix=$(find .local-vsix -maxdepth 1 -name '*.vsix' -print -quit)
+          test -n "$vsix"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$vsix" --clobber
+            exit 0
+          fi
+          gh release create "$TAG" "$vsix" --title "ElfUI Language Tools $VERSION" --generate-notes

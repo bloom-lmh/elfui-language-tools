@@ -397,6 +397,39 @@ const elfBuiltInComponentTags = new Set([
   "TransitionGroup"
 ]);
 
+const elfBuiltInComponentCompletions = [
+  {
+    detail: "ElfUI built-in component",
+    label: "Teleport",
+    newText: 'Teleport to="${1:body}">$0</Teleport>'
+  },
+  {
+    detail: "ElfUI built-in component",
+    label: "Transition",
+    newText: 'Transition name="${1:fade}">$0</Transition>'
+  },
+  {
+    detail: "ElfUI built-in component",
+    label: "TransitionGroup",
+    newText: 'TransitionGroup name="${1:list}" tag="${2:div}">$0</TransitionGroup>'
+  },
+  {
+    detail: "ElfUI built-in component",
+    label: "KeepAlive",
+    newText: "KeepAlive>$0</KeepAlive>"
+  },
+  {
+    detail: "ElfUI built-in component",
+    label: "Suspense",
+    newText: "Suspense>$0</Suspense>"
+  },
+  {
+    detail: "ElfUI dynamic component outlet",
+    label: "component",
+    newText: "component :is=${1:component}></component>"
+  }
+];
+
 export const createElfCompletionList = (
   document: TextDocument,
   position: Position,
@@ -3719,6 +3752,15 @@ const createTagCompletions = (
       newText: createTagCompletionText(label, completionContext)
     })
   ),
+  ...elfBuiltInComponentCompletions.map((item) =>
+    createTemplateCompletionItem(document, context, completionContext, {
+      detail: item.detail,
+      insertTextFormat: InsertTextFormat.Snippet,
+      kind: CompletionItemKind.Class,
+      label: item.label,
+      newText: createBuiltInComponentCompletionText(item.newText, completionContext)
+    })
+  ),
   ...context.component.uses.map((item) =>
     createTemplateCompletionItem(document, context, completionContext, {
       detail: "ElfUI local component",
@@ -3736,6 +3778,11 @@ const createTagCompletionText = (tag: string, completionContext: TemplateComplet
 
   return completionContext.kind === "tag" && completionContext.mode === "bare" ? `<${body}` : body;
 };
+
+const createBuiltInComponentCompletionText = (
+  text: string,
+  completionContext: TemplateCompletionContext
+) => (completionContext.kind === "tag" && completionContext.mode === "bare" ? `<${text}` : text);
 
 const createAutoImportComponentCompletions = (
   document: TextDocument,

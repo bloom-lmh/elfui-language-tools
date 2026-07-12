@@ -89,6 +89,24 @@ suite("ElfUI Language Features Smoke", function () {
     );
   });
 
+  test("provides framework built-in component completions", async () => {
+    const { document, position } = await openFixtureWithCursor(
+      [
+        'import { defineHtml, html } from "elfui";',
+        "",
+        "export const Demo = defineHtml(html`",
+        `  <Trans${CURSOR}`,
+        "`);",
+        ""
+      ].join("\n")
+    );
+
+    const items = await waitForCompletionLabels(document, position, ["Transition", "Teleport"]);
+
+    assert(hasCompletionLabel(items, "Transition"), "Expected Transition built-in completion.");
+    assert(hasCompletionLabel(items, "Teleport"), "Expected Teleport built-in completion.");
+  });
+
   test("provides focused attribute completions", async () => {
     const { document, position } = await openFixtureWithCursor(
       [

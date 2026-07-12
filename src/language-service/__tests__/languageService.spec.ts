@@ -175,6 +175,22 @@ describe("ElfUI language service", () => {
     expect(completions.items.some((item) => item.label === "button")).toBe(true);
   });
 
+  it("completes framework built-in components in template tags", () => {
+    const source = `
+      import { defineHtml, html } from "elfui";
+
+      export const Demo = defineHtml(html\`<Trans\`);
+    `;
+    const document = createDocument(source);
+    const completions = createElfCompletionList(document, positionAfter(document, source, "<Trans"));
+    const transition = completions.items.find((item) => item.label === "Transition");
+
+    expect(transition).toBeDefined();
+    expect(readCompletionNewText(transition!)).toBe('Transition name="${1:fade}">$0</Transition>');
+    expect(completions.items.some((item) => item.label === "Teleport")).toBe(true);
+    expect(completions.items.some((item) => item.label === "KeepAlive")).toBe(true);
+  });
+
   it("keeps attribute-name completions focused on template attributes", () => {
     const source = `
       import { ElfUI } from "elfui";

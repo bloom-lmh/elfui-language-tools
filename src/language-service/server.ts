@@ -258,7 +258,15 @@ export const startElfLanguageServer = (connection: Connection) => {
       return null;
     }
 
-    return createElfHover(document, params.position);
+    return createElfHover(
+      document,
+      params.position,
+      createLanguageServiceOptionsForDocument(
+        languageServiceOptions,
+        indexedComponentsByUri,
+        document.uri
+      )
+    );
   });
 
   connection.onDefinition((params) => {

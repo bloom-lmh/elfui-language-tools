@@ -2427,4 +2427,51 @@ describe("ElfUI language service", () => {
     expect(readHoverText(hover)).toContain("ElfUI local component");
     expect(readHoverText(hover)).toContain("LocalIcon");
   });
+
+  it("provides indexed component metadata on tags, props, events and slots", () => {
+    const source = `
+      import { defineHtml, html, useComponents } from "elfui";
+      import { PackageButton } from "@acme/elfui-kit";
+
+      const onConfirm = () => {};
+      const visible = true;
+      useComponents({ PackageButton });
+
+      export default defineHtml(html\`
+        <PackageButton :open=\${visible} @confirm=\${onConfirm}>
+          <template #footer="footer">Footer</template>
+        </PackageButton>
+      \`);
+    `;
+    const document = createDocument(source);
+    const options = {
+      project: {
+        components: [
+          {
+            emits: ["confirm"],
+            exportName: "PackageButton" as const,
+            importPath: "@acme/elfui-kit",
+            localName: "PackageButton",
+            props: ["open"],
+            slotScopes: [{ name: "footer", scopeType: "{ close(): void }" }],
+            slots: ["footer"],
+            tagName: "elf-package-button"
+          }
+        ]
+      }
+    };
+
+    expect(
+      readHoverText(createElfHover(document, positionAfter(document, source, "<PackageButton"), options))
+    ).toContain("Props: `open`");
+    expect(
+      readHoverText(createElfHover(document, positionAfter(document, source, ":open"), options))
+    ).toContain("Import: `@acme/elfui-kit`");
+    expect(
+      readHoverText(createElfHover(document, positionAfter(document, source, "@confirm"), options))
+    ).toContain("ElfUI event");
+    expect(
+      readHoverText(createElfHover(document, positionAfter(document, source, "#footer"), options))
+    ).toContain("Scope: `{ close(): void }`");
+  });
 });

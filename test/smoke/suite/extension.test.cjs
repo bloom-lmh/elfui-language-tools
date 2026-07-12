@@ -993,6 +993,20 @@ suite("ElfUI Language Features Smoke", function () {
         ),
         `Expected external package component usage to be clean. Diagnostics: ${diagnostics.join("; ")}`
       );
+
+      const componentHover = await waitForHoverText(
+        usageDocument,
+        usageDocument.positionAt(usageText.indexOf("<PackageButton") + 1),
+        "Props: `label`, `open`"
+      );
+      const slotHover = await waitForHoverText(
+        usageDocument,
+        usageDocument.positionAt(usageText.indexOf("#footer") + 1),
+        "Scope: `{ action: { disabled: boolean; label: string } }`"
+      );
+
+      assert.match(componentHover, /@acme\/elfui-kit/, "Expected package import hover metadata.");
+      assert.match(slotHover, /ElfUI slot/, "Expected package slot hover metadata.");
     } finally {
       cleanupExternalPackageMetadata();
       await vscode.commands.executeCommand("elfui.restartLanguageServer");

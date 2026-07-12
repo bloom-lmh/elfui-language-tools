@@ -7,6 +7,7 @@ VS Code language features for ElfUI macro and chain components.
 - Macro component support for ordinary `.ts` / `.tsx` files that export `defineHtml()` components.
 - Realtime macro diagnostics from the ElfUI macro compiler, including template TypeScript errors, slot checks, and structured source ranges.
 - Macro-aware completion and hover for `defineProps()`, `defineEmits()`, `defineSlots()`, `defineHtml()`, and `useComponents()`.
+- Hover metadata for indexed workspace and package components, including import source, props, events, slots, and typed slot scopes.
 - HTML completion, hover, diagnostics, and closing tag support inside `.template(\`...\`)`.
 - ElfUI-aware template completion for `props()`, `setup()` returns, `emits()`, `use()` components, slot locals, and `ctx.form`.
 - Full expression completion and diagnostics in `${...}`, quoted binding, and `{{...}}` styles, including typed `v-for` locals from `useRef()` lists.

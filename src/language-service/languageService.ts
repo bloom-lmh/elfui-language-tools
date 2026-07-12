@@ -502,10 +502,25 @@ export const createElfCompletionList = (
   };
 };
 
-export const createElfHover = (document: TextDocument, position: Position): Hover | null => {
+export const createElfHover = (
+  document: TextDocument,
+  position: Position,
+  options: ElfLanguageServiceOptions = {}
+): Hover | null => {
+  const resolvedOptions = resolveLanguageServiceOptions(options);
   const templateContext = findEmbeddedDocumentContext(document, position, "template");
 
   if (templateContext) {
+    const projectMetadataHover = createProjectMetadataHover(
+      document,
+      templateContext,
+      resolvedOptions.projectComponents
+    );
+
+    if (projectMetadataHover) {
+      return projectMetadataHover;
+    }
+
     const metadataHover = createTemplateMetadataHover(document, templateContext);
 
     if (metadataHover) {
@@ -6123,6 +6138,58 @@ const createTemplateMetadataHover = (
 
   return null;
 };
+
+const createProjectMetadataHover = (
+  document: TextDocument,
+  context: EmbeddedDocumentContext,
+  projectComponents: ElfProjectComponent[]
+): Hover | null => {
+  const target = resolveProjectReferenceTarget(document, context, projectComponents);
+
+  if (!target) {
+    return null;
+  }
+
+  return {
+    contents: {
+      kind: "markdown",
+      value: createProjectReferenceHover(target)
+    },
+    range: target.range
+  };
+};
+
+const createProjectReferenceHover = (target: ElfProjectReferenceTarget): string => {
+  const { component } = target;
+  const tagName = component.tagName ?? toKebabCase(component.localName);
+  const lines =
+    target.kind === "component"
+      ? [`**<${target.name}>**`, "ElfUI indexed component."]
+      : [
+          `**${target.name}**`,
+          `ElfUI ${target.kind === "emit" ? "event" : target.kind} of \`<${tagName}>\`.`
+        ];
+
+  lines.push(`Import: \`${component.importPath}\``);
+
+  if (target.kind === "component") {
+    if (component.props?.length) lines.push(`Props: ${formatHoverNames(component.props)}`);
+    if (component.emits?.length) lines.push(`Events: ${formatHoverNames(component.emits)}`);
+    if (component.slots?.length) lines.push(`Slots: ${formatHoverNames(component.slots)}`);
+  }
+
+  if (target.kind === "slot") {
+    const scope = component.slotScopes?.find((item) => item.name === target.symbolName);
+
+    if (scope) {
+      lines.push(`Scope: \`${scope.scopeType}\``);
+    }
+  }
+
+  return lines.join("\n\n");
+};
+
+const formatHoverNames = (names: string[]) => names.map((name) => `\`${name}\``).join(", ");
 
 const createLocalComponentHover = (component: ComponentUseMeta): string => {
   const lines = [`**<${component.localName}>**`, "ElfUI local component."];

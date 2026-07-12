@@ -10,6 +10,7 @@ VS Code language features for ElfUI macro and chain components.
 - HTML completion, hover, diagnostics, and closing tag support inside `.template(\`...\`)`.
 - ElfUI-aware template completion for `props()`, `setup()` returns, `emits()`, `use()` components, slot locals, and `ctx.form`.
 - Full expression completion and diagnostics in `${...}`, quoted binding, and `{{...}}` styles, including typed `v-for` locals from `useRef()` lists.
+- Contextual DOM event typing for `$event` in event bindings, including `MouseEvent`, `KeyboardEvent`, and `InputEvent` member completions.
 - Quoted dynamic bindings such as `:key="item.id"`, `v-if="visible"`, and `@click="select(item)"` are highlighted as TypeScript expressions, while ordinary HTML values such as `class="row"` remain strings.
 - A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `html\`...\`` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
 - HTML/CSS syntax highlighting inside `.template(\`...\`)`, `.style(\`...\`)`, and `.globalStyle(\`...\`)` through embedded TextMate scopes.

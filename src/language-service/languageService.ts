@@ -3412,8 +3412,51 @@ const createTemplateForLocalDeclarations = (
   declarations.push(
     ...createSlotScopeLocalDeclarations(template, offset, context, projectComponents)
   );
+  declarations.push(...createEventLocalDeclarations(template, offset));
 
   return declarations;
+};
+
+const createEventLocalDeclarations = (template: string, offset: number): string[] => {
+  const openTag = readOpenTagFragment(template.slice(0, offset));
+
+  if (!openTag) {
+    return [];
+  }
+
+  const matches = [
+    ...openTag.fragment.matchAll(
+      /(?:^|\s)(?:@|v-on:)([\w-]+)(?:\.[\w-]+)*\s*=\s*(?:\$\{|["'])/g
+    )
+  ];
+  const eventName = matches.at(-1)?.[1]?.toLowerCase();
+
+  if (!eventName) {
+    return [];
+  }
+
+  return [`const $event = null as unknown as ${readTemplateEventType(eventName)};`];
+};
+
+const readTemplateEventType = (eventName: string): string => {
+  if (["beforeinput", "input"].includes(eventName)) {
+    return "InputEvent & { currentTarget: HTMLInputElement; target: HTMLInputElement }";
+  }
+
+  if (["change", "select"].includes(eventName)) {
+    return "Event & { currentTarget: HTMLInputElement; target: HTMLInputElement }";
+  }
+
+  if (["keydown", "keypress", "keyup"].includes(eventName)) return "KeyboardEvent";
+  if (["click", "auxclick", "contextmenu", "dblclick", "mousedown", "mouseenter", "mouseleave", "mousemove", "mouseout", "mouseover", "mouseup"].includes(eventName)) return "MouseEvent";
+  if (eventName.startsWith("pointer")) return "PointerEvent";
+  if (eventName === "wheel") return "WheelEvent";
+  if (["focus", "focusin", "focusout", "blur"].includes(eventName)) return "FocusEvent";
+  if (["drag", "dragend", "dragenter", "dragleave", "dragover", "dragstart", "drop"].includes(eventName)) return "DragEvent";
+  if (eventName === "submit") return "SubmitEvent";
+  if (eventName.startsWith("touch")) return "TouchEvent";
+
+  return "Event";
 };
 
 const createVForLocalExpressionMappings = (

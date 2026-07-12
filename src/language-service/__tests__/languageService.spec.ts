@@ -1618,6 +1618,32 @@ describe("ElfUI language service", () => {
     expect(userLabels).toContain("name");
   });
 
+  it("uses DOM event types for $event member completions", () => {
+    const source = `
+      import { defineHtml, html } from "elfui";
+
+      export const Demo = defineHtml(html\`
+        <input @input=\${$event.} />
+        <button @keydown=\${$event.}>Save</button>
+      \`);
+    `;
+    const document = createDocument(source);
+    const inputLabels = createElfCompletionList(
+      document,
+      positionAfter(document, source, "@input=${$event.")
+    ).items.map((item) => item.label);
+    const keyLabels = createElfCompletionList(
+      document,
+      positionAfter(document, source, "@keydown=${$event.")
+    ).items.map((item) => item.label);
+
+    expect(inputLabels).toContain("data");
+    expect(inputLabels).toContain("inputType");
+    expect(inputLabels).toContain("target");
+    expect(keyLabels).toContain("code");
+    expect(keyLabels).toContain("key");
+  });
+
   it("uses v-for source types for template local member completions", () => {
     const source = `
       import { defineHtml, defineProps, html } from "elfui";

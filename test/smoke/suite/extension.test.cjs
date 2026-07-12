@@ -1168,6 +1168,24 @@ suite("ElfUI Language Features Smoke", function () {
     assert(hasCompletionLabel(items, "label"), "Expected typed prop completion.");
   });
 
+  test("provides DOM event member completions inside template expressions", async () => {
+    const { document, position } = await openFixtureWithCursor(
+      [
+        'import { defineHtml, html } from "elfui";',
+        "",
+        "export const Demo = defineHtml(html`",
+        `  <input @input=\${$event.${CURSOR}} />`,
+        "`);",
+        ""
+      ].join("\n")
+    );
+
+    const items = await waitForCompletionLabels(document, position, ["data", "inputType"]);
+
+    assert(hasCompletionLabel(items, "data"), "Expected InputEvent data completion.");
+    assert(hasCompletionLabel(items, "inputType"), "Expected InputEvent inputType completion.");
+  });
+
   test("provides ElfUI Studio structure, dynamic point, preview, migration and index commands", async () => {
     const studioDocument = await openFixture(
       [

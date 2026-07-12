@@ -204,6 +204,9 @@
     }
   },
   "scripts": {
+    "changeset": "changeset",
+    "release:status": "changeset status",
+    "release:version": "changeset version",
     "bundle": "node ./scripts/build.mjs",
     "build": "pnpm typecheck && pnpm bundle",
     "clean": "rimraf dist",
@@ -237,6 +240,7 @@
     "vscode-languageserver-textdocument": "latest"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@types/node": "25.8.0",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.5.2",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { basicChainFixture } from "../__fixtures__/basicChain";
+import { elfuiDemoFixture } from "../__fixtures__/elfuiDemo";
 import { analyzeElfSource, isInsideEmbeddedRegion } from "../source";
 
 describe("analyzeElfSource", () => {
@@ -241,6 +242,16 @@ describe("analyzeElfSource", () => {
     expect(result.isMacroComponent).toBe(true);
     expect(result.components[0]?.macro).toBe(true);
     expect(result.components[0]?.templates[0]?.content).toContain("@click");
+  });
+
+  it("keeps the real @elfui/core demo page inside a macro template region", () => {
+    const result = analyzeElfSource(elfuiDemoFixture, { fileName: "App.ts" });
+    const template = result.components[0]?.templates[0];
+
+    expect(result.isMacroComponent).toBe(true);
+    expect(result.components[0]?.macro).toBe(true);
+    expect(template?.content).toContain("<elf-router-view>");
+    expect(template?.content).toContain("@click=${toggleTheme}");
   });
 
   it("collects defineModel props and update emits from macro components", () => {

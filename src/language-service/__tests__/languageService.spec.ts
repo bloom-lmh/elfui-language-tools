@@ -28,6 +28,7 @@ import {
   createElfTagComplete,
   elfSemanticTokensLegend
 } from "../languageService";
+import { elfuiDemoFixture } from "../../language-core/__fixtures__/elfuiDemo";
 
 const createDocument = (source: string) =>
   TextDocument.create("file:///Demo.ts", "typescript", 0, source);
@@ -196,6 +197,17 @@ describe("ElfUI language service", () => {
     );
 
     expect(directiveCompletions.items.map((item) => item.label)).toContain("v-if");
+  });
+
+  it("keeps the @elfui/core demo page free of template parser diagnostics", () => {
+    const document = TextDocument.create("file:///App.ts", "typescript", 0, elfuiDemoFixture);
+    const diagnostics = readDiagnosticMessages(createElfDiagnostics(document));
+    const completionPosition = document.positionAt(elfuiDemoFixture.indexOf("@click") + 1);
+    const completions = createElfCompletionList(document, completionPosition);
+
+    expect(diagnostics.some((item) => item.includes("Unexpected character in tag"))).toBe(false);
+    expect(diagnostics.some((item) => item.includes("not registered with use()"))).toBe(false);
+    expect(completions.items.map((item) => item.label)).toContain("@click");
   });
 
   it("completes framework built-in components in template tags", () => {

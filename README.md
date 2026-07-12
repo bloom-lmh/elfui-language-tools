@@ -14,7 +14,7 @@ VS Code language features for ElfUI macro and chain components.
 - A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `html\`...\`` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
 - HTML/CSS syntax highlighting inside `.template(\`...\`)`, `.style(\`...\`)`, and `.globalStyle(\`...\`)` through embedded TextMate scopes.
 - HTML/CSS document and range formatting inside `.template(\`...\`)`, `.style(\`...\`)`, and `.globalStyle(\`...\`)`.
-- Format-on-save for ElfUI template and style strings.
+- Document and range formatting providers for ElfUI template and style strings; save-time formatting remains under the editor or Prettier's control.
 - CSS completion, hover, diagnostics, and color preview inside `.style(\`...\`)`, including Web Components selectors such as `:host-context()`, `::slotted()`, `::part()`, template-derived `part`/`slot` selector snippets, and declared CSS custom property references.
 - Diagnostics for unknown template variables, unregistered local components, undeclared emit calls, non-writable `v-model` targets, and component prop/event/slot mismatches from same-file or workspace metadata.
 - Go to Definition, References, and Document Highlight for same-file template symbols and workspace component tags, props, events, and slots.

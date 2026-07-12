@@ -6323,7 +6323,8 @@ const collectUnclosedTagDiagnostics = (
       node.tag &&
       node.startTagEnd !== undefined &&
       node.endTagStart === undefined &&
-      !voidHtmlTags.has(node.tag.toLowerCase())
+      !voidHtmlTags.has(node.tag.toLowerCase()) &&
+      !isExplicitlySelfClosingTag(virtualDocument, node)
     ) {
       diagnostics.push({
         message: `Missing closing tag </${node.tag}>.`,
@@ -6343,6 +6344,14 @@ const collectUnclosedTagDiagnostics = (
   };
 
   htmlDocument.roots.forEach(visit);
+};
+
+const isExplicitlySelfClosingTag = (document: TextDocument, node: HTMLNode) => {
+  if (node.startTagEnd === undefined) {
+    return false;
+  }
+
+  return /\/\s*>$/.test(document.getText().slice(node.start, node.startTagEnd));
 };
 
 const collectUnknownComponentDiagnostics = (

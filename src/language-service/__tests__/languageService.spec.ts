@@ -459,6 +459,24 @@ describe("ElfUI language service", () => {
     expect(diagnostics.some((item) => item.includes("Missing closing tag"))).toBe(true);
   });
 
+  it("does not report missing closing tags for explicit SVG self-closing elements", () => {
+    const source = `
+      import { defineHtml, html } from "elfui";
+
+      export default defineHtml(html\`
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <path d="M8 8 L16 16" />
+        </svg>
+      \`);
+    `;
+    const document = createDocument(source);
+    const diagnostics = readDiagnosticMessages(createElfDiagnostics(document));
+
+    expect(diagnostics.some((item) => item.includes("Missing closing tag"))).toBe(false);
+  });
+
   it("reports unknown template variables and unregistered local components", () => {
     const source = `
       import { ElfUI } from "elfui";

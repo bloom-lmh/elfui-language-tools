@@ -2,8 +2,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vscode = require("vscode");
+const extensionManifest = require("../../../package.json");
 
-const EXTENSION_ID = "elfui.elfui-language-features";
+const EXTENSION_ID = `${extensionManifest.publisher}.${extensionManifest.name}`;
 const WORKSPACE_ROOT = path.resolve(__dirname, "..", "workspace");
 const FIXTURE_PATH = path.join(WORKSPACE_ROOT, "chain-smoke.ts");
 const PACKAGE_JSON_PATH = path.join(WORKSPACE_ROOT, "package.json");

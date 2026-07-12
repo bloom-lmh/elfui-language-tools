@@ -5,7 +5,7 @@
   "version": "0.2.6",
   "license": "MIT",
   "type": "commonjs",
-  "publisher": "elfui",
+  "publisher": "SWUST-WEBLAB-LMH",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bloom-lmh/elfui-language-tools.git"

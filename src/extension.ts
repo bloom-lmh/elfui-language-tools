@@ -31,6 +31,7 @@ interface TypeScriptLanguageFeaturesExports {
 
 interface ElfIntegrationReport {
   diagnostics: {
+    bySource: Record<string, number>;
     nativeTemplateLocalFalsePositives: Array<{
       code: number | string;
       message: string;
@@ -40,8 +41,13 @@ interface ElfIntegrationReport {
     total: number;
   };
   document: {
+    componentCount: number;
     hasElfTemplate: boolean;
     languageId: string | null;
+    templateRegions: Array<{
+      endLine: number;
+      startLine: number;
+    }>;
     uri: string | null;
   };
   extension: {
@@ -314,6 +320,15 @@ const diagnoseIntegration = (context: vscode.ExtensionContext): ElfIntegrationRe
         })
         .slice(0, 20)
     : [];
+  const documentDiagnostics = document ? vscode.languages.getDiagnostics(document.uri) : [];
+  const diagnosticSources = documentDiagnostics.reduce<Record<string, number>>(
+    (result, diagnostic) => {
+      const source = diagnostic.source || "unknown";
+      result[source] = (result[source] ?? 0) + 1;
+      return result;
+    },
+    {},
+  );
   const languageServer = readLanguageServerState();
   const typeScriptExtension = vscode.extensions.getExtension(
     "vscode.typescript-language-features",
@@ -331,12 +346,20 @@ const diagnoseIntegration = (context: vscode.ExtensionContext): ElfIntegrationRe
           : "not-observable";
   const report: ElfIntegrationReport = {
     diagnostics: {
+      bySource: diagnosticSources,
       nativeTemplateLocalFalsePositives,
-      total: document ? vscode.languages.getDiagnostics(document.uri).length : 0,
+      total: documentDiagnostics.length,
     },
     document: {
+      componentCount: analysis?.components.length ?? 0,
       hasElfTemplate: templates.length > 0,
       languageId: document?.languageId ?? null,
+      templateRegions: document
+        ? templates.map((template) => ({
+            endLine: document.positionAt(template.contentEnd).line + 1,
+            startLine: document.positionAt(template.contentStart).line + 1,
+          }))
+        : [],
       uri: document?.uri.toString() ?? null,
     },
     extension: {

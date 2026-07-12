@@ -583,6 +583,12 @@ suite("ElfUI Language Features Smoke", function () {
 
     assert.equal(integration.document.uri, breadcrumbDocument.uri.toString());
     assert.equal(integration.document.hasElfTemplate, true);
+    assert(integration.document.componentCount >= 1, "Expected integration component count.");
+    assert(integration.document.templateRegions.length >= 1, "Expected integration template regions.");
+    assert(
+      typeof integration.diagnostics.bySource === "object",
+      "Expected diagnostics grouped by source."
+    );
     assert.equal(
       integration.typeScriptPlugin.observableState,
       "effective",

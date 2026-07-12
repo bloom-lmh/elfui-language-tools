@@ -2,7 +2,7 @@
   "name": "elfui-language-features",
   "displayName": "ElfUI Language Tools",
   "description": "VS Code language features for ElfUI macro components.",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "license": "MIT",
   "type": "commonjs",
   "publisher": "SWUST-WEBLAB-LMH",
@@ -116,23 +116,6 @@
           "type": "boolean",
           "default": true,
           "description": "Enable ElfUI component language features."
-        },
-        "elfui.languageFeatures.formatOnSave": {
-          "type": "boolean",
-          "default": true,
-          "description": "Format ElfUI template and style strings when saving TS/TSX/JS/JSX files."
-        },
-        "elfui.languageFeatures.format.tabSize": {
-          "type": "number",
-          "default": 2,
-          "minimum": 1,
-          "description": "Tab size used when formatting ElfUI template and style strings."
-        },
-        "elfui.languageFeatures.format.wrapLineLength": {
-          "type": "number",
-          "default": 120,
-          "minimum": 0,
-          "description": "Maximum line length used when formatting ElfUI template and style strings. Set to 0 to disable wrapping."
         },
         "elfui.languageFeatures.completion.templateBindingStyle": {
           "type": "string",

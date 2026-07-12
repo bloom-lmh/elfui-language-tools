@@ -278,15 +278,32 @@
       ]
     },
     "elfuiComponentTag": {
-      "match": "(</?)([A-Z][A-Za-z0-9]*|[a-z][a-z0-9]*-[a-z0-9-]+)\\b",
-      "captures": {
+      "begin": "(</?)([A-Z][A-Za-z0-9]*|[a-z][a-z0-9]*-[a-z0-9-]+)\\b",
+      "beginCaptures": {
         "1": {
-          "name": "punctuation.definition.tag.html"
+          "name": "punctuation.definition.tag.elfui"
         },
         "2": {
           "name": "support.class.component.elfui entity.name.tag.component.elfui"
         }
-      }
+      },
+      "end": "(/?>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.elfui"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#interpolation"
+        },
+        {
+          "include": "#quotedDirectiveExpression"
+        },
+        {
+          "include": "text.html.basic"
+        }
+      ]
     },
     "templateContent": {
       "patterns": [

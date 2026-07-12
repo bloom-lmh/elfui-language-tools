@@ -335,6 +335,9 @@ console.log("ElfUI grammar token tests:");
   const customComponent = tokens.find((token) => token.text === "CustomButton");
   const kebabComponent = tokens.find((token) => token.text === "elf-button");
   const nativeButton = tokens.find((token) => token.text === "button");
+  const componentClosingBracket = tokens.find(
+    (token) => token.text === ">" && token.scopes.some((scope) => scope.includes("tag.elfui"))
+  );
 
   assertion("marks PascalCase component tags with the ElfUI color scope", () => {
     expectScope(customComponent, "support.class.component.elfui");
@@ -344,6 +347,9 @@ console.log("ElfUI grammar token tests:");
   });
   assertion("does not mark native HTML tags as ElfUI components", () => {
     expectNoScope(nativeButton, "support.class.component.elfui");
+  });
+  assertion("marks component tag brackets with the ElfUI color scope", () => {
+    expectScope(componentClosingBracket, "punctuation.definition.tag.elfui");
   });
 }
 

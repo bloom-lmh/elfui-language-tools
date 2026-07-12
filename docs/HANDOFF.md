@@ -70,9 +70,6 @@ LSP 提供：
   - `ElfUI: Show Output Channel`
 - **配置项**（VS Code 设置）
   - `elfui.languageFeatures.enabled`：启用 / 禁用
-  - `elfui.languageFeatures.formatOnSave`：保存时格式化嵌入区域
-  - `elfui.languageFeatures.format.tabSize`：嵌入区域格式化 tab size
-  - `elfui.languageFeatures.format.wrapLineLength`：行宽
   - `elfui.languageFeatures.componentTagColor`：组件标签颜色（默认 `#4FC1FF`）
 - **触发激活**：打开任意 TS / JS 文件时自动激活；保存时自动格式化
 

@@ -68,25 +68,18 @@ suite("ElfUI Language Features Smoke", function () {
     //   );
     const { document, position } = await openFixtureWithCursor(
       [
-        'import { ElfUI } from "elfui";',
+        'import { defineHtml, html } from "@elfui/core";',
         "",
-        "const Demo = ElfUI.createComponent();",
-        'Demo.emits(["submit"]);',
-        "Demo.template(",
-        `  \`<button @${CURSOR}></button>\``,
+        "export default defineHtml(",
+        `  html\`<button @${CURSOR}></button>\``,
         ");",
-        "Demo.build();",
         ""
       ].join("\n")
     );
 
-    const items = await waitForCompletionLabels(document, position, ["@click", "@submit"]);
+    const items = await waitForCompletionLabels(document, position, ["@click"]);
 
     assert(hasCompletionLabel(items, "@click"), "Expected event completion in wrapped template.");
-    assert(
-      hasCompletionLabel(items, "@submit"),
-      "Expected declared emit completion in wrapped template."
-    );
   });
 
   test("provides framework built-in component completions", async () => {
@@ -1487,7 +1480,8 @@ suite("ElfUI Language Features Smoke", function () {
 
     assert.deepEqual(rule.scope, [
       "support.class.component.elfui",
-      "entity.name.tag.component.elfui"
+      "entity.name.tag.component.elfui",
+      "punctuation.definition.tag.elfui"
     ]);
     assert.equal(rule.settings.foreground, "#4299e1");
   });

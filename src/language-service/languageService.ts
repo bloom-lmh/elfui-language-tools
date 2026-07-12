@@ -683,7 +683,8 @@ const createMacroDiagnostics = (
       .filter(
         (diagnostic) =>
           !isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic) &&
-          !isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic)
+          !isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic) &&
+          !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic)
       );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -2959,7 +2960,35 @@ const isResolvedInterpolationRefValueDiagnostic = (
       return (
         interpolation !== null && !hasTypeScriptDiagnosticInExpression(document, interpolation)
       );
-    });
+  });
+};
+
+/** 宏编译器映射偏移时，以原始脚本作用域复核，保留真实缺失名称给快速修复。 */
+const isResolvedKnownMacroTemplateDiagnostic = (
+  document: TextDocument,
+  components: ComponentMeta[],
+  diagnostic: Diagnostic
+): boolean => {
+  if (diagnostic.code !== "ELF_TEMPLATE_TYPE") {
+    return false;
+  }
+
+  const parsed = readMacroUnknownLocalDiagnostic(readDiagnosticMessage(diagnostic));
+
+  if (!parsed) {
+    return false;
+  }
+
+  const sourceOffset = document.offsetAt(diagnostic.range.start);
+  const component = components.find((candidate) =>
+    candidate.templates.some((region) => isInsideEmbeddedRegion(region, sourceOffset))
+  );
+
+  if (component?.props.includes(parsed.localName)) {
+    return true;
+  }
+
+  return !hasTypeScriptDiagnosticInExpression(document, parsed.expression);
 };
 
 const readMacroInterpolationRefValueDiagnostic = (message: string): string | null => {

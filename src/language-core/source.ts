@@ -92,6 +92,8 @@ interface MacroSymbols {
   uses: NamedMeta[];
 }
 
+const macroRuntimePackages = ["elfui", "@elfui/core"];
+
 export const createEmptyComponentMeta = (id: string): ComponentMeta => ({
   emits: [],
   formControl: false,
@@ -197,7 +199,9 @@ export const isMacroComponentSource = (source: string, fileName = "anonymous.ts"
   return (
     /\.elf\.[cm]?[jt]sx?$/.test(cleanFileName) ||
     hasElfComponentPragma(source) ||
-    analyzeElfMacroUsage(source, "elfui", fileName).hasMacroComponentExport
+    macroRuntimePackages.some(
+      (runtimePackage) => analyzeElfMacroUsage(source, runtimePackage, fileName).hasMacroComponentExport
+    )
   );
 };
 

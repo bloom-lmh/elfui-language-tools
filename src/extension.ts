@@ -60,23 +60,10 @@ interface ElfIntegrationReport {
   };
 }
 
-interface LspTextEdit {
-  newText: string;
-  range: {
-    end: {
-      character: number;
-      line: number;
-    };
-    start: {
-      character: number;
-      line: number;
-    };
-  };
-}
-
 const componentTagColorScopes = [
   "support.class.component.elfui",
   "entity.name.tag.component.elfui",
+  "punctuation.definition.tag.elfui",
 ];
 
 const componentTagColorRule = {
@@ -120,13 +107,6 @@ export const activate = async (context: vscode.ExtensionContext) => {
     );
 
     context.subscriptions.push(
-      vscode.workspace.onWillSaveTextDocument((event) => {
-        if (event.reason !== vscode.TextDocumentSaveReason.Manual) {
-          return;
-        }
-
-        event.waitUntil(formatEmbeddedRegionsOnSave(event.document));
-      }),
       vscode.commands.registerCommand(
         "elfui.restartLanguageServer",
         async () => {
@@ -517,92 +497,8 @@ const isElfComponentTagColorRule = (rule: unknown) => {
   );
 };
 
-const formatEmbeddedRegionsOnSave = async (
-  document: vscode.TextDocument,
-): Promise<vscode.TextEdit[]> => {
-  const configuration = vscode.workspace.getConfiguration(
-    "elfui.languageFeatures",
-    document.uri,
-  );
-
-  if (
-    !configuration.get("enabled", true) ||
-    !configuration.get("formatOnSave", true) ||
-    !languageClient ||
-    languageClient.state !== State.Running ||
-    !isSupportedLanguage(document.languageId)
-  ) {
-    return [];
-  }
-
-  try {
-    const edits = await languageClient.sendRequest<LspTextEdit[]>(
-      "textDocument/formatting",
-      {
-        options: readFormattingOptions(document),
-        textDocument: {
-          uri: document.uri.toString(),
-        },
-      },
-    );
-
-    return edits.map(toVsCodeTextEdit);
-  } catch (error) {
-    const message =
-      error instanceof Error ? (error.stack ?? error.message) : String(error);
-
-    outputChannel?.appendLine(`ElfUI format on save failed: ${message}`);
-
-    return [];
-  }
-};
-
-const toVsCodeTextEdit = (edit: LspTextEdit) =>
-  new vscode.TextEdit(
-    new vscode.Range(
-      edit.range.start.line,
-      edit.range.start.character,
-      edit.range.end.line,
-      edit.range.end.character,
-    ),
-    edit.newText,
-  );
-
-const readFormattingOptions = (document: vscode.TextDocument) => {
-  const visibleEditor = vscode.window.visibleTextEditors.find(
-    (editor) => editor.document === document,
-  );
-  const tabSize = visibleEditor?.options.tabSize;
-  const insertSpaces = visibleEditor?.options.insertSpaces;
-  const editorConfiguration = vscode.workspace.getConfiguration(
-    "editor",
-    document.uri,
-  );
-  const formatConfiguration = vscode.workspace.getConfiguration(
-    "elfui.languageFeatures.format",
-    document.uri,
-  );
-  const configuredTabSize = formatConfiguration.get<number>("tabSize");
-
-  return {
-    insertSpaces:
-      typeof insertSpaces === "boolean"
-        ? insertSpaces
-        : editorConfiguration.get("insertSpaces", true),
-    tabSize:
-      typeof configuredTabSize === "number"
-        ? configuredTabSize
-        : typeof tabSize === "number"
-          ? tabSize
-          : editorConfiguration.get("tabSize", 2),
-    wrapLineLength: formatConfiguration.get("wrapLineLength", 120),
-  };
-};
-
 const isSupportedLanguage = (languageId: string) =>
-  ["typescript", "typescriptreact", "javascript", "javascriptreact"].includes(
-    languageId,
-  );
+  ["typescript", "typescriptreact", "javascript", "javascriptreact"].includes(languageId);
 
 interface StudioAnalysis {
   components: StudioComponentMeta[];

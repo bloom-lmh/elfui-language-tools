@@ -228,6 +228,21 @@ describe("analyzeElfSource", () => {
     expect(component?.styles[0]?.content).toContain("display");
   });
 
+  it("recognizes macro components imported from @elfui/core", () => {
+    const result = analyzeElfSource(
+      `
+        import { defineHtml, html } from "@elfui/core";
+
+        export default defineHtml(html\`<button @click="save" v-if="visible">Save</button>\`);
+      `,
+      { fileName: "Home.ts" }
+    );
+
+    expect(result.isMacroComponent).toBe(true);
+    expect(result.components[0]?.macro).toBe(true);
+    expect(result.components[0]?.templates[0]?.content).toContain("@click");
+  });
+
   it("collects defineModel props and update emits from macro components", () => {
     const source = `
       import { defineHtml, defineModel, html } from "elfui";

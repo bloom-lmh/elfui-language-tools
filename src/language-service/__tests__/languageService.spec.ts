@@ -175,6 +175,29 @@ describe("ElfUI language service", () => {
     expect(completions.items.some((item) => item.label === "button")).toBe(true);
   });
 
+  it("provides event completions for @elfui/core macro components", () => {
+    const source = `
+      import { defineHtml, html } from "@elfui/core";
+
+      export default defineHtml(html\`<button @\`);
+    `;
+    const document = createDocument(source);
+    const completions = createElfCompletionList(
+      document,
+      document.positionAt(source.lastIndexOf("@") + 1)
+    );
+    expect(completions.items.map((item) => item.label)).toContain("@click");
+
+    const directiveSource = source.replace("<button @", "<button v-");
+    const directiveDocument = createDocument(directiveSource);
+    const directiveCompletions = createElfCompletionList(
+      directiveDocument,
+      positionAfter(directiveDocument, directiveSource, "v-")
+    );
+
+    expect(directiveCompletions.items.map((item) => item.label)).toContain("v-if");
+  });
+
   it("completes framework built-in components in template tags", () => {
     const source = `
       import { defineHtml, html } from "elfui";
@@ -2122,6 +2145,28 @@ describe("ElfUI language service", () => {
     const diagnostics = readDiagnosticMessages(createElfDiagnostics(document));
 
     expect(diagnostics.some((item) => item.includes("disabeld"))).toBe(true);
+  });
+
+  it("does not report valid macro handlers and exposed props as missing", () => {
+    const source = `
+      import { defineHtml, defineProps, html } from "elfui";
+
+      interface Props {
+        title: string;
+      }
+
+      const props = defineProps<Props>();
+      const toggleTheme = () => props.title;
+
+      export default defineHtml<Props>(html\`
+        <button @click="toggleTheme">\${title}</button>
+      \`);
+    `;
+    const document = TextDocument.create("file:///AppShell.ts", "typescript", 0, source);
+    const diagnostics = readDiagnosticMessages(createElfDiagnostics(document));
+
+    expect(diagnostics.some((item) => item.includes("toggleTheme"))).toBe(false);
+    expect(diagnostics.some((item) => item.includes("title"))).toBe(false);
   });
 
   it("does not report packaged lib false positives in macro template diagnostics", () => {

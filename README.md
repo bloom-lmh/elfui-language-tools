@@ -31,9 +31,6 @@ VS Code language features for ElfUI macro and chain components.
 ## Settings
 
 - `elfui.languageFeatures.enabled`: enable or disable the language server.
-- `elfui.languageFeatures.formatOnSave`: format ElfUI template and style strings when saving.
-- `elfui.languageFeatures.format.tabSize`: tab size used when formatting ElfUI template and style strings.
-- `elfui.languageFeatures.format.wrapLineLength`: maximum line length used when formatting ElfUI template and style strings.
 - `elfui.languageFeatures.completion.templateBindingStyle`: template directive and prop snippet style, `expression` or `quoted`.
 - `elfui.languageFeatures.completion.eventBindingStyle`: event snippet style, `expression` or `quoted`.
 - `elfui.languageFeatures.semanticTokens.enabled`: enable ElfUI semantic tokens. The default is `false` so TypeScript keeps its built-in semantic highlighting.

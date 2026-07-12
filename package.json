@@ -235,7 +235,7 @@
     "typescript": "^5.9.3",
     "vscode-css-languageservice": "latest",
     "vscode-html-languageservice": "latest",
-    "vscode-languageclient": "^9.0.1",
+    "vscode-languageclient": "^10.1.0",
     "vscode-languageserver": "latest",
     "vscode-languageserver-textdocument": "latest"
   },

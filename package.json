@@ -238,6 +238,7 @@
     "dist",
     "images",
     "LICENSE.txt",
+    "node_modules/elfui-language-features-typescript-plugin",
     "snippets",
     "syntaxes",
     "README.md"

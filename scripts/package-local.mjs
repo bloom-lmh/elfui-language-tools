@@ -9,12 +9,9 @@ const packageJsonPath = path.join(packageRoot, "package.json");
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
 const outDir = path.join(packageRoot, ".local-vsix");
 const outFile = path.join(outDir, `${packageJson.name}-${packageJson.version}.vsix`);
-const skipVerify = process.argv.includes("--skip-verify");
-const typeScriptPluginDir = path.join(
-  packageRoot,
-  "elfui-language-features-typescript-plugin"
-);
+const stageDir = path.join(outDir, ".package-stage");
 const typeScriptPluginName = "elfui-language-features-typescript-plugin";
+const skipVerify = process.argv.includes("--skip-verify");
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.rmSync(outFile, { force: true });
@@ -24,8 +21,18 @@ if (!skipVerify) {
   run("pnpm", ["smoke"]);
 }
 
-run("pnpm", ["exec", "vsce", "package", "--no-dependencies", "--out", outFile]);
-injectTypeScriptServerPlugin(outFile);
+preparePackageStage();
+
+try {
+  run(
+    process.execPath,
+    [path.join(packageRoot, "node_modules", "@vscode", "vsce", "vsce"), "package", "--out", outFile],
+    stageDir,
+    false
+  );
+} finally {
+  fs.rmSync(stageDir, { force: true, recursive: true });
+}
 
 const stat = fs.statSync(outFile);
 
@@ -35,6 +42,32 @@ if (!stat.isFile() || stat.size <= 0) {
 
 console.log(`ElfUI VS Code extension package created: ${outFile}`);
 console.log(`Package size: ${formatBytes(stat.size)}`);
+
+function preparePackageStage() {
+  const pluginSourceDir = path.join(packageRoot, "elfui-language-features-typescript-plugin");
+  const pluginTargetDir = path.join(stageDir, "node_modules", typeScriptPluginName);
+  const stageManifest = {
+    ...packageJson,
+    dependencies: {
+      [typeScriptPluginName]: packageJson.version
+    },
+    scripts: Object.fromEntries(
+      Object.entries(packageJson.scripts ?? {}).filter(([name]) => name !== "vscode:prepublish")
+    )
+  };
+
+  fs.rmSync(stageDir, { force: true, recursive: true });
+  fs.mkdirSync(stageDir, { recursive: true });
+
+  ["dist", "images", "snippets", "syntaxes"].forEach((name) => {
+    fs.cpSync(path.join(packageRoot, name), path.join(stageDir, name), { recursive: true });
+  });
+  ["LICENSE.txt", "README.md"].forEach((name) => {
+    fs.copyFileSync(path.join(packageRoot, name), path.join(stageDir, name));
+  });
+  fs.cpSync(pluginSourceDir, pluginTargetDir, { recursive: true });
+  fs.writeFileSync(path.join(stageDir, "package.json"), `${JSON.stringify(stageManifest, null, 2)}\n`);
+}
 
 function run(command, args, cwd = packageRoot, shell = process.platform === "win32") {
   const result = spawnSync(command, args, {
@@ -52,62 +85,4 @@ function formatBytes(bytes) {
   const mib = bytes / 1024 / 1024;
 
   return `${mib.toFixed(2)} MiB`;
-}
-
-function injectTypeScriptServerPlugin(vsixPath) {
-  const files = ["index.js", "package.json"].map((fileName) =>
-    path.join(typeScriptPluginDir, fileName)
-  );
-
-  files.forEach((fileName) => {
-    if (!fs.existsSync(fileName)) {
-      throw new Error(`Missing TypeScript server plugin file: ${fileName}`);
-    }
-  });
-
-  if (process.platform === "win32") {
-    const archivePath = quotePowerShell(vsixPath);
-    const pluginPath = quotePowerShell(typeScriptPluginDir);
-    const script = [
-      "Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop;",
-      "Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop;",
-      `$archive = [System.IO.Compression.ZipFile]::Open(${archivePath}, [System.IO.Compression.ZipArchiveMode]::Update);`,
-      "try {",
-      `  Get-ChildItem -LiteralPath ${pluginPath} -File | ForEach-Object {`,
-      `    $entryName = 'extension/node_modules/${typeScriptPluginName}/' + $_.Name;`,
-      "    $existing = $archive.GetEntry($entryName);",
-      "    if ($null -ne $existing) { $existing.Delete(); }",
-      "    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null;",
-      "  };",
-      `  @('index.js', 'package.json') | ForEach-Object { if ($null -eq $archive.GetEntry('extension/node_modules/${typeScriptPluginName}/' + $_)) { throw \"TypeScript plugin entry was not packaged: $_\"; } };`,
-      "} finally {",
-      "  $archive.Dispose();",
-      "}"
-    ].join("\n");
-
-    run("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], packageRoot, false);
-    return;
-  }
-
-  const stagingDir = path.join(outDir, ".typescript-plugin-staging");
-  const stagedPluginDir = path.join(
-    stagingDir,
-    "extension",
-    "node_modules",
-    typeScriptPluginName
-  );
-
-  fs.rmSync(stagingDir, { force: true, recursive: true });
-  fs.mkdirSync(stagedPluginDir, { recursive: true });
-  files.forEach((fileName) => fs.copyFileSync(fileName, path.join(stagedPluginDir, path.basename(fileName))));
-
-  try {
-    run("zip", ["-q", "-ur", vsixPath, "extension/node_modules"], stagingDir);
-  } finally {
-    fs.rmSync(stagingDir, { force: true, recursive: true });
-  }
-}
-
-function quotePowerShell(value) {
-  return `'${value.replace(/'/g, "''")}'`;
 }

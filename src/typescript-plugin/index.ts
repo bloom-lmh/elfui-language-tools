@@ -55,9 +55,11 @@ const init = (modules: TypeScriptServerPluginModules) => {
           return diagnostics;
         }
 
+        const templatePropNames = collectDeclaredTemplatePropNames(tsModule, sourceFile);
+
         return diagnostics.filter(
           (diagnostic) =>
-            !isElfTemplateLocalDiagnostic(tsModule, sourceFile, diagnostic)
+            !isElfTemplateLocalDiagnostic(tsModule, sourceFile, templatePropNames, diagnostic)
         );
       };
 
@@ -101,6 +103,7 @@ const readPluginConfiguration = (
 const isElfTemplateLocalDiagnostic = (
   tsModule: typeof ts,
   sourceFile: ts.SourceFile,
+  templatePropNames: Set<string>,
   diagnostic: ts.Diagnostic
 ): boolean => {
   if (!isMissingNameDiagnostic(diagnostic.code) || diagnostic.start === undefined) {
@@ -130,6 +133,10 @@ const isElfTemplateLocalDiagnostic = (
     return true;
   }
 
+  if (templatePropNames.has(localName)) {
+    return true;
+  }
+
   const templateContent = sourceFile.text.slice(
     templateContext.contentStart,
     templateContext.contentEnd,
@@ -137,6 +144,63 @@ const isElfTemplateLocalDiagnostic = (
   const diagnosticOffset = diagnostic.start - templateContext.contentStart;
 
   return hasActiveTemplateLocal(tsModule, templateContent, diagnosticOffset, localName);
+};
+
+const collectDeclaredTemplatePropNames = (
+  tsModule: typeof ts,
+  sourceFile: ts.SourceFile
+): Set<string> => {
+  const names = new Set<string>();
+
+  const visit = (node: ts.Node) => {
+    if (
+      tsModule.isCallExpression(node) &&
+      tsModule.isIdentifier(node.expression) &&
+      node.expression.text === "defineProps"
+    ) {
+      const options = node.arguments[0];
+
+      if (options && tsModule.isObjectLiteralExpression(options)) {
+        options.properties.forEach((property) => {
+          const name = readPropertyName(tsModule, property.name);
+
+          if (name) {
+            names.add(name);
+          }
+        });
+      }
+
+      const typeArgument = node.typeArguments?.[0];
+
+      if (typeArgument && tsModule.isTypeLiteralNode(typeArgument)) {
+        typeArgument.members.forEach((member) => {
+          const name = readPropertyName(tsModule, member.name);
+
+          if (name) {
+            names.add(name);
+          }
+        });
+      }
+    }
+
+    tsModule.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+
+  return names;
+};
+
+const readPropertyName = (tsModule: typeof ts, name: ts.PropertyName | undefined): string | null => {
+  if (!name) {
+    return null;
+  }
+
+  if (tsModule.isIdentifier(name) || tsModule.isStringLiteral(name) || tsModule.isNumericLiteral(name)) {
+    return name.text;
+  }
+
+  return null;
 };
 
 const isMissingNameDiagnostic = (code: number): boolean =>

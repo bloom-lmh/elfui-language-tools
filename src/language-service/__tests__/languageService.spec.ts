@@ -445,6 +445,21 @@ describe("ElfUI language service", () => {
     expect(diagnostics.some((item) => item.includes('"count"'))).toBe(false);
   });
 
+  it("does not require framework built-in components to be registered", () => {
+    const source = `
+      import { defineHtml, html } from "elfui";
+
+      export const Demo = defineHtml(html\`
+        <Teleport to="body"><Transition><span>ready</span></Transition></Teleport>
+      \`);
+    `;
+    const document = createDocument(source);
+    const diagnostics = readDiagnosticMessages(createElfDiagnostics(document));
+
+    expect(diagnostics.some((item) => item.includes("Teleport"))).toBe(false);
+    expect(diagnostics.some((item) => item.includes("Transition"))).toBe(false);
+  });
+
   it("recognises $event and $value as built-in template variables", () => {
     const source = `
       import { ElfUI } from "elfui";

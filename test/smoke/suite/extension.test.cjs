@@ -453,8 +453,9 @@ suite("ElfUI Language Features Smoke", function () {
 
     const { document: mustacheDocument, position: mustachePosition } = await openFixtureWithCursor(
       [
-        'import { defineHtml, html, useRef } from "elfui";',
+        'import { defineHtml, defineProps, html, useRef } from "elfui";',
         "",
+        'const props = defineProps({ title: { type: String, default: "" } });',
         'const userList = useRef([{ age: 35, id: 1, name: "Ada" }]);',
         "",
         "export const Home = defineHtml(html`",
@@ -487,6 +488,7 @@ suite("ElfUI Language Features Smoke", function () {
         "  <ul>",
         '    <li v-for="user in userList" :key=${user.id} @click=${onUserClick(user, $event)}>${user.name} - ${user.age}</li>',
         "  </ul>",
+        '  <div>${title}</div>',
         "  <div>${missingValue}</div>",
         "`);",
         ""
@@ -513,6 +515,10 @@ suite("ElfUI Language Features Smoke", function () {
     assert(
       !tsDiagnostics.some((item) => item.code === 2304 && item.message.includes("'$event'")),
       "Expected TypeScript server plugin to suppress event local missing-name diagnostics."
+    );
+    assert(
+      !tsDiagnostics.some((item) => item.code === 2552 && item.message.includes("'title'")),
+      "Expected TypeScript server plugin to suppress defineProps template shorthand diagnostics."
     );
 
     const breadcrumbDocument = await openFixture(

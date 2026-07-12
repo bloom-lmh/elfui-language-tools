@@ -389,6 +389,14 @@ const voidHtmlTags = new Set([
   "wbr"
 ]);
 
+const elfBuiltInComponentTags = new Set([
+  "KeepAlive",
+  "Suspense",
+  "Teleport",
+  "Transition",
+  "TransitionGroup"
+]);
+
 export const createElfCompletionList = (
   document: TextDocument,
   position: Position,
@@ -6276,6 +6284,7 @@ const collectUnknownComponentDiagnostics = (
   const visit = (node: HTMLNode) => {
     if (
       node.tag &&
+      !elfBuiltInComponentTags.has(node.tag) &&
       isComponentLikeTag(node.tag, localComponents) &&
       !localComponents.has(node.tag)
     ) {

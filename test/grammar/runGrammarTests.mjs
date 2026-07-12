@@ -328,6 +328,37 @@ console.log("ElfUI grammar token tests:");
 }
 
 {
+  console.log("\n  case: expression bindings inside HTML attributes");
+  const source =
+    'const View = defineHtml(html`<header v-if=${props.title || props.closable}><elf-drawer :style=${{ width: props.width }} v-else-if=${props.type === "success"} v-if=${props.closable && !props.disabled} :aria-labelledby=${props.title ? titleId : null}></elf-drawer></header>`);';
+  const tokens = tokenize(source);
+  const styleObject = tokens.find((token) => token.text === "width");
+  const strictEqual = tokens.find((token) => token.text === "===");
+  const logicalOr = tokens.find((token) => token.text === "||");
+  const logicalAnd = tokens.find((token) => token.text === "&&");
+  const ternary = tokens.find((token) => token.text === "?");
+  const expressionEnd = tokens.find(
+    (token) =>
+      token.text === "}" &&
+      token.scopes.some((scope) => scope.includes("punctuation.definition.template-expression.end.ts"))
+  );
+
+  assertion("embeds native tag attribute expressions as TypeScript", () => {
+    expectScope(logicalOr, "meta.template.expression.ts");
+    expectScope(logicalOr, "keyword.operator.logical.ts");
+  });
+  assertion("keeps nested object literals inside expression bindings", () => {
+    expectScope(styleObject, "meta.template.expression.ts");
+    expectScope(expressionEnd, "punctuation.definition.template-expression.end.ts");
+  });
+  assertion("keeps comparison, logical and ternary operators in TypeScript scope", () => {
+    expectScope(strictEqual, "keyword.operator.comparison.ts");
+    expectScope(logicalAnd, "keyword.operator.logical.ts");
+    expectScope(ternary, "keyword.operator.ternary.ts");
+  });
+}
+
+{
   console.log("\n  case: ElfUI component tag scopes");
   const source =
     'const View = defineHtml(html`<CustomButton></CustomButton><elf-button></elf-button><button></button>`);';

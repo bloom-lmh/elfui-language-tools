@@ -16,6 +16,9 @@
       "include": "#quotedDirectiveExpression"
     },
     {
+      "include": "#interpolation"
+    },
+    {
       "include": "#styleCall"
     },
     {
@@ -359,6 +362,31 @@
       },
       "contentName": "meta.template.expression.ts",
       "patterns": [
+        {
+          "include": "#interpolationBrace"
+        },
+        {
+          "include": "source.ts"
+        }
+      ]
+    },
+    "interpolationBrace": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.block.begin.ts"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.block.end.ts"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#interpolationBrace"
+        },
         {
           "include": "source.ts"
         }

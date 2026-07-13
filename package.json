@@ -2,7 +2,7 @@
   "name": "elfui-language-features",
   "displayName": "ElfUI Language Tools",
   "description": "VS Code language features for ElfUI macro components.",
-  "version": "0.2.20",
+  "version": "0.2.21",
   "license": "MIT",
   "type": "commonjs",
   "publisher": "SWUST-WEBLAB-LMH",
@@ -63,6 +63,14 @@
       {
         "command": "elfui.showWorkspaceIndexReport",
         "title": "ElfUI: Show Workspace Index Report"
+      },
+      {
+        "command": "elfui.exportWorkspacePerformanceReport",
+        "title": "ElfUI: Export Workspace Performance Report"
+      },
+      {
+        "command": "elfui.clearWorkspacePerformanceHistory",
+        "title": "ElfUI: Clear Workspace Performance History"
       },
       {
         "command": "elfui.generateWorkspaceComponentMetadata",

@@ -55,6 +55,8 @@ suite("ElfUI Language Features Smoke", function () {
       "elfui.previewComponent",
       "elfui.migrateTemplateBindings",
       "elfui.showWorkspaceIndexReport",
+      "elfui.exportWorkspacePerformanceReport",
+      "elfui.clearWorkspacePerformanceHistory",
       "elfui.generateWorkspaceComponentMetadata"
     ].forEach((command) => {
       assert(commands.includes(command), `Expected ${command} command to be registered.`);
@@ -1360,6 +1362,36 @@ suite("ElfUI Language Features Smoke", function () {
       migratedText.includes('v-for="item in items"'),
       "Expected v-for declaration to stay quoted."
     );
+  });
+
+  test("exports and clears workspace performance history", async () => {
+    const performancePath = path.join(WORKSPACE_ROOT, ".elfui", "performance-report.json");
+    const originalReport = readFileIfPresent(performancePath);
+
+    try {
+      const indexReport = await vscode.commands.executeCommand("elfui.showWorkspaceIndexReport");
+      const exported = await vscode.commands.executeCommand("elfui.exportWorkspacePerformanceReport");
+      const exportedReport = JSON.parse(fs.readFileSync(performancePath, "utf8"));
+
+      assert.equal(exported?.history >= 1, true, "Expected exported performance history.");
+      assert.equal(exported?.wrote, true, "Expected performance export write.");
+      assert(
+        exportedReport.reports.some((item) => item.recordedAt === indexReport.recordedAt),
+        "Expected exported report history to include the latest scan."
+      );
+
+      const cleared = await vscode.commands.executeCommand("elfui.clearWorkspacePerformanceHistory");
+
+      assert.equal(cleared >= 1, true, "Expected persisted performance history to clear.");
+
+      const refreshed = await vscode.commands.executeCommand("elfui.showWorkspaceIndexReport");
+
+      assert.equal(refreshed.history.length, 1, "Expected new report history after clearing.");
+    } finally {
+      restoreFile(performancePath, originalReport);
+      removeDirectoryIfEmpty(path.dirname(performancePath));
+      await vscode.commands.executeCommand("elfui.clearWorkspacePerformanceHistory");
+    }
   });
 
   test("provides style completions", async () => {

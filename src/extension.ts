@@ -203,6 +203,12 @@ export const activate = async (context: vscode.ExtensionContext) => {
       vscode.commands.registerCommand("elfui.showWorkspaceIndexReport", () =>
         showWorkspaceIndexReport(context),
       ),
+      vscode.commands.registerCommand("elfui.exportWorkspacePerformanceReport", () =>
+        exportWorkspacePerformanceReport(context),
+      ),
+      vscode.commands.registerCommand("elfui.clearWorkspacePerformanceHistory", () =>
+        clearWorkspacePerformanceHistory(context),
+      ),
       vscode.commands.registerCommand("elfui.generateWorkspaceComponentMetadata", () =>
         generateWorkspaceComponentMetadata(context),
       ),
@@ -1277,6 +1283,46 @@ const parentUri = (uri: vscode.Uri): vscode.Uri => {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
+
+const exportWorkspacePerformanceReport = async (
+  context: vscode.ExtensionContext,
+): Promise<{ history: number; uri: string; wrote: boolean } | null> => {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+
+  if (!folder) {
+    void vscode.window.showInformationMessage("Open an ElfUI workspace before exporting performance data.");
+
+    return null;
+  }
+
+  const history = readWorkspacePerformanceHistory(context);
+  const uri = vscode.Uri.joinPath(folder.uri, ".elfui", "performance-report.json");
+  const report = {
+    exportedAt: new Date().toISOString(),
+    languageServer: await requestLanguageServerPerformanceSummary(),
+    languageServerStartupMs,
+    reports: history,
+    workspace: folder.uri.toString(),
+  };
+  const wrote = await writeWorkspaceTextIfChanged(uri, `${JSON.stringify(report, null, 2)}\n`);
+
+  void vscode.window.showInformationMessage(
+    `${wrote ? "Exported" : "Updated"} ElfUI performance report: ${uri.fsPath}`,
+  );
+
+  return { history: history.length, uri: uri.toString(), wrote };
+};
+
+const clearWorkspacePerformanceHistory = async (
+  context: vscode.ExtensionContext,
+): Promise<number> => {
+  const history = readWorkspacePerformanceHistory(context);
+
+  await context.workspaceState.update(workspacePerformanceHistoryKey, undefined);
+  void vscode.window.showInformationMessage("Cleared ElfUI workspace performance history.");
+
+  return history.length;
+};
 
 const showWorkspaceIndexReport = async (context: vscode.ExtensionContext) => {
   const started = performance.now();

@@ -46,7 +46,7 @@ VS Code language features for ElfUI macro and chain components.
 
 Use `ElfUI: Restart Language Server` after changing local language-server builds during development. `ElfUI: Diagnose Integration` reports the active extension version, language-server state, TypeScript plugin configuration, recognized template-region line ranges, diagnostic counts grouped by source, and whether a native template-local false positive is still present.
 
-`ElfUI: Show Workspace Index Report` stores the latest 20 explicit report scans in VS Code workspace state. It also displays the current language-server startup time, recent index samples, and aggregate completion latency without adding per-request disk writes.
+`ElfUI: Show Workspace Index Report` stores the latest 20 explicit report scans in VS Code workspace state. It also displays the current language-server startup time, recent index samples, and aggregate completion latency without adding per-request disk writes. `ElfUI: Export Workspace Performance Report` writes the collected history to `.elfui/performance-report.json`; `ElfUI: Clear Workspace Performance History` clears only the current workspace's saved samples.
 
 ## Component Package Metadata
 

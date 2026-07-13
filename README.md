@@ -75,7 +75,9 @@ The metadata JSON can list exported components:
         { "name": "label", "type": "string" },
         { "name": "open", "type": "boolean", "default": false }
       ],
-      "emits": ["confirm"],
+      "emits": [
+        { "name": "confirm", "payloadType": "{ value: string }" }
+      ],
       "slots": ["default", "footer"],
       "slotScopes": [
         {
@@ -88,7 +90,7 @@ The metadata JSON can list exported components:
 }
 ```
 
-`importPath` is optional and defaults to the package name. `props` also accepts the legacy string form such as `["label", "open"]`; use the structured form to show prop type and static default value in template hover.
+`importPath` is optional and defaults to the package name. `props` and `emits` also accept the legacy string form such as `["label", "open"]` or `["confirm"]`; use the structured form to show prop type/default value and event payload type in template hover.
 
 ## Local Development
 

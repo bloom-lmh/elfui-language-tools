@@ -86,7 +86,7 @@ const writePackageComponentMetadata = (root: string) => {
     JSON.stringify({
       components: [
         {
-          emits: ["confirm"],
+          emits: [{ name: "confirm", payloadType: "{ value: string }" }],
           exportName: "PackageButton",
           localName: "PackageButton",
           props: [
@@ -295,6 +295,9 @@ describe("workspace component index", () => {
       { name: "label", type: "string" },
       { defaultValue: "false", name: "open", type: "boolean" },
       { defaultValue: "null", name: "description", type: "string | null" }
+    ]);
+    expect(component?.emitDetails).toEqual([
+      { name: "confirm", payloadType: "{ value: string }" }
     ]);
     expect(component?.symbols?.map((item) => `${item.kind}:${item.name}`)).toEqual([
       "prop:label",

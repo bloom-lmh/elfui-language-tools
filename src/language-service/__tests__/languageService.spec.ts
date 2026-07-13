@@ -2469,6 +2469,7 @@ describe("ElfUI language service", () => {
         components: [
           {
             emits: ["confirm"],
+            emitDetails: [{ name: "confirm", payloadType: "{ value: string }" }],
             exportName: "PackageButton" as const,
             importPath: "@acme/elfui-kit",
             localName: "PackageButton",
@@ -2497,6 +2498,9 @@ describe("ElfUI language service", () => {
     expect(
       readHoverText(createElfHover(document, positionAfter(document, source, "@confirm"), options))
     ).toContain("ElfUI event");
+    expect(
+      readHoverText(createElfHover(document, positionAfter(document, source, "@confirm"), options))
+    ).toContain("Payload: `{ value: string }`");
     expect(
       readHoverText(createElfHover(document, positionAfter(document, source, "#footer"), options))
     ).toContain("Scope: `{ close(): void }`");

@@ -41,6 +41,7 @@ import {
   elfSemanticTokensLegend,
   type ElfLanguageServiceOptions,
   type ElfProjectComponent,
+  type ElfProjectComponentEmit,
   type ElfProjectComponentProp,
   type ElfProjectComponentSlotScope,
   type ElfProjectComponentSymbol,
@@ -1195,7 +1196,8 @@ const readIndexedPackageMetadataComponent = (
   const importPath = readString(entry.importPath) ?? packageName;
   const propMetadata = readPackageComponentProps(entry.props);
   const props = propMetadata.names;
-  const emits = readNameArray(entry.emits);
+  const emitMetadata = readPackageComponentEmits(entry.emits);
+  const emits = emitMetadata.names;
   const slots = readNameArray(entry.slots);
   const slotScopes = readPackageComponentSlotScopes(entry.slotScopes);
   const symbols = createPackageComponentSymbols(props, emits, slots);
@@ -1204,6 +1206,7 @@ const readIndexedPackageMetadataComponent = (
   return [
     {
       definition,
+      emitDetails: emitMetadata.details,
       emits,
       exportName,
       fileName,
@@ -1267,6 +1270,48 @@ const readPackageComponentProps = (
       ...existing,
       ...(type ? { type } : {}),
       ...(defaultValue !== undefined ? { defaultValue } : {})
+    });
+  });
+
+  return {
+    details: [...details.values()],
+    names: [...details.keys()]
+  };
+};
+
+const readPackageComponentEmits = (
+  value: unknown
+): { details: ElfProjectComponentEmit[]; names: string[] } => {
+  if (!Array.isArray(value)) {
+    return { details: [], names: [] };
+  }
+
+  const details = new Map<string, ElfProjectComponentEmit>();
+
+  value.forEach((item) => {
+    if (readName(item)) {
+      if (!details.has(item)) {
+        details.set(item, { name: item });
+      }
+      return;
+    }
+
+    if (!isRecord(item)) {
+      return;
+    }
+
+    const name = readString(item.name);
+
+    if (!name) {
+      return;
+    }
+
+    const existing = details.get(name) ?? { name };
+    const payloadType = readString(item.payloadType) ?? readString(item.type);
+
+    details.set(name, {
+      ...existing,
+      ...(payloadType ? { payloadType } : {})
     });
   });
 

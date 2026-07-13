@@ -1015,10 +1015,16 @@ suite("ElfUI Language Features Smoke", function () {
         usageDocument.positionAt(usageText.indexOf(":open") + 1),
         "Type: `boolean`"
       );
+      const eventHover = await waitForHoverText(
+        usageDocument,
+        usageDocument.positionAt(usageText.indexOf("@confirm") + 1),
+        "Payload: `{ value: string }`"
+      );
 
       assert.match(componentHover, /@acme\/elfui-kit/, "Expected package import hover metadata.");
       assert.match(slotHover, /ElfUI slot/, "Expected package slot hover metadata.");
       assert.match(propHover, /Default: `false`/, "Expected package prop default hover metadata.");
+      assert.match(eventHover, /ElfUI event/, "Expected package event hover metadata.");
     } finally {
       cleanupExternalPackageMetadata();
       await vscode.commands.executeCommand("elfui.restartLanguageServer");
@@ -1583,7 +1589,7 @@ function writeExternalPackageMetadata() {
       {
         components: [
           {
-            emits: ["confirm"],
+            emits: [{ name: "confirm", payloadType: "{ value: string }" }],
             exportName: "PackageButton",
             localName: "PackageButton",
             props: [

@@ -84,8 +84,14 @@ export interface ElfProjectComponentProp {
   type?: string;
 }
 
+export interface ElfProjectComponentEmit {
+  name: string;
+  payloadType?: string;
+}
+
 export interface ElfProjectComponent {
   definition?: Range;
+  emitDetails?: ElfProjectComponentEmit[];
   emits?: string[];
   exportName: "default" | string;
   importPath: string;
@@ -6198,6 +6204,14 @@ const createProjectReferenceHover = (target: ElfProjectReferenceTarget): string 
 
     if (prop?.defaultValue !== undefined) {
       lines.push(`Default: \`${prop.defaultValue}\``);
+    }
+  }
+
+  if (target.kind === "emit") {
+    const emit = component.emitDetails?.find((item) => item.name === target.symbolName);
+
+    if (emit?.payloadType) {
+      lines.push(`Payload: \`${emit.payloadType}\``);
     }
   }
 

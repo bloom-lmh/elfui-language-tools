@@ -41,6 +41,7 @@ import {
   elfSemanticTokensLegend,
   type ElfLanguageServiceOptions,
   type ElfProjectComponent,
+  type ElfProjectComponentProp,
   type ElfProjectComponentSlotScope,
   type ElfProjectComponentSymbol,
   type ElfTemplateBindingStyle
@@ -1139,7 +1140,8 @@ const readIndexedPackageMetadataComponent = (
   }
 
   const importPath = readString(entry.importPath) ?? packageName;
-  const props = readNameArray(entry.props);
+  const propMetadata = readPackageComponentProps(entry.props);
+  const props = propMetadata.names;
   const emits = readNameArray(entry.emits);
   const slots = readNameArray(entry.slots);
   const slotScopes = readPackageComponentSlotScopes(entry.slotScopes);
@@ -1155,6 +1157,7 @@ const readIndexedPackageMetadataComponent = (
       importPath,
       localName,
       packageImportPath: importPath,
+      propDetails: propMetadata.details,
       props,
       slotScopes,
       slots,
@@ -1173,6 +1176,65 @@ const readNameArray = (value: unknown): string[] =>
   Array.isArray(value) ? [...new Set(value.filter(readName))] : [];
 
 const readName = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+
+const readPackageComponentProps = (
+  value: unknown
+): { details: ElfProjectComponentProp[]; names: string[] } => {
+  if (!Array.isArray(value)) {
+    return { details: [], names: [] };
+  }
+
+  const details = new Map<string, ElfProjectComponentProp>();
+
+  value.forEach((item) => {
+    if (readName(item)) {
+      if (!details.has(item)) {
+        details.set(item, { name: item });
+      }
+      return;
+    }
+
+    if (!isRecord(item)) {
+      return;
+    }
+
+    const name = readString(item.name);
+
+    if (!name) {
+      return;
+    }
+
+    const existing = details.get(name) ?? { name };
+    const type = readString(item.type);
+    const defaultValue = readPackagePropDefaultValue(
+      Object.hasOwn(item, "default") ? item.default : item.defaultValue
+    );
+
+    details.set(name, {
+      ...existing,
+      ...(type ? { type } : {}),
+      ...(defaultValue !== undefined ? { defaultValue } : {})
+    });
+  });
+
+  return {
+    details: [...details.values()],
+    names: [...details.keys()]
+  };
+};
+
+const readPackagePropDefaultValue = (value: unknown): string | undefined => {
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null
+  ) {
+    return JSON.stringify(value);
+  }
+
+  return undefined;
+};
 
 const readPackageComponentSlotScopes = (value: unknown): ElfProjectComponentSlotScope[] =>
   Array.isArray(value)
@@ -1328,6 +1390,7 @@ const readIndexedComponents = (
       fileName,
       importPath: "",
       localName,
+      propDetails: component.propDetails,
       props: component.props,
       slotScopes,
       slots: component.slots,

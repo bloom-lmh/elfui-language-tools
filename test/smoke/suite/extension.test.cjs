@@ -1010,9 +1010,15 @@ suite("ElfUI Language Features Smoke", function () {
         usageDocument.positionAt(usageText.indexOf("#footer") + 1),
         "Scope: `{ action: { disabled: boolean; label: string } }`"
       );
+      const propHover = await waitForHoverText(
+        usageDocument,
+        usageDocument.positionAt(usageText.indexOf(":open") + 1),
+        "Type: `boolean`"
+      );
 
       assert.match(componentHover, /@acme\/elfui-kit/, "Expected package import hover metadata.");
       assert.match(slotHover, /ElfUI slot/, "Expected package slot hover metadata.");
+      assert.match(propHover, /Default: `false`/, "Expected package prop default hover metadata.");
     } finally {
       cleanupExternalPackageMetadata();
       await vscode.commands.executeCommand("elfui.restartLanguageServer");
@@ -1568,7 +1574,10 @@ function writeExternalPackageMetadata() {
             emits: ["confirm"],
             exportName: "PackageButton",
             localName: "PackageButton",
-            props: ["label", "open"],
+            props: [
+              { name: "label", type: "string" },
+              { default: false, name: "open", type: "boolean" }
+            ],
             slotScopes: [
               {
                 name: "footer",

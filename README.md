@@ -8,7 +8,7 @@ VS Code language features for ElfUI macro and chain components.
 - Realtime macro diagnostics from the ElfUI macro compiler, including template TypeScript errors, slot checks, and structured source ranges.
 - Macro-aware completion and hover for `defineProps()`, `defineEmits()`, `defineSlots()`, `defineHtml()`, and `useComponents()`.
 - Template prop hover for local macro components includes the individual TypeScript type and statically declared default value when available.
-- Hover metadata for indexed workspace and package components, including import source, props, events, slots, and typed slot scopes.
+- Hover metadata for indexed workspace and package components, including import source, typed props with static defaults, events, slots, and typed slot scopes.
 - HTML completion, hover, diagnostics, and closing tag support inside `.template(\`...\`)`.
 - ElfUI-aware template completion for `props()`, `setup()` returns, `emits()`, `use()` components, slot locals, and `ctx.form`.
 - Full expression completion and diagnostics in `${...}`, quoted binding, and `{{...}}` styles, including typed `v-for` locals from `useRef()` lists.
@@ -69,7 +69,10 @@ The metadata JSON can list exported components:
       "exportName": "PackageButton",
       "localName": "PackageButton",
       "tagName": "elf-package-button",
-      "props": ["label", "open"],
+      "props": [
+        { "name": "label", "type": "string" },
+        { "name": "open", "type": "boolean", "default": false }
+      ],
       "emits": ["confirm"],
       "slots": ["default", "footer"],
       "slotScopes": [
@@ -83,7 +86,7 @@ The metadata JSON can list exported components:
 }
 ```
 
-`importPath` is optional and defaults to the package name.
+`importPath` is optional and defaults to the package name. `props` also accepts the legacy string form such as `["label", "open"]`; use the structured form to show prop type and static default value in template hover.
 
 ## Local Development
 

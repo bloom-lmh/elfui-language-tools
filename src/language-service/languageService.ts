@@ -78,12 +78,19 @@ export interface ElfProjectComponentSlotScope {
   scopeType: string;
 }
 
+export interface ElfProjectComponentProp {
+  defaultValue?: string;
+  name: string;
+  type?: string;
+}
+
 export interface ElfProjectComponent {
   definition?: Range;
   emits?: string[];
   exportName: "default" | string;
   importPath: string;
   localName: string;
+  propDetails?: ElfProjectComponentProp[];
   props?: string[];
   slotScopes?: ElfProjectComponentSlotScope[];
   slots?: string[];
@@ -6180,6 +6187,18 @@ const createProjectReferenceHover = (target: ElfProjectReferenceTarget): string 
     if (component.props?.length) lines.push(`Props: ${formatHoverNames(component.props)}`);
     if (component.emits?.length) lines.push(`Events: ${formatHoverNames(component.emits)}`);
     if (component.slots?.length) lines.push(`Slots: ${formatHoverNames(component.slots)}`);
+  }
+
+  if (target.kind === "prop") {
+    const prop = component.propDetails?.find((item) => item.name === target.symbolName);
+
+    if (prop?.type) {
+      lines.push(`Type: \`${prop.type}\``);
+    }
+
+    if (prop?.defaultValue !== undefined) {
+      lines.push(`Default: \`${prop.defaultValue}\``);
+    }
   }
 
   if (target.kind === "slot") {

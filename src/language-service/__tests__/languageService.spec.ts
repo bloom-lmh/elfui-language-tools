@@ -2472,6 +2472,7 @@ describe("ElfUI language service", () => {
             exportName: "PackageButton" as const,
             importPath: "@acme/elfui-kit",
             localName: "PackageButton",
+            propDetails: [{ defaultValue: "false", name: "open", type: "boolean" }],
             props: ["open"],
             slotScopes: [{ name: "footer", scopeType: "{ close(): void }" }],
             slots: ["footer"],
@@ -2487,6 +2488,12 @@ describe("ElfUI language service", () => {
     expect(
       readHoverText(createElfHover(document, positionAfter(document, source, ":open"), options))
     ).toContain("Import: `@acme/elfui-kit`");
+    expect(
+      readHoverText(createElfHover(document, positionAfter(document, source, ":open"), options))
+    ).toContain("Type: `boolean`");
+    expect(
+      readHoverText(createElfHover(document, positionAfter(document, source, ":open"), options))
+    ).toContain("Default: `false`");
     expect(
       readHoverText(createElfHover(document, positionAfter(document, source, "@confirm"), options))
     ).toContain("ElfUI event");

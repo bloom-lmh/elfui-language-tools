@@ -89,7 +89,11 @@ const writePackageComponentMetadata = (root: string) => {
           emits: ["confirm"],
           exportName: "PackageButton",
           localName: "PackageButton",
-          props: ["label", "open"],
+          props: [
+            { name: "label", type: "string" },
+            { default: false, name: "open", type: "boolean" },
+            { default: null, name: "description", type: "string | null" }
+          ],
           slotScopes: [
             {
               name: "footer",
@@ -277,7 +281,7 @@ describe("workspace component index", () => {
       importPath: "@acme/elfui-kit",
       localName: "PackageButton",
       packageImportPath: "@acme/elfui-kit",
-      props: ["label", "open"],
+      props: ["label", "open", "description"],
       slots: ["default", "footer"],
       tagName: "elf-package-button"
     });
@@ -287,9 +291,15 @@ describe("workspace component index", () => {
         scopeType: "{ action: { disabled: boolean; label: string } }"
       }
     ]);
+    expect(component?.propDetails).toEqual([
+      { name: "label", type: "string" },
+      { defaultValue: "false", name: "open", type: "boolean" },
+      { defaultValue: "null", name: "description", type: "string | null" }
+    ]);
     expect(component?.symbols?.map((item) => `${item.kind}:${item.name}`)).toEqual([
       "prop:label",
       "prop:open",
+      "prop:description",
       "emit:confirm",
       "slot:default",
       "slot:footer"

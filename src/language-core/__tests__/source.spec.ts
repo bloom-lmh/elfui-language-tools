@@ -229,6 +229,32 @@ describe("analyzeElfSource", () => {
     expect(component?.styles[0]?.content).toContain("display");
   });
 
+  it("collects individual macro prop types and static defaults", () => {
+    const result = analyzeElfSource(`
+      import { defineHtml, defineProps, html } from "elfui";
+
+      interface Props {
+        count: number;
+        title?: string;
+      }
+
+      defineProps<Props>({
+        count: { type: Number, default: 1 },
+        title: { type: String, default: "Hello" }
+      });
+
+      export default defineHtml(html\`<section>{{ title }}</section>\`);
+    `);
+    const details = result.components[0]?.propDetails;
+
+    expect(details).toEqual(
+      expect.arrayContaining([
+        { defaultValue: "1", name: "count", type: "number" },
+        { defaultValue: '"Hello"', name: "title", type: "string | undefined" }
+      ])
+    );
+  });
+
   it("recognizes macro components imported from @elfui/core", () => {
     const result = analyzeElfSource(
       `

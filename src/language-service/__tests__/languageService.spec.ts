@@ -1618,6 +1618,26 @@ describe("ElfUI language service", () => {
     expect(userLabels).toContain("name");
   });
 
+  it("shows individual macro prop types and defaults in template hover", () => {
+    const source = `
+      import { defineHtml, defineProps, html } from "elfui";
+
+      interface Props {
+        title?: string;
+      }
+
+      defineProps<Props>({ title: { type: String, default: "Hello" } });
+
+      export default defineHtml(html\`<section :title=\${title}></section>\`);
+    `;
+    const document = createDocument(source);
+    const hover = createElfHover(document, positionAfter(document, source, "${title"));
+    const hoverText = readHoverText(hover);
+
+    expect(hoverText).toContain("Type: `string | undefined`");
+    expect(hoverText).toContain('Default: `"Hello"`');
+  });
+
   it("uses DOM event types for $event member completions", () => {
     const source = `
       import { defineHtml, html } from "elfui";

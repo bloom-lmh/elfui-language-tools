@@ -45,6 +45,12 @@ export interface ComponentSymbolMeta {
   start: number;
 }
 
+export interface ComponentPropMeta {
+  defaultValue?: string;
+  name: string;
+  type?: string;
+}
+
 export interface ComponentMeta {
   emits: string[];
   emitsType?: string;
@@ -55,6 +61,7 @@ export interface ComponentMeta {
   macro: boolean;
   name: string | null;
   props: string[];
+  propDetails: ComponentPropMeta[];
   propsType?: string;
   setupReturns: string[];
   slots: string[];
@@ -79,9 +86,11 @@ export interface AnalyzeElfSourceOptions {
 type MutableComponentMeta = ComponentMeta;
 
 interface NamedMeta {
+  defaultValue?: string;
   end: number;
   name: string;
   start: number;
+  type?: string;
 }
 
 interface MacroSymbols {
@@ -101,6 +110,7 @@ export const createEmptyComponentMeta = (id: string): ComponentMeta => ({
   macro: false,
   name: null,
   props: [],
+  propDetails: [],
   setupReturns: [],
   slots: [],
   styles: [],
@@ -299,6 +309,7 @@ const applyMacroMetadata = (
   component.slotsType = item.slotsType;
 
   appendUnique(component.props, [...item.propNames, ...symbols.props.map((prop) => prop.name)]);
+  appendPropDetails(component.propDetails, symbols.props);
   appendUnique(component.emits, [...item.emitNames, ...symbols.emits.map((emit) => emit.name)]);
   appendUnique(
     component.slots,
@@ -409,6 +420,7 @@ const applyBuilderMethod = (
       component.props,
       props.map((item) => item.name)
     );
+    appendPropDetails(component.propDetails, props);
     appendSymbols(component.symbols, props, "prop");
 
     return;
@@ -858,9 +870,17 @@ const readTypeMembers = (
   node: ts.InterfaceDeclaration | ts.TypeLiteralNode,
   sourceFile: ts.SourceFile
 ): NamedMeta[] =>
-  node.members.flatMap((member) =>
-    "name" in member && member.name ? readPropertyNameMeta(member.name, sourceFile) : []
-  );
+  node.members.flatMap((member) => {
+    if (!(ts.isPropertySignature(member) || ts.isPropertyDeclaration(member)) || !member.name) {
+      return [];
+    }
+
+    const type = member.type
+      ? `${member.type.getText(sourceFile)}${member.questionToken ? " | undefined" : ""}`
+      : undefined;
+
+    return readPropertyNameMeta(member.name, sourceFile).map((item) => ({ ...item, type }));
+  });
 
 const callExpressionName = (call: ts.CallExpression): string | null => {
   const expression = call.expression;
@@ -994,7 +1014,14 @@ const readObjectProperties = (node: ts.Node, sourceFile: ts.SourceFile): NamedMe
   }
 
   return node.properties.flatMap((property) => {
-    if (ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property)) {
+    if (ts.isPropertyAssignment(property)) {
+      return readPropertyNameMeta(property.name, sourceFile).map((item) => ({
+        ...item,
+        ...readRuntimePropDetails(property.initializer, sourceFile)
+      }));
+    }
+
+    if (ts.isMethodDeclaration(property)) {
       return readPropertyNameMeta(property.name, sourceFile);
     }
 
@@ -1010,6 +1037,83 @@ const readObjectProperties = (node: ts.Node, sourceFile: ts.SourceFile): NamedMe
 
     return [];
   });
+};
+
+const readRuntimePropDetails = (
+  initializer: ts.Expression,
+  sourceFile: ts.SourceFile
+): Pick<NamedMeta, "defaultValue" | "type"> => {
+  if (ts.isIdentifier(initializer)) {
+    return { type: readRuntimeConstructorType(initializer.text) };
+  }
+
+  if (!ts.isObjectLiteralExpression(initializer)) {
+    return {};
+  }
+
+  const typeProperty = initializer.properties.find(
+    (property): property is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(property) && readPropertyName(property.name).includes("type")
+  );
+  const defaultProperty = initializer.properties.find(
+    (property): property is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(property) && readPropertyName(property.name).includes("default")
+  );
+  const type = typeProperty
+    ? readRuntimePropType(typeProperty.initializer, sourceFile)
+    : undefined;
+  const defaultValue = defaultProperty
+    ? readStaticDefaultValue(defaultProperty.initializer, sourceFile)
+    : undefined;
+
+  return { defaultValue, type };
+};
+
+const readRuntimePropType = (node: ts.Expression, sourceFile: ts.SourceFile): string | undefined => {
+  if (ts.isIdentifier(node)) {
+    return readRuntimeConstructorType(node.text);
+  }
+
+  if (ts.isArrayLiteralExpression(node)) {
+    const types = node.elements
+      .filter(ts.isIdentifier)
+      .map((element) => readRuntimeConstructorType(element.text) ?? element.text);
+
+    return types.length ? types.join(" | ") : undefined;
+  }
+
+  return node.getText(sourceFile);
+};
+
+const readRuntimeConstructorType = (name: string): string | undefined => {
+  switch (name) {
+    case "Boolean":
+      return "boolean";
+    case "Number":
+      return "number";
+    case "String":
+      return "string";
+    case "Array":
+      return "unknown[]";
+    case "Object":
+      return "Record<string, unknown>";
+    default:
+      return undefined;
+  }
+};
+
+const readStaticDefaultValue = (node: ts.Expression, sourceFile: ts.SourceFile): string | undefined => {
+  if (
+    ts.isStringLiteral(node) ||
+    ts.isNumericLiteral(node) ||
+    node.kind === ts.SyntaxKind.TrueKeyword ||
+    node.kind === ts.SyntaxKind.FalseKeyword ||
+    node.kind === ts.SyntaxKind.NullKeyword
+  ) {
+    return node.getText(sourceFile);
+  }
+
+  return undefined;
 };
 
 const readStringArrayEntries = (node: ts.Node, sourceFile: ts.SourceFile): NamedMeta[] => {
@@ -1248,11 +1352,35 @@ const appendUses = (target: ComponentUseMeta[], values: readonly ComponentUseMet
   });
 };
 
+const appendPropDetails = (target: ComponentPropMeta[], values: readonly NamedMeta[]) => {
+  values.forEach((value) => {
+    const existing = target.find((item) => item.name === value.name);
+
+    if (existing) {
+      if (value.type) existing.type = value.type;
+      if (value.defaultValue) existing.defaultValue = value.defaultValue;
+      return;
+    }
+
+    target.push({
+      defaultValue: value.defaultValue,
+      name: value.name,
+      type: value.type
+    });
+  });
+};
+
 const appendNamed = (target: NamedMeta[], values: readonly NamedMeta[]) => {
   values.forEach((value) => {
-    if (!target.some((item) => item.name === value.name)) {
+    const existing = target.find((item) => item.name === value.name);
+
+    if (!existing) {
       target.push(value);
+      return;
     }
+
+    if (value.type) existing.type = value.type;
+    if (value.defaultValue) existing.defaultValue = value.defaultValue;
   });
 };
 

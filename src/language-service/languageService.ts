@@ -6100,7 +6100,11 @@ const createTemplateMetadataHover = (
     return {
       contents: {
         kind: "markdown",
-        value: createSymbolHover("prop", word.value, context.component.propsType)
+        value: createPropHover(
+          word.value,
+          context.component.propsType,
+          context.component.propDetails.find((item) => item.name === word.value)
+        )
       },
       range: sourceRange
     };
@@ -6222,6 +6226,26 @@ const createSymbolHover = (
 
   if (typeName) {
     lines.push(`Declared in: \`${typeName}\``);
+  }
+
+  return lines.join("\n\n");
+};
+
+const createPropHover = (
+  name: string,
+  propsType: string | undefined,
+  detail: { defaultValue?: string; type?: string } | undefined
+): string => {
+  const lines = [`**${name}**`, "ElfUI prop."];
+
+  if (detail?.type) {
+    lines.push(`Type: \`${detail.type}\``);
+  } else if (propsType) {
+    lines.push(`Declared in: \`${propsType}\``);
+  }
+
+  if (detail?.defaultValue !== undefined) {
+    lines.push(`Default: \`${detail.defaultValue}\``);
   }
 
   return lines.join("\n\n");

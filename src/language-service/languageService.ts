@@ -304,15 +304,15 @@ const templateDirectives: Array<
     }
 > = [
   { label: "v-if", placeholder: "condition", value: "expression" },
-  { label: "v-else-if", placeholder: "condition", value: "expression" },
-  { label: "v-else", value: "none" },
   { label: "v-for", value: "for" },
   { label: "v-model", placeholder: "value", value: "expression" },
   { label: "v-show", placeholder: "visible", value: "expression" },
-  { label: "v-text", placeholder: "value", value: "expression" },
-  { label: "v-html", placeholder: "html", value: "expression" },
+  { label: "v-else-if", placeholder: "condition", value: "expression" },
+  { label: "v-else", value: "none" },
   { label: "v-once", value: "none" },
-  { label: "v-memo", placeholder: "[deps]", value: "expression" }
+  { label: "v-memo", placeholder: "[deps]", value: "expression" },
+  { label: "v-text", placeholder: "value", value: "expression" },
+  { label: "v-html", placeholder: "html", value: "expression" }
 ];
 
 const eventModifiers = [".stop", ".prevent", ".capture", ".once", ".passive", ".self"];
@@ -2650,13 +2650,14 @@ const createDirectiveCompletions = (
   completionContext: TemplateCompletionContext,
   completionOptions: ResolvedElfCompletionOptions
 ): CompletionItem[] =>
-  templateDirectives.map((directive) =>
+  templateDirectives.map((directive, index) =>
     createTemplateCompletionItem(document, context, completionContext, {
       detail: "ElfUI directive",
       insertTextFormat: InsertTextFormat.Snippet,
       kind: CompletionItemKind.Property,
       label: directive.label,
-      newText: createDirectiveCompletionText(directive, completionOptions)
+      newText: createDirectiveCompletionText(directive, completionOptions),
+      sortText: `01${index.toString().padStart(2, "0")}`
     })
   );
 
@@ -5085,49 +5086,52 @@ const createUseComponentsImportEdits = (document: TextDocument): TextEdit[] => {
 const createElfuiNamedImportEdits = (document: TextDocument, importName: string): TextEdit[] => {
   const source = document.getText();
   const sourceFile = createTsSourceFile(source);
+  const moduleSpecifiers = ["@elfui/core", "elfui"];
 
-  for (const statement of sourceFile.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      statement.moduleSpecifier.text !== "elfui" ||
-      !statement.importClause?.namedBindings ||
-      !ts.isNamedImports(statement.importClause.namedBindings)
-    ) {
-      continue;
-    }
-
-    const namedImports = statement.importClause.namedBindings;
-
-    if (namedImports.elements.some((element) => element.name.text === importName)) {
-      return [];
-    }
-
-    const closingBraceOffset = source.lastIndexOf("}", namedImports.getEnd());
-
-    if (closingBraceOffset < 0) {
-      return [];
-    }
-
-    const body = source.slice(namedImports.getStart(sourceFile) + 1, closingBraceOffset);
-    const trailingWhitespace = body.match(/\s*$/)?.[0] ?? "";
-    const insertOffset = closingBraceOffset - trailingWhitespace.length;
-    const prefix = namedImports.elements.length > 0 ? ", " : " ";
-    const suffix = trailingWhitespace || " ";
-
-    return [
-      {
-        newText: `${prefix}${importName}${suffix}`,
-        range: createRangeFromOffsets(document, insertOffset, closingBraceOffset)
+  for (const moduleSpecifier of moduleSpecifiers) {
+    for (const statement of sourceFile.statements) {
+      if (
+        !ts.isImportDeclaration(statement) ||
+        !ts.isStringLiteral(statement.moduleSpecifier) ||
+        statement.moduleSpecifier.text !== moduleSpecifier ||
+        !statement.importClause?.namedBindings ||
+        !ts.isNamedImports(statement.importClause.namedBindings)
+      ) {
+        continue;
       }
-    ];
+
+      const namedImports = statement.importClause.namedBindings;
+
+      if (namedImports.elements.some((element) => element.name.text === importName)) {
+        return [];
+      }
+
+      const closingBraceOffset = source.lastIndexOf("}", namedImports.getEnd());
+
+      if (closingBraceOffset < 0) {
+        return [];
+      }
+
+      const body = source.slice(namedImports.getStart(sourceFile) + 1, closingBraceOffset);
+      const trailingWhitespace = body.match(/\s*$/)?.[0] ?? "";
+      const insertOffset = closingBraceOffset - trailingWhitespace.length;
+      const prefix = namedImports.elements.length > 0 ? ", " : " ";
+      const suffix = trailingWhitespace || " ";
+
+      return [
+        {
+          newText: `${prefix}${importName}${suffix}`,
+          range: createRangeFromOffsets(document, insertOffset, closingBraceOffset)
+        }
+      ];
+    }
   }
 
   const insertOffset = findImportInsertionOffset(source);
 
   return [
     {
-      newText: `import { ${importName} } from "elfui";\n`,
+      newText: `import { ${importName} } from "@elfui/core";\n`,
       range: createRangeFromOffsets(document, insertOffset, insertOffset)
     }
   ];

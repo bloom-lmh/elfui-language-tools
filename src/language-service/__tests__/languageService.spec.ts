@@ -261,6 +261,8 @@ describe("ElfUI language service", () => {
     expect(labels.includes("emit")).toBe(false);
     expect(labels.includes("LocalIcon")).toBe(false);
     expect(labels.includes("count")).toBe(false);
+    expect(vIfCompletion?.sortText).toBe("0100");
+    expect(vForCompletion?.sortText).toBe("0101");
     expect(readCompletionNewText(vIfCompletion!)).toBe("v-if=\\${${1:condition}}");
     expect(readCompletionNewText(vForCompletion!)).toBe('v-for="${1:item} in ${2:items}"');
     expect(readCompletionNewText(vMemoCompletion!)).toBe("v-memo=\\${${1:[deps]}}");
@@ -1361,6 +1363,25 @@ describe("ElfUI language service", () => {
 
     expect(action).toBeDefined();
     expect(editTexts).toContain("const handler = (e: Event) => {\n};\n");
+  });
+
+  it("adds useRef to the existing @elfui/core import", () => {
+    const source = `
+      import { defineHtml, html } from "@elfui/core";
+
+      export default defineHtml(html\`<h1>{{ title }}</h1>\`);
+    `;
+    const document = createDocument(source);
+    const diagnostic = createElfDiagnostics(document).find((item) =>
+      readDiagnosticMessages([item]).some((message) => message.includes("title"))
+    );
+    const action = createElfCodeActions(document, diagnostic!.range, {
+      diagnostics: [diagnostic!]
+    }).find((item) => item.title === 'Create state "title" with useRef()');
+    const formatted = applyTextEdits(source, action?.edit?.changes?.[document.uri] ?? []);
+
+    expect(formatted).toContain('import { defineHtml, html, useRef } from "@elfui/core";');
+    expect(formatted).not.toContain('from "elfui"');
   });
 
   it("creates all missing macro states before event handlers", () => {

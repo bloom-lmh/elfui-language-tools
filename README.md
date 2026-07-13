@@ -98,23 +98,23 @@ Run `ElfUI: Generate Component Metadata` in a component-library workspace to wri
 ## Local Development
 
 ```bash
-pnpm --dir tools/vscode-extension test
-pnpm --dir tools/vscode-extension build
-pnpm --dir tools/vscode-extension smoke
-pnpm --dir tools/vscode-extension smoke:host
-pnpm --dir tools/vscode-extension verify:m10
-pnpm --dir tools/vscode-extension package:vsix
+pnpm test
+pnpm build
+pnpm smoke
+pnpm smoke:host
+pnpm verify:m10
+pnpm package:vsix
 ```
 
 The smoke host suite starts a real VS Code Extension Host and covers activation, template completions, declaration quick fixes, document links, workspace symbols, style completions, closing tags, semantic tokens, embedded formatting, and ElfUI Studio commands.
 
 `verify:m10` scans the real `ui-kit/src/components` tree as the M10 pressure gate. It verifies macro component coverage, `v-for`/`v-model`/`${...}` pressure, Web Components CSS token coverage, cached index performance, and test coverage for `useComponents()` aliases, `defineModel()`, `defineSlots<T>()`, and dependency package metadata.
 
-`package:vsix` writes a local installable package to `tools/vscode-extension/.local-vsix/`.
+`package:vsix` writes a local installable package to `.local-vsix/`.
 Install it with:
 
 ```bash
-code --install-extension tools/vscode-extension/.local-vsix/elfui-language-features-0.2.6.vsix --force
+code --install-extension .local-vsix/elfui-language-features-X.Y.Z.vsix --force
 ```
 
 For `v-for` locals, prefer template expressions when possible:

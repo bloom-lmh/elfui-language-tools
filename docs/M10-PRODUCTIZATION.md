@@ -1,12 +1,12 @@
 # M10 Productization Gate
 
 This document records the acceptance gate used to close M10-P2 and M10-P3 for
-`tools/vscode-extension`.
+this repository.
 
 ## Command
 
 ```bash
-pnpm --dir tools/vscode-extension verify:m10
+pnpm verify:m10
 ```
 
 The gate scans the real `ui-kit/src/components` tree and checks:
@@ -23,20 +23,20 @@ The gate scans the real `ui-kit/src/components` tree and checks:
 
 ## Current Baseline
 
-Latest local run on 2026-07-10:
+Latest local run on 2026-07-13:
 
 | Gate | Result |
 | --- | --- |
 | ui-kit source files | 257 TS files |
 | macro/builder component files | 55 files |
-| expression bindings | 1213 |
+| expression bindings | 911 |
 | `v-for` declarations | 50 |
 | `v-model` bindings | 16 |
 | `:host` selectors | 444 |
 | `::part` / `::slotted` selectors | 16 |
-| `--elf-*` token references | 1312 |
-| cold scan budget | 50-80 ms observed, budget <= 3000 ms |
-| warm cache budget | 3-5 ms observed, budget <= 750 ms |
+| `--elf-*` token references | 1343 |
+| cold scan budget | 47-62 ms observed, budget <= 3000 ms |
+| warm cache budget | 2-4 ms observed, budget <= 750 ms |
 
 ## Studio Features
 
@@ -48,6 +48,8 @@ M10-P3 is accepted through real VS Code Extension Host coverage for:
 - `ElfUI: Preview Component`
 - `ElfUI: Migrate Template Bindings to Expressions`
 - `ElfUI: Show Workspace Index Report`
+- `ElfUI: Generate Component Metadata`
+- `ElfUI: Export Workspace Performance Report`
 
 The preview is intentionally a static template preview. Runtime mounting remains
 framework/application-owned because project dev-server setup varies by app.

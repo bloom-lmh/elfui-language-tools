@@ -284,6 +284,26 @@ console.log("ElfUI grammar token tests:");
 }
 
 {
+  console.log("\n  case: css tagged template inside defineStyle");
+  const source = [
+    'import { css, defineStyle } from "@elfui/core";',
+    "defineStyle(css`",
+    "  .fade-enter-from { opacity: 0; }",
+    "`);"
+  ].join("\n");
+  const tokens = tokenize(source);
+  const cssTag = tokens.find((token) => token.line === 1 && token.text === "css");
+  const opacity = tokens.find((token) => token.line === 2 && token.text.includes("opacity"));
+
+  assertion("recognizes css as an ElfUI style tag", () => {
+    expectScope(cssTag, "support.function.elfui.style");
+  });
+  assertion("opens CSS region for defineStyle(css`...`)", () => {
+    expectScope(opacity, "meta.embedded.block.css");
+  });
+}
+
+{
   console.log("\n  case: \${interpolation} tokenizes without crashing");
   let crashed = false;
   try {

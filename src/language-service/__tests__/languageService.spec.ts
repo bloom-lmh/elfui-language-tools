@@ -2150,6 +2150,36 @@ describe("ElfUI language service", () => {
     expect(formatted).toContain('\n            class="primary raised wide"');
   });
 
+  it("keeps expression-bound object attributes intact while formatting templates", () => {
+    const source = `
+      import { defineHtml, html } from "@elfui/core";
+
+      const View = defineHtml(html\`<button
+        :class=\${{
+          'is-disabled': item.disabled,
+          'is-divided': item.divided,
+          'is-selected': isSelected(item)
+        }}
+        :disabled=\${item.disabled}
+      >Save</button>\`);
+    `;
+    const document = createDocument(source);
+    const formatted = applyTextEdits(
+      source,
+      createElfFormattingEdits(document, {
+        insertSpaces: true,
+        tabSize: 2
+      })
+    );
+
+    expect(formatted).toContain(":class=${{");
+    expect(formatted).toContain("'is-disabled': item.disabled");
+    expect(formatted).toContain("'is-divided': item.divided");
+    expect(formatted).toContain("'is-selected': isSelected(item)");
+    expect(formatted).toContain(":disabled=${item.disabled}");
+    expect(formatted).not.toContain('prop="{');
+  });
+
   it("formats only the selected embedded range", () => {
     const source = `
       import { ElfUI } from "elfui";

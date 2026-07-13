@@ -234,6 +234,39 @@ type TemplateCompletionContext =
 const htmlLanguageService = getHtmlLanguageService();
 const cssLanguageService = getCSSLanguageService();
 
+interface CachedSourceAnalysis {
+  analysis: ReturnType<typeof analyzeElfSource>;
+  source: string;
+}
+
+// A single VS Code request fan-outs into several language features. Reusing the
+// parsed source prevents those features from repeatedly building the same AST.
+const sourceAnalysisCache = new Map<string, CachedSourceAnalysis>();
+const sourceAnalysisCacheLimit = 24;
+
+const analyzeDocument = (document: TextDocument) => {
+  const source = document.getText();
+  const cached = sourceAnalysisCache.get(document.uri);
+
+  if (cached?.source === source) {
+    sourceAnalysisCache.delete(document.uri);
+    sourceAnalysisCache.set(document.uri, cached);
+    return cached.analysis;
+  }
+
+  const analysis = analyzeElfSource(source, { fileName: document.uri });
+  sourceAnalysisCache.set(document.uri, { analysis, source });
+
+  if (sourceAnalysisCache.size > sourceAnalysisCacheLimit) {
+    const oldestUri = sourceAnalysisCache.keys().next().value;
+    if (oldestUri) {
+      sourceAnalysisCache.delete(oldestUri);
+    }
+  }
+
+  return analysis;
+};
+
 export const elfSemanticTokenTypes = [
   "class",
   "property",
@@ -668,9 +701,7 @@ export const createElfDiagnostics = (
 ): Diagnostic[] => {
   const source = document.getText();
   const resolvedOptions = resolveLanguageServiceOptions(options);
-  const analysis = analyzeElfSource(source, {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
   const macroDiagnostics = analysis.isMacroComponent
     ? createMacroDiagnostics(document, analysis.components)
     : [];
@@ -1060,9 +1091,7 @@ const readSlotWordRangeAtOffset = (
 };
 
 export const createElfDocumentSymbols = (document: TextDocument): DocumentSymbol[] => {
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
 
   return analysis.components.map((component, index) => {
     const range = createComponentRange(document, component);
@@ -1106,9 +1135,7 @@ export const createElfDocumentSymbols = (document: TextDocument): DocumentSymbol
 
 export const createElfDocumentLinks = (document: TextDocument): DocumentLink[] => {
   const source = document.getText();
-  const analysis = analyzeElfSource(source, {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
 
   return [
     ...createImportDocumentLinks(document),
@@ -1361,9 +1388,7 @@ export const createElfFoldingRanges = (
   document: TextDocument,
   context?: { rangeLimit?: number }
 ): FoldingRange[] => {
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
 
   return analysis.components.flatMap((component) => [
     ...component.templates.flatMap((region) =>
@@ -1515,9 +1540,7 @@ export const createElfSemanticTokens = (
   const source = document.getText();
   const sourceStart = range ? document.offsetAt(range.start) : 0;
   const sourceEnd = range ? document.offsetAt(range.end) : source.length;
-  const analysis = analyzeElfSource(source, {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
   const resolvedOptions = resolveLanguageServiceOptions(options);
   const tokens = analysis.components.flatMap((component) => [
     ...createComponentDeclarationSemanticTokens(component),
@@ -1819,9 +1842,7 @@ const readDirectiveNamePart = (attribute: string): { start: number; text: string
 };
 
 export const createElfInlayHints = (document: TextDocument, range?: Range): InlayHint[] => {
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
   const sourceStart = range ? document.offsetAt(range.start) : 0;
   const sourceEnd = range ? document.offsetAt(range.end) : document.getText().length;
 
@@ -1865,9 +1886,7 @@ const isElfCodeActionDiagnostic = (diagnostic: Diagnostic): boolean =>
   diagnostic.source === "ElfUI" || diagnostic.source === "ElfUI Macro";
 
 export const createElfDocumentColors = (document: TextDocument): ColorInformation[] => {
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
 
   return analysis.components.flatMap((component) =>
     component.styles.flatMap((region) => {
@@ -1910,9 +1929,7 @@ export const createElfFormattingEdits = (
   document: TextDocument,
   options: ElfFormattingOptions
 ): TextEdit[] => {
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
 
   return analysis.components.flatMap((component) => [
     ...component.templates.flatMap((region) => formatEmbeddedRegion(document, region, options)),
@@ -1925,9 +1942,7 @@ export const createElfRangeFormattingEdits = (
   range: Range,
   options: ElfFormattingOptions
 ): TextEdit[] => {
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
   const start = document.offsetAt(range.start);
   const end = document.offsetAt(range.end);
 
@@ -1978,9 +1993,7 @@ const resolveElfReferenceTarget = (
 ): ElfReferenceTarget | null => {
   const source = document.getText();
   const offset = document.offsetAt(position);
-  const analysis = analyzeElfSource(source, {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
 
   for (const component of analysis.components) {
     const sourceSymbol = component.symbols.find(
@@ -2377,9 +2390,7 @@ const createAttributeInlayHintLabel = (
 };
 
 const createTemplateBindingStyleActions = (document: TextDocument, range: Range): CodeAction[] => {
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
   const start = document.offsetAt(range.start);
   const end = document.offsetAt(range.end);
 
@@ -3959,9 +3970,7 @@ const createTemplateComponentAutoImportActions = (
 
   const sourceStart = document.offsetAt(range.start);
   const sourceEnd = document.offsetAt(range.end);
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
   const actions: CodeAction[] = [];
 
   diagnostics.forEach((diagnostic) => {
@@ -4029,9 +4038,7 @@ const createTemplateDeclarationCodeActions = (
 
   const sourceStart = document.offsetAt(range.start);
   const sourceEnd = document.offsetAt(range.end);
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
   const actions: CodeAction[] = [];
   const batchAction = createAllMissingTemplateDeclarationAction(
     document,
@@ -6290,9 +6297,7 @@ const findEmbeddedDocumentContext = (
   kind: EmbeddedRegion["kind"]
 ): EmbeddedDocumentContext | null => {
   const offset = document.offsetAt(position);
-  const analysis = analyzeElfSource(document.getText(), {
-    fileName: document.uri
-  });
+  const analysis = analyzeDocument(document);
 
   for (const component of analysis.components) {
     const regions = kind === "template" ? component.templates : component.styles;
@@ -6400,19 +6405,23 @@ const formatEmbeddedRegion = (
           insertSpaces: options.insertSpaces,
           tabSize: options.tabSize
         };
+  const protectedTemplate =
+    region.kind === "template" ? protectTemplateExpressions(virtualDocument.getText()) : undefined;
+  const formattingDocument = protectedTemplate
+    ? TextDocument.create(virtualDocument.uri, virtualDocument.languageId, virtualDocument.version, protectedTemplate.source)
+    : virtualDocument;
   const edits =
     region.kind === "template"
-      ? htmlLanguageService.format(virtualDocument, virtualRange, {
+      ? htmlLanguageService.format(formattingDocument, virtualRange, {
           ...formatOptions,
           wrapAttributes: "auto"
         })
-      : cssLanguageService.format(virtualDocument, virtualRange, formatOptions);
+      : cssLanguageService.format(formattingDocument, virtualRange, formatOptions);
 
   if (!sourceRange) {
-    const formattedContent = applyVirtualTextEdits(
-      virtualDocument.getText(),
-      virtualDocument,
-      edits
+    const formattedContent = restoreTemplateExpressions(
+      applyVirtualTextEdits(formattingDocument.getText(), formattingDocument, edits),
+      protectedTemplate
     );
 
     return [
@@ -6426,7 +6435,69 @@ const formatEmbeddedRegion = (
     ];
   }
 
-  return edits.map((edit) => mapTextEdit(document, { region, virtualDocument }, edit));
+  return edits.map((edit) =>
+    mapTextEdit(document, { region, virtualDocument }, {
+      ...edit,
+      newText: restoreTemplateExpressions(edit.newText, protectedTemplate)
+    })
+  );
+};
+
+interface ProtectedTemplateExpressions {
+  replacements: Map<string, string>;
+  source: string;
+}
+
+const protectTemplateExpressions = (template: string): ProtectedTemplateExpressions => {
+  const replacements = new Map<string, string>();
+  let result = "";
+  let cursor = 0;
+  let expressionIndex = 0;
+
+  while (cursor < template.length) {
+    const start = template.indexOf("${", cursor);
+    if (start < 0) {
+      result += template.slice(cursor);
+      break;
+    }
+
+    const end = findBalancedTemplateExpressionEnd(template, start);
+    if (end === null) {
+      result += template.slice(cursor);
+      break;
+    }
+
+    const expression = template.slice(start, end + 1);
+    const attributeExpression = isAttributeExpressionStart(template, start);
+    const markerLength = expression.length - (attributeExpression ? 2 : 0);
+    const marker = createTemplateExpressionMarker(expressionIndex++, markerLength);
+    replacements.set(marker, expression);
+    result += template.slice(cursor, start);
+    result += attributeExpression ? `"${marker}"` : marker;
+    cursor = end + 1;
+  }
+
+  return { replacements, source: result };
+};
+
+const createTemplateExpressionMarker = (index: number, length: number) => {
+  const value = `e${index.toString(36)}`;
+
+  return value.length >= length ? value.slice(0, length) : `${value}${"_".repeat(length - value.length)}`;
+};
+
+const restoreTemplateExpressions = (
+  value: string,
+  protectedTemplate: ProtectedTemplateExpressions | undefined
+) => {
+  if (!protectedTemplate) {
+    return value;
+  }
+
+  return [...protectedTemplate.replacements].reduce(
+    (result, [marker, expression]) => result.replaceAll(`"${marker}"`, expression).replaceAll(marker, expression),
+    value
+  );
 };
 
 const formatEmbeddedCodeBlock = (

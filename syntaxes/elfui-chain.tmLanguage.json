@@ -13,6 +13,9 @@
       "include": "#htmlTaggedTemplate"
     },
     {
+      "include": "#cssTaggedTemplate"
+    },
+    {
       "include": "#quotedDirectiveExpression"
     },
     {
@@ -123,6 +126,32 @@
       "patterns": [
         {
           "include": "#templateContent"
+        }
+      ]
+    },
+    "cssTaggedTemplate": {
+      "begin": "\\b(css)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "name": "support.function.elfui.style entity.name.function.elfui"
+        },
+        "2": {
+          "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.elfui string.template.ts"
+        }
+      },
+      "contentName": "meta.embedded.block.css source.css",
+      "patterns": [
+        {
+          "include": "#interpolation"
+        },
+        {
+          "include": "source.css"
         }
       ]
     },

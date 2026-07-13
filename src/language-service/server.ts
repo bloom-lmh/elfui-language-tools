@@ -134,6 +134,8 @@ export const startElfLanguageServer = (connection: Connection) => {
   let workspaceRoots: string[] = [];
   const workspaceIndex = createWorkspaceComponentIndex();
   const indexedComponentsByUri = workspaceIndex.componentsByUri;
+  const pendingDocumentIndexUpdates = new Map<string, TextDocument>();
+  let pendingDocumentIndexTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingWorkspaceIndexTimer: ReturnType<typeof setTimeout> | undefined;
   const indexPerformanceHistory: WorkspaceIndexPerformanceSample[] = [];
   const completionPerformance = {
@@ -179,18 +181,22 @@ export const startElfLanguageServer = (connection: Connection) => {
     completionPerformance.maxDurationMs = Math.max(completionPerformance.maxDurationMs, durationMs);
   };
 
-  const refreshOpenDocuments = () => {
+  const refreshOpenDocumentDiagnostics = () => {
     documents.all().forEach((document) => {
-      updateIndexedDocument(document, workspaceIndex);
       publishDiagnostics(document);
     });
+  };
+
+  const syncOpenDocumentsToIndex = () => {
+    documents.all().forEach((document) => updateIndexedDocument(document, workspaceIndex));
   };
 
   const rebuildWorkspaceIndexNow = (reason: string) => {
     const stats = rebuildWorkspaceComponentIndex(workspaceRoots, workspaceIndex, reason);
 
     recordWorkspaceIndexStats(stats);
-    refreshOpenDocuments();
+    syncOpenDocumentsToIndex();
+    refreshOpenDocumentDiagnostics();
   };
 
   const scheduleWorkspaceIndexRebuild = (reason: string) => {
@@ -201,6 +207,23 @@ export const startElfLanguageServer = (connection: Connection) => {
     pendingWorkspaceIndexTimer = setTimeout(() => {
       pendingWorkspaceIndexTimer = undefined;
       rebuildWorkspaceIndexNow(reason);
+    }, workspaceIndex.options.indexDebounceMs);
+  };
+
+  const scheduleDocumentIndexUpdate = (document: TextDocument) => {
+    pendingDocumentIndexUpdates.set(document.uri, document);
+
+    if (pendingDocumentIndexTimer) {
+      clearTimeout(pendingDocumentIndexTimer);
+    }
+
+    pendingDocumentIndexTimer = setTimeout(() => {
+      pendingDocumentIndexTimer = undefined;
+      pendingDocumentIndexUpdates.forEach((pendingDocument) =>
+        updateIndexedDocument(pendingDocument, workspaceIndex)
+      );
+      pendingDocumentIndexUpdates.clear();
+      refreshOpenDocumentDiagnostics();
     }, workspaceIndex.options.indexDebounceMs);
   };
 
@@ -605,8 +628,8 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   documents.onDidChangeContent((change) => {
-    updateIndexedDocument(change.document, workspaceIndex);
     publishDiagnostics(change.document);
+    scheduleDocumentIndexUpdate(change.document);
   });
 
   documents.onDidClose((change) => {

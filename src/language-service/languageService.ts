@@ -6425,7 +6425,8 @@ const formatEmbeddedRegion = (
   if (!sourceRange) {
     const formattedContent = restoreTemplateExpressions(
       applyVirtualTextEdits(formattingDocument.getText(), formattingDocument, edits),
-      protectedTemplate
+      protectedTemplate,
+      options
     );
 
     return [
@@ -6492,16 +6493,63 @@ const createTemplateExpressionMarker = (index: number, length: number) => {
 
 const restoreTemplateExpressions = (
   value: string,
-  protectedTemplate: ProtectedTemplateExpressions | undefined
+  protectedTemplate: ProtectedTemplateExpressions | undefined,
+  options?: ElfFormattingOptions
 ) => {
   if (!protectedTemplate) {
     return value;
   }
 
-  return [...protectedTemplate.replacements].reduce(
-    (result, [marker, expression]) => result.replaceAll(`"${marker}"`, expression).replaceAll(marker, expression),
-    value
+  return [...protectedTemplate.replacements].reduce((result, [marker, expression]) => {
+    const quotedMarker = `"${marker}"`;
+    const markerOffset = result.indexOf(quotedMarker);
+    const target = markerOffset >= 0 ? quotedMarker : marker;
+    const offset = markerOffset >= 0 ? markerOffset : result.indexOf(marker);
+    const restoredExpression = options
+      ? formatMultilineObjectExpression(
+          expression,
+          offset >= 0 ? readLineIndent(result, offset) : "",
+          options
+        )
+      : expression;
+
+    return result.replace(target, restoredExpression);
+  }, value);
+};
+
+const formatMultilineObjectExpression = (
+  expression: string,
+  attributeIndent: string,
+  options: ElfFormattingOptions
+) => {
+  if (!expression.startsWith("${{") || !expression.endsWith("}}") || !/\r?\n/.test(expression)) {
+    return expression;
+  }
+
+  const newLine = expression.includes("\r\n") ? "\r\n" : "\n";
+  const lines = expression.slice(3, -2).split(/\r?\n/);
+
+  while (lines[0]?.trim() === "") {
+    lines.shift();
+  }
+  while (lines.at(-1)?.trim() === "") {
+    lines.pop();
+  }
+
+  const contentLines = lines.filter((line) => line.trim());
+  if (contentLines.length === 0) {
+    return expression;
+  }
+
+  const commonIndent = Math.min(
+    ...contentLines.map((line) => line.match(/^[ \t]*/)?.[0].length ?? 0)
   );
+  const contentIndent = `${attributeIndent}${createIndentUnit(options)}`;
+  const normalizedLines = lines.map((line) =>
+    line.trim() ? `${contentIndent}${line.slice(commonIndent)}` : ""
+  );
+
+  return "${{" + newLine + normalizedLines.join(newLine) + newLine + attributeIndent + "}}";
 };
 
 const formatEmbeddedCodeBlock = (

@@ -2194,6 +2194,14 @@ describe("ElfUI language service", () => {
     );
 
     expect(formatted).toContain(":class=${{");
+    const classLine = formatted.split("\n").find((line) => line.includes(":class=${{")) ?? "";
+    const memberLine =
+      formatted.split("\n").find((line) => line.includes("'is-disabled': item.disabled")) ?? "";
+    const closeLine = formatted.split("\n").find((line) => line.trim() === "}}") ?? "";
+    const indentSize = (line: string) => line.match(/^[ \t]*/)?.[0].length ?? 0;
+
+    expect(indentSize(memberLine)).toBe(indentSize(classLine) + 2);
+    expect(indentSize(closeLine)).toBe(indentSize(classLine));
     expect(formatted).toContain("'is-disabled': item.disabled");
     expect(formatted).toContain("'is-divided': item.divided");
     expect(formatted).toContain("'is-selected': isSelected(item)");

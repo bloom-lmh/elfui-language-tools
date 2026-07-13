@@ -86,6 +86,17 @@ export interface LanguageServerPerformanceSummary {
   index: WorkspaceIndexPerformanceSample[];
 }
 
+export interface GeneratedComponentMetadata {
+  emits: string[];
+  exportName: "default" | string;
+  fileName: string;
+  localName: string;
+  props: Array<string | { default?: boolean | null | number | string; name: string; type?: string }>;
+  slotScopes: ElfProjectComponentSlotScope[];
+  slots: string[];
+  tagName?: string;
+}
+
 interface WorkspaceIndexFileCacheEntry {
   components: IndexedProjectComponent[];
   mtimeMs: number;
@@ -278,6 +289,10 @@ export const startElfLanguageServer = (connection: Connection) => {
     },
     index: [...indexPerformanceHistory]
   }));
+
+  connection.onRequest("elfui/getWorkspaceComponentMetadata", (): GeneratedComponentMetadata[] =>
+    createWorkspaceComponentMetadata(workspaceRoots, indexedComponentsByUri)
+  );
 
   connection.onWorkspaceSymbol((params) =>
     createWorkspaceSymbols(params.query, indexedComponentsByUri)
@@ -1130,6 +1145,81 @@ const isPathInside = (candidate: string, root: string): boolean => {
     relativePath === "" ||
     (!!relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath))
   );
+};
+
+export const createWorkspaceComponentMetadata = (
+  workspaceRoots: string[],
+  componentsByUri: Map<string, IndexedProjectComponent[]>
+): GeneratedComponentMetadata[] => {
+  const metadata = new Map<string, GeneratedComponentMetadata>();
+
+  componentsByUri.forEach((components) => {
+    components.forEach((component) => {
+      if (
+        component.importPath ||
+        !workspaceRoots.some((root) => isPathInside(component.fileName, root))
+      ) {
+        return;
+      }
+
+      const key = `${component.fileName}:${component.exportName}:${component.localName}`;
+
+      if (metadata.has(key)) {
+        return;
+      }
+
+      metadata.set(key, {
+        emits: [...(component.emits ?? [])],
+        exportName: component.exportName,
+        fileName: component.fileName,
+        localName: component.localName,
+        props: createGeneratedMetadataProps(component),
+        slotScopes: [...(component.slotScopes ?? [])],
+        slots: [...(component.slots ?? [])],
+        ...(component.tagName ? { tagName: component.tagName } : {})
+      });
+    });
+  });
+
+  return [...metadata.values()].sort((left, right) =>
+    left.localName.localeCompare(right.localName) || left.fileName.localeCompare(right.fileName)
+  );
+};
+
+const createGeneratedMetadataProps = (
+  component: IndexedProjectComponent
+): GeneratedComponentMetadata["props"] =>
+  (component.props ?? []).map((name) => {
+    const detail = component.propDetails?.find((item) => item.name === name);
+    const parsedDefault = parseGeneratedMetadataDefault(detail?.defaultValue);
+
+    if (!detail?.type && !parsedDefault.hasValue) {
+      return name;
+    }
+
+    return {
+      name,
+      ...(detail?.type ? { type: detail.type } : {}),
+      ...(parsedDefault.hasValue ? { default: parsedDefault.value } : {})
+    };
+  });
+
+const parseGeneratedMetadataDefault = (
+  value: string | undefined
+): { hasValue: boolean; value?: boolean | null | number | string } => {
+  if (value === undefined) {
+    return { hasValue: false };
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+
+    return typeof parsed === "string" || typeof parsed === "number" || typeof parsed === "boolean" || parsed === null
+      ? { hasValue: true, value: parsed }
+      : { hasValue: false };
+  } catch {
+    return { hasValue: false };
+  }
 };
 
 const readJsonFile = (fileName: string): unknown => {

@@ -8,6 +8,7 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 
 import {
   applyWatchedFileChangesToIndex,
+  createWorkspaceComponentMetadata,
   createLanguageServiceOptionsForDocument,
   createWorkspaceComponentIndex,
   readLanguageServiceOptions,
@@ -306,6 +307,25 @@ describe("workspace component index", () => {
       "emit:confirm",
       "slot:default",
       "slot:footer"
+    ]);
+  });
+
+  it("creates package metadata from cached local component exports only", () => {
+    const root = createTempRoot();
+    writeComponent(root, "GeneratedButton.ts", "GeneratedButton");
+    const index = createWorkspaceComponentIndex();
+
+    rebuildWorkspaceComponentIndex([root], index, "metadata-generation");
+
+    expect(createWorkspaceComponentMetadata([root], index.componentsByUri)).toEqual([
+      expect.objectContaining({
+        emits: [],
+        exportName: "GeneratedButton",
+        fileName: path.join(root, "GeneratedButton.ts"),
+        localName: "GeneratedButton",
+        props: [{ name: "label", type: "string" }],
+        slots: []
+      })
     ]);
   });
 

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { State, type LanguageClient } from "vscode-languageclient/node";
 
+import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { startElfLanguageClient, stopElfLanguageClient } from "./lsp/client";
 
@@ -50,6 +51,25 @@ interface WorkspaceIndexReportSnapshot {
 
 interface WorkspaceIndexReport extends WorkspaceIndexReportSnapshot {
   history: WorkspaceIndexReportSnapshot[];
+}
+
+interface GeneratedComponentMetadata {
+  emits: string[];
+  exportName: "default" | string;
+  fileName: string;
+  localName: string;
+  props: Array<string | { default?: boolean | null | number | string; name: string; type?: string }>;
+  slotScopes: Array<{ name: string; scopeType: string }>;
+  slots: string[];
+  tagName?: string;
+}
+
+interface MetadataGenerationResult {
+  components: number;
+  manifestUpdated: boolean;
+  metadataUri: string;
+  metadataWritten: boolean;
+  workspace: string;
 }
 
 interface TypeScriptPluginConfiguration {
@@ -182,6 +202,9 @@ export const activate = async (context: vscode.ExtensionContext) => {
       ),
       vscode.commands.registerCommand("elfui.showWorkspaceIndexReport", () =>
         showWorkspaceIndexReport(context),
+      ),
+      vscode.commands.registerCommand("elfui.generateWorkspaceComponentMetadata", () =>
+        generateWorkspaceComponentMetadata(context),
       ),
       vscode.commands.registerCommand(
         "elfui.revealRange",
@@ -1094,6 +1117,166 @@ const migrateActiveTemplateBindings = async (): Promise<number> => {
 
   return count;
 };
+
+const generateWorkspaceComponentMetadata = async (
+  context: vscode.ExtensionContext,
+): Promise<MetadataGenerationResult[]> => {
+  if (!languageClient || languageClient.state !== State.Running) {
+    void vscode.window.showInformationMessage("Start the ElfUI language server before generating metadata.");
+
+    return [];
+  }
+
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+
+  if (workspaceFolders.length === 0) {
+    void vscode.window.showInformationMessage("Open an ElfUI workspace before generating metadata.");
+
+    return [];
+  }
+
+  let components: GeneratedComponentMetadata[];
+
+  try {
+    components = await languageClient.sendRequest<GeneratedComponentMetadata[]>(
+      "elfui/getWorkspaceComponentMetadata",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    outputChannel?.appendLine(`ElfUI metadata generation failed: ${message}`);
+    void vscode.window.showErrorMessage("ElfUI could not read workspace component metadata.");
+
+    return [];
+  }
+
+  const results = await Promise.all(
+    workspaceFolders.map((folder) => generateWorkspaceMetadataFile(folder, components)),
+  );
+  const generatedComponents = results.reduce((count, result) => count + result.components, 0);
+
+  void vscode.window.showInformationMessage(
+    `Generated ElfUI metadata for ${generatedComponents} component${generatedComponents === 1 ? "" : "s"}.`,
+  );
+
+  return results;
+};
+
+const generateWorkspaceMetadataFile = async (
+  folder: vscode.WorkspaceFolder,
+  components: GeneratedComponentMetadata[],
+): Promise<MetadataGenerationResult> => {
+  const packageUri = vscode.Uri.joinPath(folder.uri, "package.json");
+  const packageJson = await readWorkspaceJson(packageUri);
+  const declaredMetadataPath = readMetadataRelativePath(packageJson);
+  const relativeMetadataPath = declaredMetadataPath ?? "elfui.components.json";
+  const metadataUri = vscode.Uri.joinPath(folder.uri, ...relativeMetadataPath.split("/"));
+  const localComponents = components
+    .filter((component) => isFileInWorkspaceFolder(component.fileName, folder.uri.fsPath))
+    .map(({ fileName: _fileName, ...component }) => component);
+  const metadataWritten = await writeWorkspaceTextIfChanged(
+    metadataUri,
+    `${JSON.stringify({ components: localComponents }, null, 2)}\n`,
+  );
+  const nextPackageJson = packageJson && !declaredMetadataPath
+    ? withMetadataDeclaration(packageJson, relativeMetadataPath)
+    : null;
+  const manifestUpdated = nextPackageJson
+    ? await writeWorkspaceTextIfChanged(packageUri, `${JSON.stringify(nextPackageJson, null, 2)}\n`)
+    : false;
+
+  return {
+    components: localComponents.length,
+    manifestUpdated,
+    metadataUri: metadataUri.toString(),
+    metadataWritten,
+    workspace: folder.uri.toString(),
+  };
+};
+
+const readWorkspaceJson = async (uri: vscode.Uri): Promise<Record<string, unknown> | null> => {
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    const value: unknown = JSON.parse(Buffer.from(bytes).toString("utf8"));
+
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+};
+
+const readMetadataRelativePath = (packageJson: Record<string, unknown> | null): string | null => {
+  if (!packageJson || !isRecord(packageJson.elfui) || !isRecord(packageJson.elfui.languageTools)) {
+    return null;
+  }
+
+  const declaration = packageJson.elfui.languageTools.components;
+
+  if (typeof declaration !== "string") {
+    return null;
+  }
+
+  const normalized = declaration.replace(/\\/g, "/").replace(/^\.\//, "");
+
+  return isSafeMetadataRelativePath(normalized) ? normalized : null;
+};
+
+const isSafeMetadataRelativePath = (value: string): boolean =>
+  value.length > 0 &&
+  value.toLowerCase().endsWith(".json") &&
+  !path.isAbsolute(value) &&
+  !value.split("/").some((segment) => !segment || segment === "." || segment === "..");
+
+const withMetadataDeclaration = (
+  packageJson: Record<string, unknown>,
+  relativeMetadataPath: string,
+): Record<string, unknown> => {
+  const elfui = isRecord(packageJson.elfui) ? packageJson.elfui : {};
+  const languageTools = isRecord(elfui.languageTools) ? elfui.languageTools : {};
+
+  return {
+    ...packageJson,
+    elfui: {
+      ...elfui,
+      languageTools: {
+        ...languageTools,
+        components: `./${relativeMetadataPath}`,
+      },
+    },
+  };
+};
+
+const isFileInWorkspaceFolder = (fileName: string, workspacePath: string): boolean => {
+  const relativePath = path.relative(workspacePath, fileName);
+
+  return relativePath === "" || (!!relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+};
+
+const writeWorkspaceTextIfChanged = async (uri: vscode.Uri, text: string): Promise<boolean> => {
+  try {
+    const current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+
+    if (current === text) {
+      return false;
+    }
+  } catch {
+    // The target is new or unreadable, so write the generated source below.
+  }
+
+  await vscode.workspace.fs.createDirectory(parentUri(uri));
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(text, "utf8"));
+
+  return true;
+};
+
+const parentUri = (uri: vscode.Uri): vscode.Uri => {
+  const separator = uri.path.lastIndexOf("/");
+
+  return uri.with({ path: separator > 0 ? uri.path.slice(0, separator) : "/" });
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
 
 const showWorkspaceIndexReport = async (context: vscode.ExtensionContext) => {
   const started = performance.now();

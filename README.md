@@ -24,6 +24,7 @@ VS Code language features for ElfUI macro and chain components.
 - Rename for same-file template symbols, current-file workspace component usages, and matching external declarations when the template name is the real exported name.
 - Workspace Symbols for indexed ElfUI components and their props, events, and slots.
 - Dependency package component metadata from `package.json` declarations, so component libraries can provide completions, diagnostics, definitions, and auto imports without scanning `node_modules`.
+- `ElfUI: Generate Component Metadata` creates package metadata from the cached local component index and only writes files whose generated content changed.
 - Document Links for TS import/export paths, template asset links, and CSS `url(...)` references inside ElfUI embedded regions.
 - Folding Range, Selection Range, and Linked Editing Range support inside embedded template and style strings.
 - Optional Semantic Tokens for ElfUI component declarations, template component tags, props, events, slots, setup values, template locals, and directives.
@@ -91,6 +92,8 @@ The metadata JSON can list exported components:
 ```
 
 `importPath` is optional and defaults to the package name. `props` and `emits` also accept the legacy string form such as `["label", "open"]` or `["confirm"]`; use the structured form to show prop type/default value and event payload type in template hover.
+
+Run `ElfUI: Generate Component Metadata` in a component-library workspace to write `elfui.components.json` (or the existing declared metadata path). When `package.json` exists without an ElfUI metadata declaration, the command adds `elfui.languageTools.components` automatically. It uses the language server's cached workspace index and skips unchanged writes.
 
 ## Local Development
 

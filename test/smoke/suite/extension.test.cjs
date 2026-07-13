@@ -54,7 +54,8 @@ suite("ElfUI Language Features Smoke", function () {
       "elfui.showDynamicPoints",
       "elfui.previewComponent",
       "elfui.migrateTemplateBindings",
-      "elfui.showWorkspaceIndexReport"
+      "elfui.showWorkspaceIndexReport",
+      "elfui.generateWorkspaceComponentMetadata"
     ].forEach((command) => {
       assert(commands.includes(command), `Expected ${command} command to be registered.`);
     });
@@ -1032,6 +1033,62 @@ suite("ElfUI Language Features Smoke", function () {
     }
   });
 
+  test("generates package metadata from cached workspace components", async () => {
+    const componentPath = path.join(WORKSPACE_ROOT, "GeneratedMetadataButton.ts");
+    const metadataPath = path.join(WORKSPACE_ROOT, "elfui.components.json");
+    const originalPackage = readFileIfPresent(PACKAGE_JSON_PATH);
+    const originalMetadata = readFileIfPresent(metadataPath);
+
+    try {
+      fs.writeFileSync(
+        PACKAGE_JSON_PATH,
+        JSON.stringify({ name: "generated-elfui-kit", version: "1.0.0" }, null, 2),
+        "utf8"
+      );
+      fs.writeFileSync(
+        componentPath,
+        [
+          'import { defineHtml, defineProps, html } from "elfui";',
+          "",
+          "interface Props { label: string; }",
+          "defineProps<Props>();",
+          "",
+          "export const GeneratedMetadataButton = defineHtml(html`<button>{{ label }}</button>`);",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+      await vscode.commands.executeCommand("elfui.restartLanguageServer");
+      await wait(1000);
+
+      const first = await vscode.commands.executeCommand("elfui.generateWorkspaceComponentMetadata");
+      const firstResult = Array.isArray(first) ? first[0] : undefined;
+      const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+      const packageJson = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
+
+      assert.equal(firstResult?.components >= 1, true, "Expected generated component metadata.");
+      assert.equal(firstResult?.manifestUpdated, true, "Expected package metadata declaration update.");
+      assert.equal(firstResult?.metadataWritten, true, "Expected metadata file write.");
+      assert.equal(packageJson.elfui?.languageTools?.components, "./elfui.components.json");
+      assert.deepEqual(
+        metadata.components.find((item) => item.localName === "GeneratedMetadataButton")?.props,
+        [{ name: "label", type: "string" }]
+      );
+
+      const second = await vscode.commands.executeCommand("elfui.generateWorkspaceComponentMetadata");
+      const secondResult = Array.isArray(second) ? second[0] : undefined;
+
+      assert.equal(secondResult?.manifestUpdated, false, "Expected unchanged manifest to skip writes.");
+      assert.equal(secondResult?.metadataWritten, false, "Expected unchanged metadata to skip writes.");
+    } finally {
+      restoreFile(PACKAGE_JSON_PATH, originalPackage);
+      restoreFile(metadataPath, originalMetadata);
+      fs.rmSync(componentPath, { force: true });
+      await vscode.commands.executeCommand("elfui.restartLanguageServer");
+      await wait(500);
+    }
+  });
+
   test("indexes ui-kit style macro components with aliases, models and typed slots", async () => {
     const actionPath = path.join(WORKSPACE_ROOT, "DialogActionButton.ts");
     const dialogPath = path.join(WORKSPACE_ROOT, "UiDialog.ts");
@@ -1619,6 +1676,24 @@ function cleanupExternalPackageMetadata() {
   fs.rmSync(EXTERNAL_PACKAGE_ROOT, { force: true, recursive: true });
   removeDirectoryIfEmpty(path.dirname(EXTERNAL_PACKAGE_ROOT));
   removeDirectoryIfEmpty(path.join(WORKSPACE_ROOT, "node_modules"));
+}
+
+function readFileIfPresent(fileName) {
+  try {
+    return fs.readFileSync(fileName, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+function restoreFile(fileName, content) {
+  if (content === undefined) {
+    fs.rmSync(fileName, { force: true });
+    return;
+  }
+
+  fs.mkdirSync(path.dirname(fileName), { recursive: true });
+  fs.writeFileSync(fileName, content, "utf8");
 }
 
 function removeDirectoryIfEmpty(directory) {

@@ -2,7 +2,7 @@
   "name": "elfui-language-features",
   "displayName": "ElfUI Language Tools",
   "description": "VS Code language features for ElfUI macro components.",
-  "version": "0.2.25",
+  "version": "0.2.26",
   "license": "MIT",
   "type": "commonjs",
   "publisher": "SWUST-WEBLAB-LMH",
@@ -29,6 +29,17 @@
     "onLanguage:javascriptreact"
   ],
   "main": "./dist/extension.js",
+  "browser": "./dist/web-extension.js",
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": true
+  },
   "icon": "images/icon.png",
   "contributes": {
     "commands": [

@@ -8,6 +8,7 @@ const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8
 
 const requiredFiles = [
   packageJson.main,
+  packageJson.browser,
   packageJson.icon,
   "README.md",
   "syntaxes/elfui-chain.tmLanguage.json",
@@ -34,6 +35,12 @@ const grammar = packageJson.contributes?.grammars?.find(
 if (!grammar) {
   console.error("ElfUI VS Code extension smoke check failed.");
   console.error("Missing ElfUI chain injection grammar contribution.");
+  process.exit(1);
+}
+
+if (!packageJson.browser || !Array.isArray(packageJson.extensionKind)) {
+  console.error("ElfUI VS Code extension smoke check failed.");
+  console.error("Missing browser extension entry or extension host declaration.");
   process.exit(1);
 }
 

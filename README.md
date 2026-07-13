@@ -2,6 +2,31 @@
 
 VS Code language features for ElfUI macro and chain components.
 
+## StackBlitz Codeflow / VS Code for the Web
+
+The extension now has a browser entry point. In a web extension host such as
+StackBlitz Codeflow, it provides the ElfUI TextMate grammar, macro snippets,
+directive completions, macro completions, and the `ElfUI: Diagnose Integration`
+command without requiring a native process.
+
+The full language server, workspace component index, TypeScript server plugin,
+and ElfUI Studio commands still require the Node extension host used by desktop
+VS Code. This distinction is intentional: the web entry never claims that the
+Node IPC language server is running.
+
+To use the web experience, open the repository in Codeflow, open **Extensions**,
+and install the packaged VSIX. The local package command creates it at
+`.local-vsix/elfui-language-features-X.Y.Z.vsix`:
+
+```bash
+pnpm package:vsix
+```
+
+For the ElfUI StackBlitz starter, open
+`https://pr.new/bloom-lmh/elfui-playground` in Codeflow, then install the VSIX
+from the Extensions pane. Once the extension is published to the Visual Studio
+Marketplace, the same pane can install it by name instead.
+
 ## Features
 
 - Macro component support for ordinary `.ts` / `.tsx` files that export `defineHtml()` components.

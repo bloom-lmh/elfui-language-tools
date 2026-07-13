@@ -43,6 +43,14 @@ const buildConfigs = [
   },
   {
     ...baseConfig,
+    entryPoints: [path.join(packageRoot, "src", "web-extension.ts")],
+    external: ["vscode"],
+    outfile: path.join(distDir, "web-extension.js"),
+    platform: "browser",
+    target: "es2022"
+  },
+  {
+    ...baseConfig,
     entryPoints: [path.join(packageRoot, "src", "language-service", "node.ts")],
     outfile: path.join(distDir, "lsp-server.js")
   },

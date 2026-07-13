@@ -28,7 +28,7 @@ VS Code language features for ElfUI macro and chain components.
 - Folding Range, Selection Range, and Linked Editing Range support inside embedded template and style strings.
 - Optional Semantic Tokens for ElfUI component declarations, template component tags, props, events, slots, setup values, template locals, and directives.
 - Quick Fixes for declaring unknown template variables, initializing untyped `v-for` list states, undeclared emits, and same-file component prop/event/slot mismatches.
-- ElfUI Studio tools: an `ElfUI Components` explorer view, dynamic point/effect reports, a static component preview, a template binding migration command, and a workspace index performance report.
+- ElfUI Studio tools: an `ElfUI Components` explorer view, dynamic point/effect reports, a static component preview, a template binding migration command, and a persistent workspace performance report with language-server index and completion latency metrics.
 - Snippets for macro components: `elfc` creates a minimal `defineHtml()` component skeleton and `elfinit` creates a ready-to-run component template.
 
 ## Settings
@@ -44,6 +44,8 @@ VS Code language features for ElfUI macro and chain components.
 - `elfui.languageFeatures.componentTagColor`: component tag color for ElfUI template strings. Set to `null` to stop managing the color.
 
 Use `ElfUI: Restart Language Server` after changing local language-server builds during development. `ElfUI: Diagnose Integration` reports the active extension version, language-server state, TypeScript plugin configuration, recognized template-region line ranges, diagnostic counts grouped by source, and whether a native template-local false positive is still present.
+
+`ElfUI: Show Workspace Index Report` stores the latest 20 explicit report scans in VS Code workspace state. It also displays the current language-server startup time, recent index samples, and aggregate completion latency without adding per-request disk writes.
 
 ## Component Package Metadata
 

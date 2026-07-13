@@ -1258,6 +1258,18 @@ suite("ElfUI Language Features Smoke", function () {
 
     assert(indexReport.filesScanned > 0, "Expected workspace index report to scan files.");
     assert(indexReport.durationMs >= 0, "Expected workspace index report duration.");
+    assert(
+      indexReport.languageServer?.index?.length > 0,
+      "Expected workspace index report to include language-server index samples.",
+    );
+    assert(
+      indexReport.languageServer?.completion?.count > 0,
+      "Expected workspace index report to include language-server completion latency.",
+    );
+    assert(
+      indexReport.history?.some((item) => item.recordedAt === indexReport.recordedAt),
+      "Expected workspace index report to persist its latest sample.",
+    );
 
     await vscode.window.showTextDocument(studioDocument, { preview: false });
 

@@ -70,6 +70,21 @@ export interface WorkspaceIndexStats {
   truncated: boolean;
 }
 
+export interface CompletionPerformanceStats {
+  averageDurationMs: number;
+  count: number;
+  maxDurationMs: number;
+}
+
+export interface WorkspaceIndexPerformanceSample extends WorkspaceIndexStats {
+  recordedAt: number;
+}
+
+export interface LanguageServerPerformanceSummary {
+  completion: CompletionPerformanceStats;
+  index: WorkspaceIndexPerformanceSample[];
+}
+
 interface WorkspaceIndexFileCacheEntry {
   components: IndexedProjectComponent[];
   mtimeMs: number;
@@ -87,6 +102,8 @@ export const defaultWorkspaceIndexOptions: WorkspaceIndexOptions = {
   maxScanFiles: 1000,
   perfLogging: false
 };
+
+const performanceSampleLimit = 20;
 
 export const createWorkspaceComponentIndex = (
   options: Partial<WorkspaceIndexOptions> = {}
@@ -106,6 +123,12 @@ export const startElfLanguageServer = (connection: Connection) => {
   const workspaceIndex = createWorkspaceComponentIndex();
   const indexedComponentsByUri = workspaceIndex.componentsByUri;
   let pendingWorkspaceIndexTimer: ReturnType<typeof setTimeout> | undefined;
+  const indexPerformanceHistory: WorkspaceIndexPerformanceSample[] = [];
+  const completionPerformance = {
+    count: 0,
+    maxDurationMs: 0,
+    totalDurationMs: 0
+  };
 
   const logWorkspaceIndexStats = (stats: WorkspaceIndexStats) => {
     if (!workspaceIndex.options.perfLogging) {
@@ -128,6 +151,22 @@ export const startElfLanguageServer = (connection: Connection) => {
     );
   };
 
+  const recordWorkspaceIndexStats = (stats: WorkspaceIndexStats) => {
+    indexPerformanceHistory.push({ ...stats, recordedAt: Date.now() });
+
+    if (indexPerformanceHistory.length > performanceSampleLimit) {
+      indexPerformanceHistory.splice(0, indexPerformanceHistory.length - performanceSampleLimit);
+    }
+
+    logWorkspaceIndexStats(stats);
+  };
+
+  const recordCompletionDuration = (durationMs: number) => {
+    completionPerformance.count += 1;
+    completionPerformance.totalDurationMs += durationMs;
+    completionPerformance.maxDurationMs = Math.max(completionPerformance.maxDurationMs, durationMs);
+  };
+
   const refreshOpenDocuments = () => {
     documents.all().forEach((document) => {
       updateIndexedDocument(document, workspaceIndex);
@@ -138,7 +177,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   const rebuildWorkspaceIndexNow = (reason: string) => {
     const stats = rebuildWorkspaceComponentIndex(workspaceRoots, workspaceIndex, reason);
 
-    logWorkspaceIndexStats(stats);
+    recordWorkspaceIndexStats(stats);
     refreshOpenDocuments();
   };
 
@@ -157,7 +196,7 @@ export const startElfLanguageServer = (connection: Connection) => {
     languageServiceOptions = readLanguageServiceOptions(params.initializationOptions);
     workspaceIndex.options = readWorkspaceIndexOptions(params.initializationOptions);
     workspaceRoots = readWorkspaceRoots(params.workspaceFolders, params.rootUri ?? undefined);
-    logWorkspaceIndexStats(
+    recordWorkspaceIndexStats(
       rebuildWorkspaceComponentIndex(workspaceRoots, workspaceIndex, "initialize")
     );
 
@@ -223,33 +262,47 @@ export const startElfLanguageServer = (connection: Connection) => {
   connection.onDidChangeWatchedFiles((params) => {
     const stats = applyWatchedFileChangesToIndex(params.changes, workspaceIndex, "watch");
 
-    logWorkspaceIndexStats(stats);
+    recordWorkspaceIndexStats(stats);
     scheduleWorkspaceIndexRebuild("watch");
   });
+
+  connection.onRequest("elfui/getPerformanceSummary", (): LanguageServerPerformanceSummary => ({
+    completion: {
+      averageDurationMs:
+        completionPerformance.count > 0
+          ? completionPerformance.totalDurationMs / completionPerformance.count
+          : 0,
+      count: completionPerformance.count,
+      maxDurationMs: completionPerformance.maxDurationMs
+    },
+    index: [...indexPerformanceHistory]
+  }));
 
   connection.onWorkspaceSymbol((params) =>
     createWorkspaceSymbols(params.query, indexedComponentsByUri)
   );
 
   connection.onCompletion((params) => {
+    const started = performance.now();
     const document = documents.get(params.textDocument.uri);
+    const result = document
+      ? createElfCompletionList(
+          document,
+          params.position,
+          createLanguageServiceOptionsForDocument(
+            languageServiceOptions,
+            indexedComponentsByUri,
+            document.uri
+          )
+        )
+      : {
+          isIncomplete: false,
+          items: []
+        };
 
-    if (!document) {
-      return {
-        isIncomplete: false,
-        items: []
-      };
-    }
+    recordCompletionDuration(performance.now() - started);
 
-    return createElfCompletionList(
-      document,
-      params.position,
-      createLanguageServiceOptionsForDocument(
-        languageServiceOptions,
-        indexedComponentsByUri,
-        document.uri
-      )
-    );
+    return result;
   });
 
   connection.onHover((params) => {

@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import { startElfLanguageClient, stopElfLanguageClient } from "./lsp/client";
 
 let languageClient: LanguageClient | undefined;
+let languageServerStartupMs: number | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
 let componentStructureProvider: ElfComponentStructureProvider | undefined;
@@ -15,6 +16,41 @@ let typeScriptPluginConfiguration: TypeScriptPluginConfiguration = {
 
 const typeScriptPluginId = "elfui-language-features-typescript-plugin";
 const nativeMissingNameCodes = new Set([2304, 2552]);
+const workspacePerformanceHistoryKey = "elfui.workspacePerformanceHistory";
+const workspacePerformanceHistoryLimit = 20;
+
+interface LanguageServerPerformanceSummary {
+  completion: {
+    averageDurationMs: number;
+    count: number;
+    maxDurationMs: number;
+  };
+  index: Array<{
+    durationMs: number;
+    filesIndexed: number;
+    filesReused: number;
+    filesScanned: number;
+    reason: string;
+    recordedAt: number;
+    truncated: boolean;
+  }>;
+}
+
+interface WorkspaceIndexReportSnapshot {
+  components: number;
+  durationMs: number;
+  filesScanned: number;
+  languageServer?: LanguageServerPerformanceSummary;
+  languageServerStartupMs?: number;
+  recordedAt: number;
+  styles: number;
+  templates: number;
+  truncated: boolean;
+}
+
+interface WorkspaceIndexReport extends WorkspaceIndexReportSnapshot {
+  history: WorkspaceIndexReportSnapshot[];
+}
 
 interface TypeScriptPluginConfiguration {
   message: string;
@@ -104,7 +140,9 @@ export const activate = async (context: vscode.ExtensionContext) => {
         treeDataProvider: componentStructureProvider,
       }),
     );
+    const languageServerStarted = performance.now();
     languageClient = await startElfLanguageClient(context, outputChannel);
+    languageServerStartupMs = languageClient ? performance.now() - languageServerStarted : undefined;
     await configureTypeScriptPlugin();
     setStatusBar(
       languageClient && languageClient.state === State.Running
@@ -220,7 +258,9 @@ const restartLanguageClient = async (context: vscode.ExtensionContext) => {
   setStatusBar("starting");
   await stopElfLanguageClient(languageClient, outputChannel);
   languageClient = undefined;
+  const languageServerStarted = performance.now();
   languageClient = await startElfLanguageClient(context, outputChannel);
+  languageServerStartupMs = languageClient ? performance.now() - languageServerStarted : undefined;
   setStatusBar(
     languageClient && languageClient.state === State.Running
       ? "ready"
@@ -1057,47 +1097,49 @@ const migrateActiveTemplateBindings = async (): Promise<number> => {
 
 const showWorkspaceIndexReport = async (context: vscode.ExtensionContext) => {
   const started = performance.now();
+  const maxScanFiles = vscode.workspace
+    .getConfiguration("elfui.languageFeatures")
+    .get("workspace.maxScanFiles", 1000);
   const files = await vscode.workspace.findFiles(
     "**/*.{ts,tsx,js,jsx}",
     "{**/node_modules/**,**/dist/**,**/.vscode-test/**}",
-    1000,
+    maxScanFiles,
   );
-  let components = 0;
-  let templates = 0;
-  let styles = 0;
-
-  for (const uri of files) {
+  const analyses = await mapWithConcurrency(files, 8, async (uri) => {
     try {
       const bytes = await vscode.workspace.fs.readFile(uri);
-      const text = Buffer.from(bytes).toString("utf8");
-      const componentsInFile = analyzeStudioSource(text);
 
-      components += componentsInFile.length;
-      templates += componentsInFile.reduce(
-        (count, component) => count + component.templates.length,
-        0,
-      );
-      styles += componentsInFile.reduce(
-        (count, component) => count + component.styles.length,
-        0,
-      );
+      return analyzeStudioSource(Buffer.from(bytes).toString("utf8"));
     } catch (error) {
       outputChannel?.appendLine(
         `ElfUI workspace report skipped ${uri.toString()}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-    }
-  }
 
-  const report = {
-    components,
+      return [];
+    }
+  });
+  const components = analyses.flat();
+  const snapshot: WorkspaceIndexReportSnapshot = {
+    components: components.length,
     durationMs: performance.now() - started,
     filesScanned: files.length,
-    styles,
-    templates,
-    truncated: files.length >= 1000,
+    languageServer: await requestLanguageServerPerformanceSummary(),
+    ...(languageServerStartupMs !== undefined ? { languageServerStartupMs } : {}),
+    recordedAt: Date.now(),
+    styles: components.reduce((count, component) => count + component.styles.length, 0),
+    templates: components.reduce((count, component) => count + component.templates.length, 0),
+    truncated: files.length >= maxScanFiles,
   };
+  const history = [snapshot, ...readWorkspacePerformanceHistory(context)].slice(
+    0,
+    workspacePerformanceHistoryLimit,
+  );
+
+  await context.workspaceState.update(workspacePerformanceHistoryKey, history);
+
+  const report: WorkspaceIndexReport = { ...snapshot, history };
   const panel = vscode.window.createWebviewPanel(
     "elfuiWorkspaceIndexReport",
     "ElfUI Workspace Index",
@@ -1111,6 +1153,78 @@ const showWorkspaceIndexReport = async (context: vscode.ExtensionContext) => {
   panel.webview.html = createWorkspaceIndexReportHtml(report);
 
   return report;
+};
+
+const requestLanguageServerPerformanceSummary = async (): Promise<
+  LanguageServerPerformanceSummary | undefined
+> => {
+  if (!languageClient || languageClient.state !== State.Running) {
+    return undefined;
+  }
+
+  try {
+    return await languageClient.sendRequest<LanguageServerPerformanceSummary>(
+      "elfui/getPerformanceSummary",
+    );
+  } catch (error) {
+    outputChannel?.appendLine(
+      `ElfUI workspace report could not read language-server performance: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+
+    return undefined;
+  }
+};
+
+const readWorkspacePerformanceHistory = (
+  context: vscode.ExtensionContext,
+): WorkspaceIndexReportSnapshot[] => {
+  const stored = context.workspaceState.get<unknown>(workspacePerformanceHistoryKey, []);
+
+  return Array.isArray(stored) ? stored.filter(isWorkspaceIndexReportSnapshot) : [];
+};
+
+const isWorkspaceIndexReportSnapshot = (
+  value: unknown,
+): value is WorkspaceIndexReportSnapshot => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return [
+    candidate.components,
+    candidate.durationMs,
+    candidate.filesScanned,
+    candidate.recordedAt,
+    candidate.styles,
+    candidate.templates,
+  ].every((item) => typeof item === "number" && Number.isFinite(item)) && typeof candidate.truncated === "boolean";
+};
+
+const mapWithConcurrency = async <Value, Result>(
+  values: readonly Value[],
+  concurrency: number,
+  callback: (value: Value) => Promise<Result>,
+): Promise<Result[]> => {
+  const results = new Array<Result>(values.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), values.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex;
+
+        nextIndex += 1;
+        results[index] = await callback(values[index]!);
+      }
+    }),
+  );
+
+  return results;
 };
 
 const collectDynamicPoints = (region: StudioRegion): ElfDynamicPoint[] => {
@@ -1391,15 +1505,23 @@ const createComponentPreviewHtml = (
   );
 };
 
-const createWorkspaceIndexReportHtml = (report: {
-  components: number;
-  durationMs: number;
-  filesScanned: number;
-  styles: number;
-  templates: number;
-  truncated: boolean;
-}): string =>
-  createStudioHtml(
+const createWorkspaceIndexReportHtml = (report: WorkspaceIndexReport): string => {
+  const latestIndex = report.languageServer?.index.at(-1);
+  const completion = report.languageServer?.completion;
+  const historyRows = report.history
+    .slice(0, 5)
+    .map(
+      (item) => `
+        <tr>
+          <td>${escapeHtml(new Date(item.recordedAt).toLocaleString())}</td>
+          <td>${item.filesScanned}</td>
+          <td>${item.components}</td>
+          <td>${item.durationMs.toFixed(1)}ms</td>
+        </tr>`,
+    )
+    .join("");
+
+  return createStudioHtml(
     "Workspace index",
     `
       <table>
@@ -1408,12 +1530,38 @@ const createWorkspaceIndexReportHtml = (report: {
           <tr><th>Components</th><td>${report.components}</td></tr>
           <tr><th>Templates</th><td>${report.templates}</td></tr>
           <tr><th>Styles</th><td>${report.styles}</td></tr>
-          <tr><th>Duration</th><td>${report.durationMs.toFixed(1)}ms</td></tr>
+          <tr><th>Report scan</th><td>${report.durationMs.toFixed(1)}ms</td></tr>
           <tr><th>Truncated</th><td>${report.truncated ? "yes" : "no"}</td></tr>
+          <tr><th>Language server startup</th><td>${formatDuration(report.languageServerStartupMs)}</td></tr>
+          <tr><th>Latest language-server index</th><td>${formatIndexDuration(latestIndex)}</td></tr>
+          <tr><th>Completion latency</th><td>${formatCompletionLatency(completion)}</td></tr>
         </tbody>
+      </table>
+      <h2>Recent report scans</h2>
+      <table>
+        <thead><tr><th>Recorded</th><th>Files</th><th>Components</th><th>Duration</th></tr></thead>
+        <tbody>${historyRows || "<tr><td colspan=\"4\">No samples</td></tr>"}</tbody>
       </table>
     `,
   );
+};
+
+const formatDuration = (durationMs: number | undefined): string =>
+  durationMs === undefined ? "unavailable" : `${durationMs.toFixed(1)}ms`;
+
+const formatIndexDuration = (
+  sample: LanguageServerPerformanceSummary["index"][number] | undefined,
+): string =>
+  sample
+    ? `${sample.durationMs.toFixed(1)}ms (${sample.reason}, ${sample.filesScanned} files)`
+    : "unavailable";
+
+const formatCompletionLatency = (
+  completion: LanguageServerPerformanceSummary["completion"] | undefined,
+): string =>
+  completion && completion.count > 0
+    ? `${completion.averageDurationMs.toFixed(1)}ms avg, ${completion.maxDurationMs.toFixed(1)}ms max (${completion.count} requests)`
+    : "unavailable";
 
 const createStaticPreviewHtml = (template: string): string => {
   const withoutScripts = template.replace(/<script\b[\s\S]*?<\/script>/gi, "");

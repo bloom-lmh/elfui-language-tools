@@ -7589,20 +7589,76 @@ const findAttributeVirtualRange = (
   node: HTMLNode,
   attribute: string
 ): { end: number; start: number } | null => {
-  const startTag = template.slice(node.start, node.startTagEnd ?? node.start);
-  const match = new RegExp(`(?:^|\\s)(${escapeRegExp(attribute)})(?=\\s|=|$)`).exec(startTag);
+  const startTagEnd = node.startTagEnd ?? node.start;
+  const match = findAttributeMatch(template.slice(node.start, startTagEnd), attribute);
 
-  if (!match || match.index === undefined || match[1] === undefined) {
-    return null;
+  if (match) {
+    return createAttributeVirtualRange(node.start, attribute, match);
   }
 
-  const leadingWhitespace = match[0].indexOf(match[1]);
-  const start = node.start + match.index + leadingWhitespace;
+  // The HTML service may stop a <template #slot> start tag before the shorthand
+  // attribute. Scan the actual template text only as a fallback for that case.
+  const recoveredStartTagEnd = findTemplateStartTagEnd(template, node.start);
+  const recoveredMatch =
+    recoveredStartTagEnd > startTagEnd
+      ? findAttributeMatch(template.slice(node.start, recoveredStartTagEnd), attribute)
+      : null;
+
+  return recoveredMatch
+    ? createAttributeVirtualRange(node.start, attribute, recoveredMatch)
+    : null;
+};
+
+const findAttributeMatch = (startTag: string, attribute: string) =>
+  new RegExp(`(?:^|\\s)(${escapeRegExp(attribute)})(?=\\s|=|/?>|$)`).exec(startTag);
+
+const createAttributeVirtualRange = (
+  tagStart: number,
+  attribute: string,
+  match: RegExpExecArray
+): { end: number; start: number } => {
+  const leadingWhitespace = match[0].indexOf(attribute);
+  const start = tagStart + match.index + leadingWhitespace;
 
   return {
     end: start + attribute.length,
     start
   };
+};
+
+const findTemplateStartTagEnd = (template: string, start: number): number => {
+  let quote: "\"" | "'" | null = null;
+
+  for (let index = start + 1; index < template.length; index += 1) {
+    const character = template[index];
+
+    if (quote) {
+      if (character === quote && template[index - 1] !== "\\") {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (character === "\"" || character === "'") {
+      quote = character;
+      continue;
+    }
+
+    if (template.startsWith("${", index)) {
+      const expressionEnd = findBalancedTemplateExpressionEnd(template, index);
+
+      if (expressionEnd !== null) {
+        index = expressionEnd;
+      }
+      continue;
+    }
+
+    if (character === ">") {
+      return index + 1;
+    }
+  }
+
+  return template.length;
 };
 
 const findAttributeValueVirtualRange = (

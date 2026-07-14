@@ -1221,6 +1221,19 @@ describe("ElfUI language service", () => {
     expect(labels).toContain("slot");
   });
 
+  it("anchors shorthand slot hints after the complete slot attribute", () => {
+    const source = `
+      import { defineHtml, html } from "@elfui/core";
+
+      export default defineHtml(html\`<template #header></template>\`);
+    `;
+    const document = createDocument(source);
+    const hint = createElfInlayHints(document).find((item) => item.label === "slot");
+
+    expect(hint).toBeDefined();
+    expect(document.offsetAt(hint!.position)).toBe(source.indexOf("#header") + "#header".length);
+  });
+
   it("provides semantic tokens for ElfUI declarations and template usages", () => {
     const source = `
       import { ElfUI } from "elfui";

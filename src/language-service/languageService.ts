@@ -2349,8 +2349,13 @@ const createTemplateInlayHints = (
   const visit = (node: HTMLNode) => {
     Object.keys(node.attributes ?? {}).forEach((attribute) => {
       const label = createAttributeInlayHintLabel(component, attribute);
+      const attributeRange = findAttributeVirtualRange(
+        virtualDocument.getText(),
+        node,
+        attribute
+      );
 
-      if (!label) {
+      if (!label || !attributeRange) {
         return;
       }
 
@@ -2358,7 +2363,14 @@ const createTemplateInlayHints = (
         kind: InlayHintKind.Type,
         label,
         paddingLeft: true,
-        position: findAttributeRange(document, region, virtualDocument, node, attribute).end
+        paddingRight: true,
+        position: mapVirtualRangeByOffsets(
+          document,
+          region,
+          virtualDocument,
+          attributeRange.end,
+          attributeRange.end
+        ).end
       });
     });
 

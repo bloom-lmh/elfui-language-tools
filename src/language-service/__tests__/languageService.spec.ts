@@ -1234,6 +1234,23 @@ describe("ElfUI language service", () => {
     expect(document.offsetAt(hint!.position)).toBe(source.indexOf("#header") + "#header".length);
   });
 
+  it("does not render hints at a tag fallback position when an attribute cannot be located", () => {
+    const source = `
+      import { defineHtml, html } from "@elfui/core";
+
+      export default defineHtml(html\`<button @click=\${onClick} :aria-selected=\${isSelected()}></button>\`);
+    `;
+    const document = createDocument(source);
+    const hints = createElfInlayHints(document);
+    const positions = hints.map((hint) => document.offsetAt(hint.position));
+
+    expect(positions).toContain(source.indexOf("@click") + "@click".length);
+    expect(positions).toContain(
+      source.indexOf(":aria-selected") + ":aria-selected".length
+    );
+    expect(positions).not.toContain(source.indexOf("<button") + 1);
+  });
+
   it("provides semantic tokens for ElfUI declarations and template usages", () => {
     const source = `
       import { ElfUI } from "elfui";

@@ -254,7 +254,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@elfui/compiler": "0.1.0-beta.1",
+    "@elfui/compiler": "0.1.0-beta.3",
     "typescript": "^5.9.3",
     "vscode-css-languageservice": "latest",
     "vscode-html-languageservice": "latest",

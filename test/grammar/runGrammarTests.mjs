@@ -284,39 +284,20 @@ console.log("ElfUI grammar token tests:");
 }
 
 {
-  console.log("\n  case: css tagged template inside defineStyle");
-  const source = [
-    'import { css, defineStyle } from "@elfui/core";',
-    "defineStyle(css`",
-    "  .fade-enter-from { opacity: 0; }",
-    "`);"
-  ].join("\n");
-  const tokens = tokenize(source);
-  const cssTag = tokens.find((token) => token.line === 1 && token.text === "css");
-  const opacity = tokens.find((token) => token.line === 2 && token.text.includes("opacity"));
-
-  assertion("recognizes css as an ElfUI style tag", () => {
-    expectScope(cssTag, "support.function.elfui.style");
-  });
-  assertion("opens CSS region for defineStyle(css`...`)", () => {
-    expectScope(opacity, "meta.embedded.block.css");
-  });
-}
-
-{
   console.log("\n  case: direct defineHtml and defineStyle template literals");
   const source = [
     'import { defineHtml, defineStyle } from "@elfui/core";',
     "defineStyle(`",
     "  :host { display: block; }",
     "`);",
-    "export default defineHtml(`",
+    "export default defineHtml<Props, Record<string, never>>(",
+    "`",
     "  <button @click=${handleClick}>${label}</button>",
     "`);"
   ].join("\n");
   const tokens = tokenize(source);
   const cssBody = tokens.find((token) => token.line === 2 && token.text.includes("display"));
-  const htmlBody = tokens.find((token) => token.line === 5 && token.text === "<");
+  const htmlBody = tokens.find((token) => token.line === 6 && token.text === "<");
 
   assertion("opens CSS region for defineStyle(`...`)", () => {
     expectScope(cssBody, "meta.embedded.block.css");
@@ -341,24 +322,27 @@ console.log("ElfUI grammar token tests:");
 }
 
 {
-  console.log("\n  case: macro html and quoted directive expressions");
+  console.log("\n  case: direct macro template and quoted directive expressions");
   const source = [
-    'import { defineHtml, html } from "elfui";',
+    'import { defineHtml } from "elfui";',
     "const select = (user) => user;",
-    'const View = defineHtml(html`<li v-if="user.active" :key="user.id" @click="select(user, $event)" class="row">{{ user.name }}</li>`);'
+    'const View = defineHtml(`<li v-if="user.active" :key="user.id" @click="select(user, $event)" class="row">{{ user.name }}</li>`);'
   ].join("\n");
   const tokens = tokenize(source);
   const htmlBody = tokens.find((token) => token.line === 2 && token.text === "<");
-  const macro = tokens.find((token) => token.line === 2 && token.text === "html");
+  const macro = tokens.find((token) => token.line === 2 && token.text === "defineHtml");
   const expression = tokens.find(
-    (token) => token.line === 2 && token.text === "user" && token.startIndex === 39
+    (token) =>
+      token.line === 2 &&
+      token.text === "user" &&
+      token.scopes.some((scope) => scope.includes("meta.embedded.expression.elfui"))
   );
   const staticValue = tokens.find((token) => token.line === 2 && token.text === "row");
 
-  assertion("opens HTML region for html`...`", () => {
+  assertion("opens HTML region for defineHtml(`...`)", () => {
     expectScope(htmlBody, "meta.embedded.block.html");
   });
-  assertion("recognizes 'html' as an ElfUI template macro", () => {
+  assertion("recognizes defineHtml as an ElfUI template macro", () => {
     expectScope(macro, "support.function.elfui.template");
   });
   assertion("embeds quoted directive values as TypeScript expressions", () => {
@@ -373,7 +357,7 @@ console.log("ElfUI grammar token tests:");
 {
   console.log("\n  case: expression bindings inside HTML attributes");
   const source =
-    'const View = defineHtml(html`<header v-if=${props.title || props.closable}><elf-drawer :style=${{ width: props.width }} v-else-if=${props.type === "success"} v-if=${props.closable && !props.disabled} :aria-labelledby=${props.title ? titleId : null}></elf-drawer></header>`);';
+    'const View = defineHtml(`<header v-if=${props.title || props.closable}><elf-drawer :style=${{ width: props.width }} v-else-if=${props.type === "success"} v-if=${props.closable && !props.disabled} :aria-labelledby=${props.title ? titleId : null}></elf-drawer></header>`);';
   const tokens = tokenize(source);
   const styleObject = tokens.find((token) => token.text === "width");
   const strictEqual = tokens.find((token) => token.text === "===");
@@ -404,7 +388,7 @@ console.log("ElfUI grammar token tests:");
 {
   console.log("\n  case: ElfUI component tag scopes");
   const source =
-    'const View = defineHtml(html`<CustomButton></CustomButton><elf-button></elf-button><button></button>`);';
+    'const View = defineHtml(`<CustomButton></CustomButton><elf-button></elf-button><button></button>`);';
   const tokens = tokenize(source);
   const customComponent = tokens.find((token) => token.text === "CustomButton");
   const kebabComponent = tokens.find((token) => token.text === "elf-button");

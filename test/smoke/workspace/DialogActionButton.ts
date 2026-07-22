@@ -1,3 +1,3 @@
-import { defineHtml, html } from "elfui";
+import { defineHtml } from "elfui";
 
-export const DialogActionButton = defineHtml(html`<button><slot></slot></button>`);
+export const DialogActionButton = defineHtml(`<button><slot></slot></button>`);

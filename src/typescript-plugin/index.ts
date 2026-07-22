@@ -237,16 +237,14 @@ const findHtmlTemplateExpressionContext = (
       return;
     }
 
-    if (
-      tsModule.isTaggedTemplateExpression(node) &&
-      isHtmlTag(tsModule, node.tag) &&
-      tsModule.isTemplateExpression(node.template)
-    ) {
-      for (const span of node.template.templateSpans) {
+    const template = readDefineHtmlTemplate(tsModule, node);
+
+    if (template) {
+      for (const span of template.templateSpans) {
         if (offset >= span.expression.getStart(sourceFile) && offset < span.expression.getEnd()) {
           result = {
-            contentEnd: node.template.getEnd() - 1,
-            contentStart: node.template.getStart(sourceFile) + 1
+            contentEnd: template.getEnd() - 1,
+            contentStart: template.getStart(sourceFile) + 1
           };
           return;
         }
@@ -261,8 +259,21 @@ const findHtmlTemplateExpressionContext = (
   return result;
 };
 
-const isHtmlTag = (tsModule: typeof ts, tag: ts.Expression): boolean =>
-  tsModule.isIdentifier(tag) && tag.text === "html";
+const readDefineHtmlTemplate = (
+  tsModule: typeof ts,
+  node: ts.Node
+): ts.TemplateExpression | null => {
+  if (
+    !tsModule.isCallExpression(node) ||
+    !tsModule.isIdentifier(node.expression) ||
+    node.expression.text !== "defineHtml"
+  ) {
+    return null;
+  }
+
+  const template = node.arguments[0];
+  return template && tsModule.isTemplateExpression(template) ? template : null;
+};
 
 const isEventBindingTemplateExpression = (
   source: string,

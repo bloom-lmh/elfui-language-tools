@@ -1,19 +1,12 @@
 import * as ts from "typescript";
-import {
-  compileMacroComponent,
-  type MacroComponentMetadata,
-  type MacroExportedComponentMetadata,
-  type MacroLocalComponentMetadata
-} from "@elfui/compiler/macro-component";
+import { compileMacroComponent, type MacroComponentMetadata, type MacroExportedComponentMetadata, type MacroLocalComponentMetadata } from "@elfui/compiler/macro-component";
 import { analyzeElfMacroUsage } from "@elfui/compiler/vite";
 
 export type EmbeddedRegionKind = "template" | "style";
 export type EmbeddedRegionMethod =
-  | "css"
   | "defineHtml"
   | "defineStyle"
   | "globalStyle"
-  | "html"
   | "style"
   | "template";
 
@@ -225,18 +218,12 @@ const applyMacroAnalysis = (
   components: Map<string, MutableComponentMeta>,
   fileName: string
 ) => {
-  const templateRegions = [
-    ...collectTaggedTemplateRegions(sourceFile, "html", "template"),
-    ...collectDefineHtmlRegions(sourceFile)
-  ];
-  const styleRegions = [
-    ...collectTaggedTemplateRegions(sourceFile, "css", "style"),
-    ...collectDefineStyleRegions(sourceFile)
-  ];
+  const templateRegions = collectDefineHtmlRegions(sourceFile);
+  const styleRegions = collectDefineStyleRegions(sourceFile);
   const typeMembers = collectTopLevelTypeMembers(sourceFile);
   const symbols = collectMacroSymbols(sourceFile, typeMembers);
   const metadata = readMacroMetadata(source, fileName, symbols);
-  const componentMetadata = metadata.components.length
+  const componentMetadata: MacroExportedComponentMetadata[] = metadata.components.length
     ? metadata.components
     : [
         {
@@ -246,6 +233,7 @@ const applyMacroAnalysis = (
           name: "macro-component",
           propNames: [],
           propsType: "Record<string, unknown>",
+          runtimePropOptions: {},
           slotsType: "Record<string, unknown>"
         }
       ];
@@ -293,7 +281,8 @@ const readMacroMetadata = (
         name: item.name,
         propsType: "Record<string, unknown>",
         slotsType: "Record<string, unknown>"
-      }))
+      })),
+      sourceId: fileName
     };
   }
 };
@@ -589,43 +578,6 @@ const inferStandaloneEmbeddedMethod = (name: string): "template" | "style" | nul
   }
 
   return null;
-};
-
-const collectTaggedTemplateRegions = (
-  sourceFile: ts.SourceFile,
-  tagName: "css" | "html",
-  kind: EmbeddedRegionKind
-): EmbeddedRegion[] => {
-  const regions: EmbeddedRegion[] = [];
-
-  const visit = (node: ts.Node) => {
-    if (
-      ts.isTaggedTemplateExpression(node) &&
-      ts.isIdentifier(node.tag) &&
-      node.tag.text === tagName
-    ) {
-      const embeddedString = readEmbeddedString(node.template, sourceFile);
-
-      if (embeddedString) {
-        regions.push({
-          content: embeddedString.content,
-          contentEnd: embeddedString.contentEnd,
-          contentStart: embeddedString.contentStart,
-          end: node.getEnd(),
-          kind,
-          languageId: kind === "template" ? "html" : "css",
-          method: tagName,
-          start: node.getStart(sourceFile)
-        });
-      }
-    }
-
-    ts.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
-
-  return regions;
 };
 
 const collectDefineStyleRegions = (sourceFile: ts.SourceFile): EmbeddedRegion[] => {

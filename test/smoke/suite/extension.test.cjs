@@ -71,10 +71,10 @@ suite("ElfUI Language Features Smoke", function () {
     //   );
     const { document, position } = await openFixtureWithCursor(
       [
-        'import { defineHtml, html } from "@elfui/core";',
+        'import { defineHtml } from "@elfui/core";',
         "",
         "export default defineHtml(",
-        `  html\`<button @${CURSOR}></button>\``,
+        `  \`<button @${CURSOR}></button>\``,
         ");",
         ""
       ].join("\n")
@@ -88,9 +88,9 @@ suite("ElfUI Language Features Smoke", function () {
   test("provides framework built-in component completions", async () => {
     const { document, position } = await openFixtureWithCursor(
       [
-        'import { defineHtml, html } from "elfui";',
+        'import { defineHtml } from "elfui";',
         "",
-        "export const Demo = defineHtml(html`",
+        "export const Demo = defineHtml(`",
         `  <Trans${CURSOR}`,
         "`);",
         ""
@@ -387,9 +387,9 @@ suite("ElfUI Language Features Smoke", function () {
   test("provides macro quick fixes for missing state and handlers", async () => {
     const document = await openFixture(
       [
-        'import { defineHtml, html } from "elfui";',
+        'import { defineHtml } from "elfui";',
         "",
-        "export default defineHtml(html`",
+        "export default defineHtml(`",
         "  <main>",
         "    <h1>{{ title }}</h1>",
         "    <button type=\"button\" @blur=${handler}>Save</button>",
@@ -445,11 +445,11 @@ suite("ElfUI Language Features Smoke", function () {
   test("supports quoted v-for completions and repairs untyped list states", async () => {
     const { document: completionDocument, position } = await openFixtureWithCursor(
       [
-        'import { defineHtml, html, useRef } from "elfui";',
+        'import { defineHtml, useRef } from "elfui";',
         "",
         'const userList = useRef([{ age: 35, name: "Ada" }]);',
         "",
-        "export const Home = defineHtml(html`",
+        "export const Home = defineHtml(`",
         "  <ul>",
         `    <li v-for="user in userList" :key="user.${CURSOR}">{{ user.name }}</li>`,
         "  </ul>",
@@ -467,12 +467,12 @@ suite("ElfUI Language Features Smoke", function () {
 
     const { document: mustacheDocument, position: mustachePosition } = await openFixtureWithCursor(
       [
-        'import { defineHtml, defineProps, html, useRef } from "elfui";',
+        'import { defineHtml, defineProps, useRef } from "elfui";',
         "",
         'const props = defineProps({ title: { type: String, default: "" } });',
         'const userList = useRef([{ age: 35, id: 1, name: "Ada" }]);',
         "",
-        "export const Home = defineHtml(html`",
+        "export const Home = defineHtml(`",
         "  <ul>",
         `    <li v-for="user in userList" :key="user.id">{{ user.${CURSOR} }}</li>`,
         "  </ul>",
@@ -493,12 +493,12 @@ suite("ElfUI Language Features Smoke", function () {
 
     const tsDiagnosticDocument = await openFixture(
       [
-        'import { defineHtml, html, useRef } from "elfui";',
+        'import { defineHtml, useRef } from "elfui";',
         "",
         'const userList = useRef([{ age: 35, id: 1, name: "Ada" }]);',
         "const onUserClick = (user, event) => { event.preventDefault(); return user.id; };",
         "",
-        "export const Home = defineHtml(html`",
+        "export const Home = defineHtml(`",
         "  <ul>",
         '    <li v-for="user in userList" :key=${user.id} @click=${onUserClick(user, $event)}>${user.name} - ${user.age}</li>',
         "  </ul>",
@@ -537,13 +537,13 @@ suite("ElfUI Language Features Smoke", function () {
 
     const breadcrumbDocument = await openFixture(
       [
-        'import { defineHtml, html } from "elfui";',
+        'import { defineHtml } from "elfui";',
         "",
         'const props = { separator: "/" };',
         'const visibleItems = () => [{ current: true, disabled: false, ellipsis: false, key: "home", label: "Home", last: false }];',
         "const onItemClick = (item, event) => { event.preventDefault(); return item.key; };",
         "",
-        "export const Breadcrumb = defineHtml(html`",
+        "export const Breadcrumb = defineHtml(`",
         '  <nav class="breadcrumb" aria-label="breadcrumb">',
         '    <ol class="breadcrumb-list">',
         "      <li",
@@ -600,11 +600,11 @@ suite("ElfUI Language Features Smoke", function () {
 
     const document = await openFixture(
       [
-        'import { defineHtml, html, useRef } from "elfui";',
+        'import { defineHtml, useRef } from "elfui";',
         "",
         "const userList = useRef();",
         "",
-        "export const Home = defineHtml(html`",
+        "export const Home = defineHtml(`",
         "  <ul>",
         '    <li v-for="user in userList" :key="user.name">${user.name}</li>',
         "  </ul>",
@@ -692,7 +692,7 @@ suite("ElfUI Language Features Smoke", function () {
     fs.writeFileSync(
       importedPath,
       [
-        'import { defineEmits, defineHtml, defineProps, defineSlots, html } from "elfui";',
+        'import { defineEmits, defineHtml, defineProps, defineSlots } from "elfui";',
         "",
         "interface Props {",
         "  label: string;",
@@ -703,7 +703,7 @@ suite("ElfUI Language Features Smoke", function () {
         "defineEmits<{ submit: [] }>();",
         "defineSlots<{ item: (scope: { row: { id: number; label: string } }) => unknown }>();",
         "",
-        "export const ImportedButton = defineHtml(html`<button></button>`);",
+        "export const ImportedButton = defineHtml(`<button></button>`);",
         ""
       ].join("\n"),
       "utf8"
@@ -1050,12 +1050,12 @@ suite("ElfUI Language Features Smoke", function () {
       fs.writeFileSync(
         componentPath,
         [
-          'import { defineHtml, defineProps, html } from "elfui";',
+          'import { defineHtml, defineProps } from "elfui";',
           "",
           "interface Props { label: string; }",
           "defineProps<Props>();",
           "",
-          "export const GeneratedMetadataButton = defineHtml(html`<button>{{ label }}</button>`);",
+          "export const GeneratedMetadataButton = defineHtml(`<button>{{ label }}</button>`);",
           ""
         ].join("\n"),
         "utf8"
@@ -1098,9 +1098,9 @@ suite("ElfUI Language Features Smoke", function () {
     fs.writeFileSync(
       actionPath,
       [
-        'import { defineHtml, html } from "elfui";',
+        'import { defineHtml } from "elfui";',
         "",
-        "export const DialogActionButton = defineHtml(html`<button><slot></slot></button>`);",
+        "export const DialogActionButton = defineHtml(`<button><slot></slot></button>`);",
         ""
       ].join("\n"),
       "utf8"
@@ -1108,7 +1108,7 @@ suite("ElfUI Language Features Smoke", function () {
     fs.writeFileSync(
       dialogPath,
       [
-        'import { defineEmits, defineHtml, defineModel, defineProps, defineSlots, html, useComponents } from "elfui";',
+        'import { defineEmits, defineHtml, defineModel, defineProps, defineSlots, useComponents } from "elfui";',
         'import { DialogActionButton } from "./DialogActionButton";',
         "",
         "interface DialogProps {",
@@ -1125,7 +1125,7 @@ suite("ElfUI Language Features Smoke", function () {
         "}>();",
         "useComponents({ DialogAction: DialogActionButton });",
         "",
-        "export const UiDialog = defineHtml(html`",
+        "export const UiDialog = defineHtml(`",
         "  <article>",
         "    <header>{{ title }}</header>",
         "    <DialogAction>{{ value }}</DialogAction>",
@@ -1238,7 +1238,7 @@ suite("ElfUI Language Features Smoke", function () {
   test("provides TypeScript member completions inside template expressions", async () => {
     const { document, position } = await openFixtureWithCursor(
       [
-        'import { defineHtml, defineProps, html } from "elfui";',
+        'import { defineHtml, defineProps } from "elfui";',
         "",
         "interface Props {",
         "  disabled?: boolean;",
@@ -1246,7 +1246,7 @@ suite("ElfUI Language Features Smoke", function () {
         "}",
         "",
         "const props = defineProps<Props>();",
-        "export const Demo = defineHtml(html`",
+        "export const Demo = defineHtml(`",
         `  <button :title=\${props.${CURSOR}label}></button>`,
         "`);",
         ""
@@ -1262,9 +1262,9 @@ suite("ElfUI Language Features Smoke", function () {
   test("provides DOM event member completions inside template expressions", async () => {
     const { document, position } = await openFixtureWithCursor(
       [
-        'import { defineHtml, html } from "elfui";',
+        'import { defineHtml } from "elfui";',
         "",
-        "export const Demo = defineHtml(html`",
+        "export const Demo = defineHtml(`",
         `  <input @input=\${$event.${CURSOR}} />`,
         "`);",
         ""
@@ -1280,14 +1280,14 @@ suite("ElfUI Language Features Smoke", function () {
   test("provides ElfUI Studio structure, dynamic point, preview, migration and index commands", async () => {
     const studioDocument = await openFixture(
       [
-        'import { defineHtml, html, useRef } from "elfui";',
+        'import { defineHtml, useRef } from "elfui";',
         "",
         "const users = useRef([{ id: 1, name: 'Ada' }]);",
         "const save = () => {};",
         "const title = 'Users';",
         "const visible = true;",
         "",
-        "export const StudioDemo = defineHtml(html`",
+        "export const StudioDemo = defineHtml(`",
         '  <section :title=${title} v-if=${visible}>',
         '    <button @click=${save}>{{ title }}</button>',
         '    <ul><li v-for="user in users" :key=${user.id}>${user.name}</li></ul>',

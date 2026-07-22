@@ -178,9 +178,9 @@ describe("ElfUI language service", () => {
 
   it("provides event completions for @elfui/core macro components", () => {
     const source = `
-      import { defineHtml, html } from "@elfui/core";
+      import { defineHtml } from "@elfui/core";
 
-      export default defineHtml(html\`<button @\`);
+      export default defineHtml(\`<button @\`);
     `;
     const document = createDocument(source);
     const completions = createElfCompletionList(
@@ -212,9 +212,9 @@ describe("ElfUI language service", () => {
 
   it("completes framework built-in components in template tags", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
-      export const Demo = defineHtml(html\`<Trans\`);
+      export const Demo = defineHtml(\`<Trans\`);
     `;
     const document = createDocument(source);
     const completions = createElfCompletionList(document, positionAfter(document, source, "<Trans"));
@@ -475,9 +475,9 @@ describe("ElfUI language service", () => {
 
   it("does not report missing closing tags for explicit SVG self-closing elements", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
-      export default defineHtml(html\`
+      export default defineHtml(\`
         <svg viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10" />
           <line x1="12" y1="16" x2="12" y2="12" />
@@ -518,9 +518,9 @@ describe("ElfUI language service", () => {
 
   it("does not require framework built-in components to be registered", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
-      export const Demo = defineHtml(html\`
+      export const Demo = defineHtml(\`
         <Teleport to="body"><Transition><span>ready</span></Transition></Teleport>
       \`);
     `;
@@ -1223,9 +1223,9 @@ describe("ElfUI language service", () => {
 
   it("anchors shorthand slot hints after the complete slot attribute", () => {
     const source = `
-      import { defineHtml, html } from "@elfui/core";
+      import { defineHtml } from "@elfui/core";
 
-      export default defineHtml(html\`<template #header></template>\`);
+      export default defineHtml(\`<template #header></template>\`);
     `;
     const document = createDocument(source);
     const hint = createElfInlayHints(document).find((item) => item.label === "slot");
@@ -1236,9 +1236,9 @@ describe("ElfUI language service", () => {
 
   it("does not render hints at a tag fallback position when an attribute cannot be located", () => {
     const source = `
-      import { defineHtml, html } from "@elfui/core";
+      import { defineHtml } from "@elfui/core";
 
-      export default defineHtml(html\`<button @click=\${onClick} :aria-selected=\${isSelected()}></button>\`);
+      export default defineHtml(\`<button @click=\${onClick} :aria-selected=\${isSelected()}></button>\`);
     `;
     const document = createDocument(source);
     const hints = createElfInlayHints(document);
@@ -1350,9 +1350,9 @@ describe("ElfUI language service", () => {
 
   it("creates useRef state quick fixes for macro missing template names", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
-      export default defineHtml(html\`<h1>{{ 标题 }}</h1>\`);
+      export default defineHtml(\`<h1>{{ 标题 }}</h1>\`);
     `;
     const document = createDocument(source);
     const diagnostic = createElfDiagnostics(document).find((item) =>
@@ -1369,15 +1369,15 @@ describe("ElfUI language service", () => {
     expect(action).toBeDefined();
     expect(editTexts).toContain(", useRef ");
     expect(editTexts).toContain("const 标题 = useRef();\n");
-    expect(formatted).toContain('import { defineHtml, html, useRef } from "elfui";');
+    expect(formatted).toContain('import { defineHtml, useRef } from "elfui";');
     expect(formatted).toContain("const 标题 = useRef();");
   });
 
   it("creates handler quick fixes for macro missing event handlers", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
-      export default defineHtml(html\`<button @blur=\${handler}></button>\`);
+      export default defineHtml(\`<button @blur=\${handler}></button>\`);
     `;
     const document = createDocument(source);
     const diagnostic = createElfDiagnostics(document).find((item) =>
@@ -1397,9 +1397,9 @@ describe("ElfUI language service", () => {
 
   it("adds useRef to the existing @elfui/core import", () => {
     const source = `
-      import { defineHtml, html } from "@elfui/core";
+      import { defineHtml } from "@elfui/core";
 
-      export default defineHtml(html\`<h1>{{ title }}</h1>\`);
+      export default defineHtml(\`<h1>{{ title }}</h1>\`);
     `;
     const document = createDocument(source);
     const diagnostic = createElfDiagnostics(document).find((item) =>
@@ -1410,15 +1410,15 @@ describe("ElfUI language service", () => {
     }).find((item) => item.title === 'Create state "title" with useRef()');
     const formatted = applyTextEdits(source, action?.edit?.changes?.[document.uri] ?? []);
 
-    expect(formatted).toContain('import { defineHtml, html, useRef } from "@elfui/core";');
+    expect(formatted).toContain('import { defineHtml, useRef } from "@elfui/core";');
     expect(formatted).not.toContain('from "elfui"');
   });
 
   it("creates all missing macro states before event handlers", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
-      export default defineHtml(html\`
+      export default defineHtml(\`
         <section>
           {{ title }} {{ subtitle }}
           <button @blur=\${onBlur}></button>
@@ -1440,7 +1440,7 @@ describe("ElfUI language service", () => {
     const formatted = applyTextEdits(source, action?.edit?.changes?.[document.uri] ?? []);
 
     expect(action).toBeDefined();
-    expect(formatted).toContain('import { defineHtml, html, useRef } from "elfui";');
+    expect(formatted).toContain('import { defineHtml, useRef } from "elfui";');
     expect(formatted.indexOf("const title = useRef();")).toBeLessThan(
       formatted.indexOf("const subtitle = useRef();")
     );
@@ -1574,9 +1574,9 @@ describe("ElfUI language service", () => {
 
   it("provides auto import quick fixes for unregistered workspace components", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
-      export const Demo = defineHtml(html\`
+      export const Demo = defineHtml(\`
         <ImportedButton></ImportedButton>
       \`);
     `;
@@ -1636,7 +1636,7 @@ describe("ElfUI language service", () => {
 
   it("uses TypeScript virtual files for template member completions", () => {
     const source = `
-      import { defineHtml, defineProps, html } from "elfui";
+      import { defineHtml, defineProps } from "@elfui/core";
 
       interface Props {
         disabled?: boolean;
@@ -1649,7 +1649,7 @@ describe("ElfUI language service", () => {
         name: "Ada"
       };
 
-      export const Demo = defineHtml(html\`
+      export const Demo = defineHtml(\`
         <button :title=\${props.label}>{{ user.name }}</button>
       \`);
     `;
@@ -1669,9 +1669,30 @@ describe("ElfUI language service", () => {
     expect(userLabels).toContain("name");
   });
 
+  it("types useTemplateRef values from @elfui/core in direct templates", () => {
+    const source = `
+      import { defineHtml, onMounted, onUnmounted, useTemplateRef } from "@elfui/core";
+
+      const chart = useTemplateRef<HTMLDivElement>("chart");
+      onMounted(() => chart.value?.focus());
+      onUnmounted(() => chart.value?.blur());
+
+      export default defineHtml(\`
+        <div ref="chart" :data-owner=\${chart.value.}></div>
+      \`);
+    `;
+    const document = createDocument(source);
+    const labels = createElfCompletionList(
+      document,
+      positionAfter(document, source, "${chart.value.")
+    ).items.map((item) => item.label);
+
+    expect(labels).toContain("accessKey");
+  });
+
   it("shows individual macro prop types and defaults in template hover", () => {
     const source = `
-      import { defineHtml, defineProps, html } from "elfui";
+      import { defineHtml, defineProps } from "elfui";
 
       interface Props {
         title?: string;
@@ -1679,7 +1700,7 @@ describe("ElfUI language service", () => {
 
       defineProps<Props>({ title: { type: String, default: "Hello" } });
 
-      export default defineHtml(html\`<section :title=\${title}></section>\`);
+      export default defineHtml(\`<section :title=\${title}></section>\`);
     `;
     const document = createDocument(source);
     const hover = createElfHover(document, positionAfter(document, source, "${title"));
@@ -1691,9 +1712,9 @@ describe("ElfUI language service", () => {
 
   it("uses DOM event types for $event member completions", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
-      export const Demo = defineHtml(html\`
+      export const Demo = defineHtml(\`
         <input @input=\${$event.} />
         <button @keydown=\${$event.}>Save</button>
       \`);
@@ -1717,7 +1738,7 @@ describe("ElfUI language service", () => {
 
   it("uses v-for source types for template local member completions", () => {
     const source = `
-      import { defineHtml, defineProps, html } from "elfui";
+      import { defineHtml, defineProps } from "elfui";
 
       interface Item {
         id: number;
@@ -1730,7 +1751,7 @@ describe("ElfUI language service", () => {
 
       const props = defineProps<Props>();
 
-      export const Demo = defineHtml(html\`
+      export const Demo = defineHtml(\`
         <ul>
           <li v-for="item in props.items">{{ item.label }}</li>
         </ul>
@@ -1748,13 +1769,13 @@ describe("ElfUI language service", () => {
 
   it("provides typed v-for member completions inside quoted bindings", () => {
     const source = `
-      import { defineHtml, html, useRef } from "elfui";
+      import { defineHtml, useRef } from "elfui";
 
       const userList = useRef([
         { age: 35, name: "Ada" }
       ]);
 
-      export const Home = defineHtml(html\`
+      export const Home = defineHtml(\`
         <ul>
           <li v-for="user in userList" :key="user.">{{ user.name }}</li>
         </ul>
@@ -1774,13 +1795,13 @@ describe("ElfUI language service", () => {
 
   it("provides typed v-for member completions inside mustache interpolations", () => {
     const source = `
-      import { defineHtml, html, useRef } from "elfui";
+      import { defineHtml, useRef } from "elfui";
 
       const userList = useRef([
         { age: 35, id: 1, name: "Ada" }
       ]);
 
-      export const Home = defineHtml(html\`
+      export const Home = defineHtml(\`
         <ul>
           <li v-for="user in userList" :key="user.id">{{ user. }}</li>
         </ul>
@@ -1799,13 +1820,13 @@ describe("ElfUI language service", () => {
 
   it("does not report macro TS missing-name diagnostics for v-for locals inside template interpolations", () => {
     const source = `
-      import { defineHtml, html, useRef } from "elfui";
+      import { defineHtml, useRef } from "elfui";
 
       const userList = useRef([
         { age: 35, id: 1, name: "Ada" }
       ]);
 
-      export const Home = defineHtml(html\`
+      export const Home = defineHtml(\`
         <ul>
           <li v-for="user in userList" :key=\${user.id}>\${user.name} - \${user.age}</li>
         </ul>
@@ -1824,11 +1845,11 @@ describe("ElfUI language service", () => {
 
   it("repairs untyped useRef lists reported through v-for locals", () => {
     const source = `
-      import { defineHtml, html, useRef } from "elfui";
+      import { defineHtml, useRef } from "elfui";
 
       const userList = useRef();
 
-      export const Home = defineHtml(html\`
+      export const Home = defineHtml(\`
         <ul>
           <li v-for="user in userList" :key="user.name">\${user.name}</li>
         </ul>
@@ -1858,7 +1879,7 @@ describe("ElfUI language service", () => {
 
   it("uses destructured v-for source types for template local member completions", () => {
     const source = `
-      import { defineHtml, defineProps, html } from "elfui";
+      import { defineHtml, defineProps } from "elfui";
 
       interface Row {
         disabled: boolean;
@@ -1876,7 +1897,7 @@ describe("ElfUI language service", () => {
 
       const props = defineProps<Props>();
 
-      export const Demo = defineHtml(html\`
+      export const Demo = defineHtml(\`
         <ul>
           <li v-for="{ row } in props.groups">{{ row.label }}</li>
           <li v-for="({ row: current }, groupIndex) in props.groups">{{ current.disabled }} {{ groupIndex }}</li>
@@ -2203,9 +2224,9 @@ describe("ElfUI language service", () => {
 
   it("keeps expression-bound object attributes intact while formatting templates", () => {
     const source = `
-      import { defineHtml, html } from "@elfui/core";
+      import { defineHtml } from "@elfui/core";
 
-      const View = defineHtml(html\`<button
+      const View = defineHtml(\`<button
         :class=\${{
           'is-disabled': item.disabled,
           'is-divided': item.divided,
@@ -2294,7 +2315,7 @@ describe("ElfUI language service", () => {
   it("reports macro template TypeScript diagnostics", () => {
     const source = `
       /// <!--@elf component-->
-      import { defineHtml, defineProps, html } from "elfui";
+      import { defineHtml, defineProps } from "@elfui/core";
 
       interface Props {
         disabled: boolean;
@@ -2302,7 +2323,7 @@ describe("ElfUI language service", () => {
 
       const props = defineProps<Props>();
 
-      export default defineHtml(html\`
+      export default defineHtml(\`
         <button :disabled=\${props.disabeld}></button>
       \`);
     `;
@@ -2312,7 +2333,7 @@ describe("ElfUI language service", () => {
     expect(diagnostics.some((item) => item.includes("disabeld"))).toBe(true);
   });
 
-  it("does not report legacy compiler syntax errors for direct defineHtml literals", () => {
+  it("accepts beta.7 direct defineHtml literals", () => {
     const source = `
       /// <!--@elf component-->
       import { defineHtml, defineProps } from "@elfui/core";
@@ -2339,7 +2360,7 @@ describe("ElfUI language service", () => {
 
   it("does not report valid macro handlers and exposed props as missing", () => {
     const source = `
-      import { defineHtml, defineProps, html } from "elfui";
+      import { defineHtml, defineProps } from "elfui";
 
       interface Props {
         title: string;
@@ -2348,7 +2369,7 @@ describe("ElfUI language service", () => {
       const props = defineProps<Props>();
       const toggleTheme = () => props.title;
 
-      export default defineHtml<Props>(html\`
+      export default defineHtml<Props>(\`
         <button @click="toggleTheme">\${title}</button>
       \`);
     `;
@@ -2361,7 +2382,7 @@ describe("ElfUI language service", () => {
 
   it("does not report packaged lib false positives in macro template diagnostics", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
       interface MenuItem {
         badge?: string;
@@ -2383,7 +2404,7 @@ describe("ElfUI language service", () => {
         return item.index;
       };
 
-      export const Menu = defineHtml(html\`
+      export const Menu = defineHtml(\`
         <div v-if="getHorizontalPanelItems().length > 0" class="horizontal-panel">
           <template v-for="item in getHorizontalPanelItems()" :key="item.index">
             <hr v-if="item.divider" class="menu-divider" />
@@ -2418,7 +2439,7 @@ describe("ElfUI language service", () => {
 
   it("does not report HTML scanner errors for expression bindings with quotes", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
       const props = { separator: "/" };
       const visibleItems = () => [
@@ -2429,7 +2450,7 @@ describe("ElfUI language service", () => {
         event.preventDefault();
       };
 
-      export const Breadcrumb = defineHtml(html\`
+      export const Breadcrumb = defineHtml(\`
         <nav class="breadcrumb" aria-label="breadcrumb">
           <ol class="breadcrumb-list">
             <li
@@ -2495,14 +2516,14 @@ describe("ElfUI language service", () => {
 
   it("keeps useRef values typed inside interpolation bindings", () => {
     const source = `
-      import { defineHtml, html, useRef } from "elfui";
+      import { defineHtml, useRef } from "elfui";
 
       const hoveredIndex = useRef("");
       const getHoveredChildren = () => [];
       const findItem = (index: string) => ({ index });
       const popperClass = (name: string, item: { index: string }) => [name, item.index];
 
-      export const Menu = defineHtml(html\`
+      export const Menu = defineHtml(\`
         <div
           v-if=\${getHoveredChildren().length > 0}
           :class=\${popperClass("collapse-popup", findItem(hoveredIndex.value))}
@@ -2519,11 +2540,11 @@ describe("ElfUI language service", () => {
 
   it("keeps real property errors for ordinary interpolation bindings", () => {
     const source = `
-      import { defineHtml, html } from "elfui";
+      import { defineHtml } from "elfui";
 
       const item = { id: "home" };
 
-      export const Menu = defineHtml(html\`<div :class=\${item.value}></div>\`);
+      export const Menu = defineHtml(\`<div :class=\${item.value}></div>\`);
     `;
     const document = TextDocument.create("file:///Menu.ts", "typescript", 0, source);
     const diagnostics = readDiagnosticMessages(createElfDiagnostics(document));
@@ -2534,12 +2555,12 @@ describe("ElfUI language service", () => {
   it("provides macro local component completions and hover metadata", () => {
     const source = `
       /// <!--@elf component-->
-      import { defineHtml, html, useComponents } from "elfui";
+      import { defineHtml, useComponents } from "elfui";
       import { LocalIcon } from "./LocalIcon";
 
       useComponents({ LocalIcon });
 
-      export default defineHtml(html\`
+      export default defineHtml(\`
         <Loc
       \`);
     `;
@@ -2564,14 +2585,14 @@ describe("ElfUI language service", () => {
 
   it("provides indexed component metadata on tags, props, events and slots", () => {
     const source = `
-      import { defineHtml, html, useComponents } from "elfui";
+      import { defineHtml, useComponents } from "elfui";
       import { PackageButton } from "@acme/elfui-kit";
 
       const onConfirm = () => {};
       const visible = true;
       useComponents({ PackageButton });
 
-      export default defineHtml(html\`
+      export default defineHtml(\`
         <PackageButton :open=\${visible} @confirm=\${onConfirm}>
           <template #footer="footer">Footer</template>
         </PackageButton>

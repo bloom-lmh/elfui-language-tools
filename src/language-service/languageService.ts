@@ -743,8 +743,7 @@ const createMacroDiagnostics = (
         (diagnostic) =>
           !isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic) &&
           !isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic) &&
-          !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic) &&
-          !isLegacyCompilerDirectTemplateDiagnostic(components, diagnostic)
+          !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic)
       );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -761,22 +760,6 @@ const createMacroDiagnostics = (
       }
     ];
   }
-};
-
-const isLegacyCompilerDirectTemplateDiagnostic = (
-  components: ComponentMeta[],
-  diagnostic: Diagnostic
-): boolean => {
-  if (
-    diagnostic.code !== "ELF_MACRO_DEFINE_HTML_TEMPLATE" &&
-    diagnostic.code !== "ELF_MACRO_NO_TEMPLATE"
-  ) {
-    return false;
-  }
-
-  return components
-    .flatMap((component) => component.templates)
-    .some((region) => region.method === "defineHtml");
 };
 
 const mapMacroDiagnostic = (document: TextDocument, diagnostic: ElfDiagnostic): Diagnostic => {
@@ -3442,12 +3425,21 @@ declare module "elfui" {
   export function defineEmits<T = { [key: string]: unknown }>(options?: unknown): T;
   export function defineSlots<T = { [key: string]: unknown }>(): T;
   export function defineHtml<T = unknown>(template: T): unknown;
-  export function html(strings: TemplateStringsArray, ...values: unknown[]): string;
-  export function css(strings: TemplateStringsArray, ...values: unknown[]): string;
+  export function defineStyle(...styles: Array<string | null | undefined>): void;
   export function useComponents(components: unknown): void;
   export function useRef<T>(value: T): ElfTemplateRef<T>;
   export function useRef<T = unknown>(): ElfTemplateRef<T>;
   export function useComputed<T>(getter: () => T): Readonly<ElfTemplateRef<T>>;
+  export function useTemplateRef<T extends Element = Element>(name: string): {
+    value: T | null;
+    peek(): T | null;
+  };
+  export function onMounted(callback: () => void): void;
+  export function onUnmounted(callback: () => void): void;
+}
+
+declare module "@elfui/core" {
+  export * from "elfui";
 }
 `;
 

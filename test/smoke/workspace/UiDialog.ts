@@ -1,4 +1,4 @@
-import { defineEmits, defineHtml, defineModel, defineProps, defineSlots, html, useComponents } from "elfui";
+import { defineEmits, defineHtml, defineModel, defineProps, defineSlots, useComponents } from "elfui";
 import { DialogActionButton } from "./DialogActionButton";
 
 interface DialogProps {
@@ -15,7 +15,7 @@ defineSlots<{
 }>();
 useComponents({ DialogAction: DialogActionButton });
 
-export const UiDialog = defineHtml(html`
+export const UiDialog = defineHtml(`
   <article>
     <header>{{ title }}</header>
     <DialogAction>{{ value }}</DialogAction>

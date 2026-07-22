@@ -4,9 +4,12 @@ const supportedLanguages = ["typescript", "typescriptreact", "javascript", "java
 
 const macroCompletions = [
   completion("defineHtml", "defineHtml(`…`)", "defineHtml(`${1:<main>$0</main>}`)"),
-  completion("html", "ElfUI HTML template tag", "html`${1:<main>$0</main>}`"),
+  completion("defineStyle", "defineStyle(`…`)", "defineStyle(`${1::host { display: block; }}$0`)"),
   completion("useRef", "Create reactive state", "useRef(${1:initialValue})"),
+  completion("useTemplateRef", "Create a typed template ref", "useTemplateRef<${1:HTMLElement}>(\"${2:element}\")"),
   completion("useComputed", "Create derived state", "useComputed(() => ${1:value})"),
+  completion("onMounted", "Run after the component template mounts", "onMounted(() => {\n  $0\n})"),
+  completion("onUnmounted", "Run before the component unmounts", "onUnmounted(() => {\n  $0\n})"),
   completion("createApp", "Mount an ElfUI application", "createApp(${1:App}).mount(\"#app\")")
 ];
 
@@ -32,12 +35,11 @@ const hasElfTemplate = (document: vscode.TextDocument, position?: vscode.Positio
   const source = document.getText(
     position ? new vscode.Range(new vscode.Position(0, 0), position) : undefined
   );
-  const templateStart = Math.max(
-    source.lastIndexOf("html`"),
-    source.lastIndexOf("defineHtml(html`"),
-    source.lastIndexOf("defineHtml(`")
-  );
-  const openingBacktick = templateStart >= 0 ? source.indexOf("`", templateStart) : -1;
+  const matches = [
+    ...source.matchAll(/\bdefineHtml\s*(?:<[^`]*?>\s*)?\(\s*`/g)
+  ];
+  const match = matches.at(-1);
+  const openingBacktick = match ? match.index + match[0].lastIndexOf("`") : -1;
 
   return openingBacktick >= 0 && source.lastIndexOf("`") === openingBacktick;
 };
@@ -63,7 +65,7 @@ export const activate = (context: vscode.ExtensionContext) => {
     supportedLanguages,
     {
       provideCompletionItems(document, position) {
-        if (!hasElfTemplate(document) && !/\b(?:defineHtml|html|useRef|useComputed|createApp)\w*$/.test(
+        if (!hasElfTemplate(document) && !/\b(?:defineHtml|defineStyle|useRef|useTemplateRef|useComputed|onMounted|onUnmounted|createApp)\w*$/.test(
           document.lineAt(position.line).text.slice(0, position.character)
         )) {
           return undefined;

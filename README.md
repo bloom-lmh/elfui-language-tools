@@ -31,17 +31,17 @@ Marketplace, the same pane can install it by name instead.
 
 - Macro component support for ordinary `.ts` / `.tsx` files that export `defineHtml()` components.
 - Realtime macro diagnostics from the ElfUI macro compiler, including template TypeScript errors, slot checks, and structured source ranges.
-- Macro-aware completion and hover for `defineProps()`, `defineEmits()`, `defineSlots()`, `defineHtml()`, and `useComponents()`.
+- Macro-aware completion and hover for `defineProps()`, `defineEmits()`, `defineSlots()`, `defineHtml()`, `useComponents()`, lifecycle hooks, and typed `useTemplateRef()` values.
 - Template prop hover for local macro components includes the individual TypeScript type and statically declared default value when available.
 - Hover metadata for indexed workspace and package components, including import source, typed props with static defaults, events, slots, and typed slot scopes.
-- HTML completion, hover, diagnostics, and closing tag support inside `.template(\`...\`)`.
+- HTML completion, hover, diagnostics, and closing tag support inside `defineHtml(\`...\`)` and builder `.template(\`...\`)` regions.
 - ElfUI-aware template completion for `props()`, `setup()` returns, `emits()`, `use()` components, slot locals, and `ctx.form`.
 - Full expression completion and diagnostics in `${...}`, quoted binding, and `{{...}}` styles, including typed `v-for` locals from `useRef()` lists.
 - Contextual DOM event typing for `$event` in event bindings, including `MouseEvent`, `KeyboardEvent`, and `InputEvent` member completions.
 - Quoted dynamic bindings such as `:key="item.id"`, `v-if="visible"`, and `@click="select(item)"` are highlighted as TypeScript expressions, while ordinary HTML values such as `class="row"` remain strings.
-- A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `html\`...\`` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
-- HTML/CSS syntax highlighting inside `.template(\`...\`)`, `.style(\`...\`)`, and `.globalStyle(\`...\`)` through embedded TextMate scopes.
-- HTML/CSS document and range formatting inside `.template(\`...\`)`, `.style(\`...\`)`, and `.globalStyle(\`...\`)`.
+- A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `defineHtml(\`...\`)` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
+- HTML/CSS syntax highlighting inside `defineHtml(\`...\`)`, `defineStyle(\`...\`)`, and builder template/style regions through embedded TextMate scopes.
+- HTML/CSS document and range formatting inside `defineHtml(\`...\`)`, `defineStyle(\`...\`)`, and builder template/style regions.
 - Document and range formatting providers for ElfUI template and style strings; save-time formatting remains under the editor or Prettier's control.
 - CSS completion, hover, diagnostics, and color preview inside `.style(\`...\`)`, including Web Components selectors such as `:host-context()`, `::slotted()`, `::part()`, template-derived `part`/`slot` selector snippets, and declared CSS custom property references.
 - Diagnostics for unknown template variables, unregistered local components, undeclared emit calls, non-writable `v-model` targets, and component prop/event/slot mismatches from same-file or workspace metadata.
@@ -55,7 +55,7 @@ Marketplace, the same pane can install it by name instead.
 - Optional Semantic Tokens for ElfUI component declarations, template component tags, props, events, slots, setup values, template locals, and directives.
 - Quick Fixes for declaring unknown template variables, initializing untyped `v-for` list states, undeclared emits, and same-file component prop/event/slot mismatches.
 - ElfUI Studio tools: an `ElfUI Components` explorer view, dynamic point/effect reports, a static component preview, a template binding migration command, and a persistent workspace performance report with language-server index and completion latency metrics.
-- Snippets for macro components: `elfc` creates a minimal `defineHtml()` component skeleton and `elfinit` creates a ready-to-run component template.
+- Snippets for macro components: `elfc` creates a minimal `defineHtml()` component skeleton, `elfinit` creates a ready-to-run component template, and `elflifecycle` creates lifecycle hooks with a typed template ref.
 
 ## Settings
 
@@ -145,7 +145,7 @@ code --install-extension .local-vsix/elfui-language-features-X.Y.Z.vsix --force
 For `v-for` locals, prefer template expressions when possible:
 
 ```ts
-html` <li v-for="user in userList" :key="user.id">{{ user.name }} - {{ user.age }}</li> `;
+defineHtml(`<li v-for="user in userList" :key="user.id">{{ user.name }} - {{ user.age }}</li>`);
 ```
 
 Quoted bindings such as `:key="user.id"` and mustache interpolations such as `{{ user.name }}` are the most natural template-level syntax and both receive `user.` member completion. `${user.name}` remains supported for text interpolation; the extension filters TypeScript's host-language `Cannot find name 'user'` false positive when `user` comes from an active `v-for`.

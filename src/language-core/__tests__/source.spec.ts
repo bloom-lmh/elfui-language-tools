@@ -172,16 +172,7 @@ describe("analyzeElfSource", () => {
 
   it("collects macro component metadata and embedded regions", () => {
     const source = `
-      import {
-        css,
-        defineEmits,
-        defineHtml,
-        defineProps,
-        defineSlots,
-        defineStyle,
-        html,
-        useComponents
-      } from "elfui";
+      import { defineEmits, defineHtml, defineProps, defineSlots, defineStyle, useComponents } from "elfui";
       import { LocalIcon } from "./LocalIcon";
 
       interface Props {
@@ -200,13 +191,13 @@ describe("analyzeElfSource", () => {
       }>();
       useComponents({ LocalIcon });
 
-      const Button = defineHtml(html\`
+      const Button = defineHtml(\`
         <LocalIcon :label=\${props.label}>
           <template #item="{ id }">{{ id }}</template>
         </LocalIcon>
       \`);
 
-      defineStyle(css\`
+      defineStyle(\`
         :host {
           display: inline-flex;
         }
@@ -258,9 +249,41 @@ describe("analyzeElfSource", () => {
     );
   });
 
+  it("does not treat removed html and css tags as embedded ElfUI regions", () => {
+    const result = analyzeElfSource(`
+      import { defineHtml, defineStyle } from "@elfui/core";
+
+      declare const html: (strings: TemplateStringsArray) => string;
+      declare const css: (strings: TemplateStringsArray) => string;
+
+      export default defineHtml(html\`<button>Legacy</button>\`);
+      defineStyle(css\`:host { display: block; }\`);
+    `);
+
+    expect(result.components.flatMap((component) => component.templates)).toHaveLength(0);
+    expect(result.components.flatMap((component) => component.styles)).toHaveLength(0);
+  });
+
+  it("keeps lifecycle hooks and typed template refs in macro setup scope", () => {
+    const result = analyzeElfSource(`
+      import { defineHtml, onMounted, onUnmounted, useTemplateRef } from "@elfui/core";
+
+      const chart = useTemplateRef<HTMLDivElement>("chart");
+      onMounted(() => chart.value?.focus());
+      onUnmounted(() => chart.value?.blur());
+
+      export default defineHtml(\`<div ref="chart"></div>\`);
+    `);
+
+    const component = result.components[0];
+
+    expect(component?.templates[0]?.content).toContain('ref="chart"');
+    expect(component?.setupReturns).toContain("chart");
+  });
+
   it("collects individual macro prop types and static defaults", () => {
     const result = analyzeElfSource(`
-      import { defineHtml, defineProps, html } from "elfui";
+      import { defineHtml, defineProps } from "elfui";
 
       interface Props {
         count: number;
@@ -272,7 +295,7 @@ describe("analyzeElfSource", () => {
         title: { type: String, default: "Hello" }
       });
 
-      export default defineHtml(html\`<section>{{ title }}</section>\`);
+      export default defineHtml(\`<section>{{ title }}</section>\`);
     `);
     const details = result.components[0]?.propDetails;
 
@@ -287,9 +310,9 @@ describe("analyzeElfSource", () => {
   it("recognizes macro components imported from @elfui/core", () => {
     const result = analyzeElfSource(
       `
-        import { defineHtml, html } from "@elfui/core";
+        import { defineHtml } from "@elfui/core";
 
-        export default defineHtml(html\`<button @click="save" v-if="visible">Save</button>\`);
+        export default defineHtml(\`<button @click="save" v-if="visible">Save</button>\`);
       `,
       { fileName: "Home.ts" }
     );
@@ -311,12 +334,12 @@ describe("analyzeElfSource", () => {
 
   it("collects defineModel props and update emits from macro components", () => {
     const source = `
-      import { defineHtml, defineModel, html } from "elfui";
+      import { defineHtml, defineModel } from "elfui";
 
       const open = defineModel("open");
       const value = defineModel();
 
-      export const Dialog = defineHtml(html\`
+      export const Dialog = defineHtml(\`
         <dialog :open=\${open}>{{ value }}</dialog>
       \`);
     `;

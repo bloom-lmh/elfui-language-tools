@@ -6,10 +6,9 @@ import init from "../index";
 const fileName = "Home.ts";
 
 describe("ElfUI TypeScript server plugin", () => {
-  it("filters TS missing-name diagnostics for v-for locals inside html interpolations", () => {
+  it("filters TS missing-name diagnostics for v-for locals inside defineHtml literals", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;
-      declare const html: (strings: TemplateStringsArray, ...values: unknown[]) => string;
 
       const userList = [{ age: 35, id: 1, name: "Ada" }];
       const onUserClick = (user: { id: number }, event: MouseEvent) => {
@@ -17,7 +16,7 @@ describe("ElfUI TypeScript server plugin", () => {
         event.preventDefault();
       };
 
-      export const Home = defineHtml(html\`
+      export const Home = defineHtml(\`
         <ul>
           <li v-for="user in userList" :key=\${user.id} @click=\${onUserClick(user, $event)}>
             \${user.name} - \${user.age}
@@ -39,7 +38,6 @@ describe("ElfUI TypeScript server plugin", () => {
   it("filters the multiline Breadcrumb pattern without leaking the local after its tag", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;
-      declare const html: (strings: TemplateStringsArray, ...values: unknown[]) => string;
 
       const visibleItems = () => [
         { current: true, disabled: false, ellipsis: false, key: "home", label: "Home", last: false }
@@ -49,7 +47,7 @@ describe("ElfUI TypeScript server plugin", () => {
         event.preventDefault();
       };
 
-      export const Breadcrumb = defineHtml(html\`
+      export const Breadcrumb = defineHtml(\`
         <ol class="breadcrumb-list">
           <li
             v-for="item in visibleItems()"
@@ -81,9 +79,8 @@ describe("ElfUI TypeScript server plugin", () => {
   it("filters slot-scope locals only inside their template owner", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;
-      declare const html: (strings: TemplateStringsArray, ...values: unknown[]) => string;
 
-      export const Slots = defineHtml(html\`
+      export const Slots = defineHtml(\`
         <Child>
           <template #item="{ row }">\${row.label}</template>
         </Child>
@@ -96,12 +93,11 @@ describe("ElfUI TypeScript server plugin", () => {
     expect(readDiagnosticMessages(diagnostics)).toEqual(["Cannot find name 'row'."]);
   });
 
-  it("keeps ordinary TS missing-name diagnostics in html interpolations", () => {
+  it("keeps ordinary TS missing-name diagnostics in defineHtml interpolations", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;
-      declare const html: (strings: TemplateStringsArray, ...values: unknown[]) => string;
 
-      export const Home = defineHtml(html\`
+      export const Home = defineHtml(\`
         <div>\${missingValue}</div>
       \`);
     `;
@@ -116,11 +112,10 @@ describe("ElfUI TypeScript server plugin", () => {
   it("does not filter v-for locals after the owner tag is closed", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;
-      declare const html: (strings: TemplateStringsArray, ...values: unknown[]) => string;
 
       const userList = [{ age: 35, id: 1, name: "Ada" }];
 
-      export const Home = defineHtml(html\`
+      export const Home = defineHtml(\`
         <ul>
           <li v-for="user in userList">\${user.name}</li>
           \${user.name}
@@ -136,10 +131,9 @@ describe("ElfUI TypeScript server plugin", () => {
   it("respects the native template-local suppression setting", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;
-      declare const html: (strings: TemplateStringsArray, ...values: unknown[]) => string;
       const users = [{ id: 1 }];
 
-      export const Home = defineHtml(html\`<li v-for="user in users">\${user.id}</li>\`);
+      export const Home = defineHtml(\`<li v-for="user in users">\${user.id}</li>\`);
     `;
 
     const diagnostics = readPluginDiagnostics(source, {

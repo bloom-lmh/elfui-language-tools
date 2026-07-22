@@ -1,5 +1,5 @@
 export const elfuiDemoFixture = `
-  import { defineHtml, defineStyle, html, useRef } from "@elfui/core";
+  import { defineHtml, defineStyle, useRef } from "@elfui/core";
   import styles from "./App.scss?inline";
 
   defineStyle(styles);
@@ -7,7 +7,7 @@ export const elfuiDemoFixture = `
   const theme = useRef("light");
   const toggleTheme = () => theme.set(theme.value === "light" ? "dark" : "light");
 
-  export default defineHtml(html\`
+  export default defineHtml(\`
     <main class="app-shell">
       <header class="app-header">
         <a class="brand" href="#/">ElfUI</a>

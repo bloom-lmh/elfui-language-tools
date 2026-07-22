@@ -42,11 +42,11 @@ const writeComponent = (root: string, fileName: string, exportName: string) => {
   fs.writeFileSync(
     fullPath,
     [
-      'import { defineHtml, defineProps, html } from "elfui";',
+      'import { defineHtml, defineProps } from "elfui";',
       "",
       "defineProps<{ label: string }>();",
       "",
-      `export const ${exportName} = defineHtml(html\`<button></button>\`);`,
+      `export const ${exportName} = defineHtml(\`<button></button>\`);`,
       ""
     ].join("\n"),
     "utf8"
@@ -197,11 +197,11 @@ describe("workspace component index", () => {
     fs.writeFileSync(
       firstFile,
       [
-        'import { defineHtml, defineProps, html } from "elfui";',
+        'import { defineHtml, defineProps } from "elfui";',
         "",
         "defineProps<{ title: string }>();",
         "",
-        "export const First = defineHtml(html`<button></button>`);",
+        "export const First = defineHtml(`<button></button>`);",
         ""
       ].join("\n"),
       "utf8"
@@ -249,11 +249,11 @@ describe("workspace component index", () => {
       "typescript",
       1,
       [
-        'import { defineHtml, defineProps, html } from "elfui";',
+        'import { defineHtml, defineProps } from "elfui";',
         "",
         "defineProps<{ live: string }>();",
         "",
-        "export const Live = defineHtml(html`<button></button>`);",
+        "export const Live = defineHtml(`<button></button>`);",
         ""
       ].join("\n")
     );

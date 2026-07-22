@@ -31,5 +31,26 @@
       "`);"
     ],
     "description": "Create an ElfUI macro component with starter state and handler."
+  },
+  "ElfUI lifecycle template ref": {
+    "prefix": "elflifecycle",
+    "body": [
+      "import { defineHtml, onMounted, onUnmounted, useTemplateRef } from \"@elfui/core\";",
+      "",
+      "const ${1:element} = useTemplateRef<${2:HTMLElement}>(\"${1:element}\");",
+      "",
+      "onMounted(() => {",
+      "  ${1:element}.value?.focus?.();",
+      "});",
+      "",
+      "onUnmounted(() => {",
+      "  $0",
+      "});",
+      "",
+      "export default defineHtml(`",
+      "  <div ref=\"${1:element}\"></div>",
+      "`);"
+    ],
+    "description": "Create an ElfUI component with lifecycle hooks and a typed template ref."
   }
 }

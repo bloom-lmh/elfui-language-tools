@@ -8,7 +8,8 @@ only maintained home for the ElfUI VS Code extension. Do not modify the retired
 
 ## Current Capability
 
-- Embedded HTML/CSS grammar and formatting for ElfUI macro and builder template strings.
+- Embedded HTML/CSS grammar and formatting for ElfUI macro and builder template strings,
+  including save formatting alongside a separate TS/JS formatter such as Prettier.
 - LSP completion, hover, diagnostics, definitions, references, rename, document symbols,
   inlay hints, code actions, document links, folding, selection, linked editing, and color
   providers in ElfUI regions.

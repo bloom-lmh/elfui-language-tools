@@ -42,7 +42,7 @@ Marketplace, the same pane can install it by name instead.
 - A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `defineHtml(\`...\`)` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
 - HTML/CSS syntax highlighting inside `defineHtml(\`...\`)`, `defineStyle(\`...\`)`, and builder template/style regions through embedded TextMate scopes.
 - HTML/CSS document and range formatting inside `defineHtml(\`...\`)`, `defineStyle(\`...\`)`, and builder template/style regions.
-- Document and range formatting providers for ElfUI template and style strings; save-time formatting remains under the editor or Prettier's control.
+- Document and range formatting providers for ElfUI template and style strings. When another formatter such as Prettier owns the TS/JS document, ElfUI also formats only its embedded regions on save while respecting `editor.formatOnSave`.
 - CSS completion, hover, diagnostics, and color preview inside `.style(\`...\`)`, including Web Components selectors such as `:host-context()`, `::slotted()`, `::part()`, template-derived `part`/`slot` selector snippets, and declared CSS custom property references.
 - Diagnostics for unknown template variables, unregistered local components, undeclared emit calls, non-writable `v-model` targets, and component prop/event/slot mismatches from same-file or workspace metadata.
 - Go to Definition, References, and Document Highlight for same-file template symbols and workspace component tags, props, events, and slots.

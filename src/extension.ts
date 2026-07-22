@@ -85,6 +85,14 @@ interface TypeScriptLanguageFeaturesExports {
   getAPI?: (version: number) => TypeScriptLanguageFeaturesApi | undefined;
 }
 
+interface ProtocolFormattingEdit {
+  newText: string;
+  range: {
+    end: { character: number; line: number };
+    start: { character: number; line: number };
+  };
+}
+
 interface ElfIntegrationReport {
   diagnostics: {
     bySource: Record<string, number>;
@@ -236,6 +244,11 @@ export const activate = async (context: vscode.ExtensionContext) => {
         await applyComponentTagColor();
         await configureTypeScriptPlugin();
         await restartLanguageClient(context);
+      }),
+      vscode.workspace.onWillSaveTextDocument((event) => {
+        event.waitUntil(
+          createEmbeddedSaveFormattingEdits(event.document, context.extension.id),
+        );
       }),
       vscode.window.onDidChangeActiveTextEditor((editor) => {
         updateStatusBarVisibility(editor);
@@ -596,6 +609,81 @@ const isElfComponentTagColorRule = (rule: unknown) => {
 
 const isSupportedLanguage = (languageId: string) =>
   ["typescript", "typescriptreact", "javascript", "javascriptreact"].includes(languageId);
+
+const createEmbeddedSaveFormattingEdits = async (
+  document: vscode.TextDocument,
+  extensionId: string,
+): Promise<readonly vscode.TextEdit[]> => {
+  if (
+    !languageClient ||
+    languageClient.state !== State.Running ||
+    !isSupportedLanguage(document.languageId)
+  ) {
+    return [];
+  }
+
+  const editorConfiguration = vscode.workspace.getConfiguration("editor", document);
+  const defaultFormatter = editorConfiguration.get<string>("defaultFormatter");
+
+  if (
+    !editorConfiguration.get("formatOnSave", false) ||
+    !defaultFormatter ||
+    defaultFormatter.toLowerCase() === extensionId.toLowerCase()
+  ) {
+    return [];
+  }
+
+  const components = analyzeStudioSource(document.getText());
+
+  if (
+    !components.some(
+      (component) => component.templates.length > 0 || component.styles.length > 0,
+    )
+  ) {
+    return [];
+  }
+
+  const visibleEditor = vscode.window.visibleTextEditors.find(
+    (editor) => editor.document.uri.toString() === document.uri.toString(),
+  );
+  const configuredTabSize = editorConfiguration.get<number>("tabSize", 2);
+  const configuredInsertSpaces = editorConfiguration.get<boolean>("insertSpaces", true);
+  const tabSize =
+    typeof visibleEditor?.options.tabSize === "number"
+      ? visibleEditor.options.tabSize
+      : configuredTabSize;
+  const insertSpaces =
+    typeof visibleEditor?.options.insertSpaces === "boolean"
+      ? visibleEditor.options.insertSpaces
+      : configuredInsertSpaces;
+
+  try {
+    const edits = await languageClient.sendRequest<ProtocolFormattingEdit[] | null>(
+      "textDocument/formatting",
+      {
+        options: { insertSpaces, tabSize },
+        textDocument: { uri: document.uri.toString() },
+      },
+    );
+
+    return (edits ?? []).map(
+      (edit) =>
+        new vscode.TextEdit(
+          new vscode.Range(
+            edit.range.start.line,
+            edit.range.start.character,
+            edit.range.end.line,
+            edit.range.end.character,
+          ),
+          edit.newText,
+        ),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    outputChannel?.appendLine(`ElfUI save formatting skipped: ${message}`);
+    return [];
+  }
+};
 
 interface StudioAnalysis {
   components: StudioComponentMeta[];

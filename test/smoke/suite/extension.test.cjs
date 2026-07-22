@@ -1619,6 +1619,77 @@ suite("ElfUI Language Features Smoke", function () {
     );
   });
 
+  test("formats embedded regions on save while another formatter owns TypeScript", async () => {
+    const document = await openFixture(
+      [
+        'import { defineHtml, defineStyle } from "@elfui/core";',
+        "",
+        "const view = defineHtml(`<section><button>{{ count }}</button></section>`);",
+        "const styles = defineStyle(`:host{color:red;display:block;}`);",
+        "export { view };",
+        ""
+      ].join("\n")
+    );
+    const editor = vscode.window.activeTextEditor;
+
+    assert(editor, "Expected an active editor for save formatting.");
+
+    await waitFor(async () => {
+      const edits = await vscode.commands.executeCommand(
+        "vscode.executeFormatDocumentProvider",
+        document.uri,
+        { insertSpaces: true, tabSize: 2 }
+      );
+
+      return Array.isArray(edits) && edits.length > 0 ? edits : undefined;
+    }, "save-format fixture synchronization");
+
+    const editorConfiguration = vscode.workspace.getConfiguration("editor", document);
+    const previousFormatOnSave = editorConfiguration.inspect("formatOnSave")?.workspaceValue;
+    const previousDefaultFormatter = editorConfiguration.inspect("defaultFormatter")?.workspaceValue;
+
+    try {
+      await editorConfiguration.update(
+        "formatOnSave",
+        true,
+        vscode.ConfigurationTarget.Workspace
+      );
+      await editorConfiguration.update(
+        "defaultFormatter",
+        "vscode.typescript-language-features",
+        vscode.ConfigurationTarget.Workspace
+      );
+      await editor.edit((editBuilder) => {
+        editBuilder.insert(document.positionAt(document.getText().length), " ");
+      });
+
+      assert.equal(document.isDirty, true, "Expected the fixture to be dirty before save.");
+      assert.equal(await document.save(), true, "Expected the fixture save to succeed.");
+
+      await waitFor(
+        () =>
+          /defineHtml\(`\n\s*<section><button>{{ count }}<\/button><\/section>/.test(
+            document.getText()
+          ) &&
+          /defineStyle\(`\n\s*:host \{\n\s*color: red;\n\s*display: block;\n\s*\}/.test(
+            document.getText()
+          ),
+        "embedded save formatting"
+      );
+    } finally {
+      await editorConfiguration.update(
+        "formatOnSave",
+        previousFormatOnSave,
+        vscode.ConfigurationTarget.Workspace
+      );
+      await editorConfiguration.update(
+        "defaultFormatter",
+        previousDefaultFormatter,
+        vscode.ConfigurationTarget.Workspace
+      );
+    }
+  });
+
   test("applies the configured component tag color to real ElfUI TextMate scopes", async () => {
     const editorConfiguration = vscode.workspace.getConfiguration("editor");
     const rule = await waitFor(

@@ -304,6 +304,29 @@ console.log("ElfUI grammar token tests:");
 }
 
 {
+  console.log("\n  case: direct defineHtml and defineStyle template literals");
+  const source = [
+    'import { defineHtml, defineStyle } from "@elfui/core";',
+    "defineStyle(`",
+    "  :host { display: block; }",
+    "`);",
+    "export default defineHtml(`",
+    "  <button @click=${handleClick}>${label}</button>",
+    "`);"
+  ].join("\n");
+  const tokens = tokenize(source);
+  const cssBody = tokens.find((token) => token.line === 2 && token.text.includes("display"));
+  const htmlBody = tokens.find((token) => token.line === 5 && token.text === "<");
+
+  assertion("opens CSS region for defineStyle(`...`)", () => {
+    expectScope(cssBody, "meta.embedded.block.css");
+  });
+  assertion("opens HTML region for defineHtml(`...`)", () => {
+    expectScope(htmlBody, "meta.embedded.block.html");
+  });
+}
+
+{
   console.log("\n  case: \${interpolation} tokenizes without crashing");
   let crashed = false;
   try {

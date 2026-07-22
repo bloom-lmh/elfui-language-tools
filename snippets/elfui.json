@@ -2,9 +2,9 @@
   "ElfUI macro component": {
     "prefix": "elfc",
     "body": [
-      "import { defineHtml, html } from \"elfui\";",
+      "import { defineHtml } from \"@elfui/core\";",
       "",
-      "const ${1:MyComponent} = defineHtml(html`",
+      "const ${1:MyComponent} = defineHtml(`",
       "  <div>$0</div>",
       "`);",
       "",
@@ -15,7 +15,7 @@
   "ElfUI init template": {
     "prefix": "elfinit",
     "body": [
-      "import { defineHtml, html, useRef } from \"elfui\";",
+      "import { defineHtml, useRef } from \"@elfui/core\";",
       "",
       "const ${1:title} = useRef(${2:\"Hello ElfUI\"});",
       "",
@@ -23,7 +23,7 @@
       "  ${1:title}.set(${4:\"Hello ElfUI\"});",
       "};",
       "",
-      "export default defineHtml(html`",
+      "export default defineHtml(`",
       "  <main class=\"${5:app}\">",
       "    <h1>\\${${1:title}}</h1>",
       "    <button type=\"button\" @click=\\${${3:handleClick}}>$0</button>",

@@ -229,6 +229,35 @@ describe("analyzeElfSource", () => {
     expect(component?.styles[0]?.content).toContain("display");
   });
 
+  it("collects direct defineHtml and multi-argument defineStyle regions", () => {
+    const source = `
+      import { defineHtml, defineStyle } from "@elfui/core";
+
+      defineStyle(
+        \`:host { display: block; }\`,
+        \`.direct { color: red; }\`
+      );
+
+      export default defineHtml(\`
+        <button class="direct" @click=\${handleClick}>\${label}</button>
+      \`);
+    `;
+    const result = analyzeElfSource(source, { fileName: "Direct.ts" });
+    const component = result.components[0];
+
+    expect(result.isMacroComponent).toBe(true);
+    expect(component?.templates).toHaveLength(1);
+    expect(component?.templates[0]?.method).toBe("defineHtml");
+    expect(component?.templates[0]?.content).toContain("@click=${handleClick}");
+    expect(component?.styles).toHaveLength(2);
+    expect(component?.styles.map((style) => style.content)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(":host"),
+        expect.stringContaining(".direct")
+      ])
+    );
+  });
+
   it("collects individual macro prop types and static defaults", () => {
     const result = analyzeElfSource(`
       import { defineHtml, defineProps, html } from "elfui";

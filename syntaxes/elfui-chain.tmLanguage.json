@@ -13,6 +13,9 @@
       "include": "#htmlTaggedTemplate"
     },
     {
+      "include": "#defineHtmlCall"
+    },
+    {
       "include": "#cssTaggedTemplate"
     },
     {
@@ -129,6 +132,35 @@
         }
       ]
     },
+    "defineHtmlCall": {
+      "begin": "\\b(defineHtml)\\s*(?:<[^`]*?>\\s*)?(\\()\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "name": "support.function.elfui.template entity.name.function.elfui"
+        },
+        "2": {
+          "name": "punctuation.section.parens.begin.elfui meta.brace.round.ts"
+        },
+        "3": {
+          "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
+        }
+      },
+      "end": "(`)\\s*(\\))?",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.elfui string.template.ts"
+        },
+        "2": {
+          "name": "punctuation.section.parens.end.elfui meta.brace.round.ts"
+        }
+      },
+      "contentName": "meta.embedded.block.html text.html.derivative",
+      "patterns": [
+        {
+          "include": "#templateContent"
+        }
+      ]
+    },
     "cssTaggedTemplate": {
       "begin": "\\b(css)\\s*(`)",
       "beginCaptures": {
@@ -156,7 +188,7 @@
       ]
     },
     "styleCall": {
-      "begin": "(?:(?<=\\.)|\\b)(style|globalStyle)\\s*(\\()\\s*(`)",
+      "begin": "(?:(?<=\\.)|\\b)(style|globalStyle|defineStyle)\\s*(\\()\\s*(`)",
       "beginCaptures": {
         "1": {
           "name": "support.function.elfui.style entity.name.function.elfui"
@@ -188,7 +220,7 @@
       ]
     },
     "styleCallMultiLine": {
-      "begin": "(?:(?<=\\.)|\\b)(style|globalStyle)\\s*(\\()(?=\\s*$)",
+      "begin": "(?:(?<=\\.)|\\b)(style|globalStyle|defineStyle)\\s*(\\()(?=\\s*$)",
       "beginCaptures": {
         "1": {
           "name": "support.function.elfui.style entity.name.function.elfui"

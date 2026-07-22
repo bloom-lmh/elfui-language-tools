@@ -743,7 +743,8 @@ const createMacroDiagnostics = (
         (diagnostic) =>
           !isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic) &&
           !isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic) &&
-          !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic)
+          !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic) &&
+          !isLegacyCompilerDirectTemplateDiagnostic(components, diagnostic)
       );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -760,6 +761,22 @@ const createMacroDiagnostics = (
       }
     ];
   }
+};
+
+const isLegacyCompilerDirectTemplateDiagnostic = (
+  components: ComponentMeta[],
+  diagnostic: Diagnostic
+): boolean => {
+  if (
+    diagnostic.code !== "ELF_MACRO_DEFINE_HTML_TEMPLATE" &&
+    diagnostic.code !== "ELF_MACRO_NO_TEMPLATE"
+  ) {
+    return false;
+  }
+
+  return components
+    .flatMap((component) => component.templates)
+    .some((region) => region.method === "defineHtml");
 };
 
 const mapMacroDiagnostic = (document: TextDocument, diagnostic: ElfDiagnostic): Diagnostic => {

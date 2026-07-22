@@ -2312,6 +2312,31 @@ describe("ElfUI language service", () => {
     expect(diagnostics.some((item) => item.includes("disabeld"))).toBe(true);
   });
 
+  it("does not report legacy compiler syntax errors for direct defineHtml literals", () => {
+    const source = `
+      /// <!--@elf component-->
+      import { defineHtml, defineProps } from "@elfui/core";
+
+      interface Props {
+        disabled: boolean;
+      }
+
+      const props = defineProps<Props>();
+
+      export default defineHtml(\`
+        <button :disabled=\${props.disabeld}></button>
+      \`);
+    `;
+    const document = TextDocument.create("file:///Direct.elf.ts", "typescript", 0, source);
+    const diagnostics = createElfDiagnostics(document);
+    expect(
+      diagnostics.some(
+        (item) =>
+          item.code === "ELF_MACRO_DEFINE_HTML_TEMPLATE" || item.code === "ELF_MACRO_NO_TEMPLATE"
+      )
+    ).toBe(false);
+  });
+
   it("does not report valid macro handlers and exposed props as missing", () => {
     const source = `
       import { defineHtml, defineProps, html } from "elfui";

@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 const supportedLanguages = ["typescript", "typescriptreact", "javascript", "javascriptreact"];
 
 const macroCompletions = [
-  completion("defineHtml", "defineHtml(html`…`)", "defineHtml(html`${1:<main>$0</main>}`)"),
+  completion("defineHtml", "defineHtml(`…`)", "defineHtml(`${1:<main>$0</main>}`)"),
   completion("html", "ElfUI HTML template tag", "html`${1:<main>$0</main>}`"),
   completion("useRef", "Create reactive state", "useRef(${1:initialValue})"),
   completion("useComputed", "Create derived state", "useComputed(() => ${1:value})"),
@@ -32,9 +32,14 @@ const hasElfTemplate = (document: vscode.TextDocument, position?: vscode.Positio
   const source = document.getText(
     position ? new vscode.Range(new vscode.Position(0, 0), position) : undefined
   );
-  const templateStart = Math.max(source.lastIndexOf("html`"), source.lastIndexOf("defineHtml(html`"));
+  const templateStart = Math.max(
+    source.lastIndexOf("html`"),
+    source.lastIndexOf("defineHtml(html`"),
+    source.lastIndexOf("defineHtml(`")
+  );
+  const openingBacktick = templateStart >= 0 ? source.indexOf("`", templateStart) : -1;
 
-  return templateStart >= 0 && source.lastIndexOf("`") === templateStart + "html".length;
+  return openingBacktick >= 0 && source.lastIndexOf("`") === openingBacktick;
 };
 
 const isSupportedDocument = (document: vscode.TextDocument) =>

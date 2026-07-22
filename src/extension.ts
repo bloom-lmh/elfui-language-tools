@@ -749,6 +749,7 @@ const readActiveStudioAnalysis = (): StudioAnalysis | null => {
 const analyzeStudioSource = (source: string): StudioComponentMeta[] => {
   const templates = [
     ...collectTemplateLiteralRegions(source, /\bhtml\s*`/g, "template"),
+    ...collectTemplateLiteralRegions(source, /\bdefineHtml\s*(?:<[^`]*?>\s*)?\(\s*`/g, "template"),
     ...collectTemplateLiteralRegions(source, /\.template\s*\(\s*`/g, "template"),
   ];
   const styles = [

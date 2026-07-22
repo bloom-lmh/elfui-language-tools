@@ -10,6 +10,7 @@ import { analyzeElfMacroUsage } from "@elfui/compiler/vite";
 export type EmbeddedRegionKind = "template" | "style";
 export type EmbeddedRegionMethod =
   | "css"
+  | "defineHtml"
   | "defineStyle"
   | "globalStyle"
   | "html"
@@ -224,7 +225,10 @@ const applyMacroAnalysis = (
   components: Map<string, MutableComponentMeta>,
   fileName: string
 ) => {
-  const templateRegions = collectTaggedTemplateRegions(sourceFile, "html", "template");
+  const templateRegions = [
+    ...collectTaggedTemplateRegions(sourceFile, "html", "template"),
+    ...collectDefineHtmlRegions(sourceFile)
+  ];
   const styleRegions = [
     ...collectTaggedTemplateRegions(sourceFile, "css", "style"),
     ...collectDefineStyleRegions(sourceFile)
@@ -632,10 +636,10 @@ const collectDefineStyleRegions = (sourceFile: ts.SourceFile): EmbeddedRegion[] 
       const name = callExpressionName(node);
 
       if (name === "defineStyle" || name === "globalStyle") {
-        const first = node.arguments[0];
-        const embeddedString = first ? readEmbeddedString(first, sourceFile) : null;
-
-        if (embeddedString) {
+        const args = name === "defineStyle" ? node.arguments : node.arguments.slice(0, 1);
+        for (const arg of args) {
+          const embeddedString = readEmbeddedString(arg, sourceFile);
+          if (!embeddedString) continue;
           regions.push({
             content: embeddedString.content,
             contentEnd: embeddedString.contentEnd,
@@ -655,6 +659,34 @@ const collectDefineStyleRegions = (sourceFile: ts.SourceFile): EmbeddedRegion[] 
 
   visit(sourceFile);
 
+  return regions;
+};
+
+const collectDefineHtmlRegions = (sourceFile: ts.SourceFile): EmbeddedRegion[] => {
+  const regions: EmbeddedRegion[] = [];
+
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && callExpressionName(node) === "defineHtml") {
+      const first = node.arguments[0];
+      const embeddedString = first ? readEmbeddedString(first, sourceFile) : null;
+      if (embeddedString) {
+        regions.push({
+          content: embeddedString.content,
+          contentEnd: embeddedString.contentEnd,
+          contentStart: embeddedString.contentStart,
+          end: node.getEnd(),
+          kind: "template",
+          languageId: "html",
+          method: "defineHtml",
+          start: node.getStart(sourceFile)
+        });
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
   return regions;
 };
 

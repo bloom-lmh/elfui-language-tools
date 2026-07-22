@@ -6,6 +6,7 @@ interface TypeScriptServerPluginModules {
 
 interface TypeScriptServerPluginCreateInfo {
   config?: {
+    suppressNativeRefUnwrapComparisons?: unknown;
     suppressNativeTemplateLocals?: unknown;
   };
   languageService: ts.LanguageService;
@@ -13,10 +14,17 @@ interface TypeScriptServerPluginCreateInfo {
 
 const cannotFindNameCode = 2304;
 const cannotFindNameSuggestionCode = 2552;
+const noTypeOverlapComparisonCode = 2367;
+
+interface TypeScriptPluginConfiguration {
+  suppressNativeRefUnwrapComparisons: boolean;
+  suppressNativeTemplateLocals: boolean;
+}
 
 interface HtmlTemplateExpressionContext {
   contentEnd: number;
   contentStart: number;
+  expression: ts.Expression;
 }
 
 interface TemplateTag {
@@ -35,7 +43,8 @@ interface TemplateLocalScope {
 
 const init = (modules: TypeScriptServerPluginModules) => {
   const tsModule = modules.typescript;
-  let configuration: { suppressNativeTemplateLocals: boolean } = {
+  let configuration: TypeScriptPluginConfiguration = {
+    suppressNativeRefUnwrapComparisons: true,
     suppressNativeTemplateLocals: true
   };
 
@@ -51,15 +60,32 @@ const init = (modules: TypeScriptServerPluginModules) => {
         const diagnostics = getSemanticDiagnostics(fileName);
         const sourceFile = info.languageService.getProgram()?.getSourceFile(fileName);
 
-        if (!sourceFile || !configuration.suppressNativeTemplateLocals) {
+        if (!sourceFile) {
           return diagnostics;
         }
 
-        const templatePropNames = collectDeclaredTemplatePropNames(tsModule, sourceFile);
+        const templatePropNames = configuration.suppressNativeTemplateLocals
+          ? collectDeclaredTemplatePropNames(tsModule, sourceFile)
+          : new Set<string>();
+        const templateRefNames = configuration.suppressNativeRefUnwrapComparisons
+          ? collectUseRefVariableNames(tsModule, sourceFile)
+          : new Set<string>();
 
         return diagnostics.filter(
           (diagnostic) =>
-            !isElfTemplateLocalDiagnostic(tsModule, sourceFile, templatePropNames, diagnostic)
+            !(
+              configuration.suppressNativeTemplateLocals &&
+              isElfTemplateLocalDiagnostic(tsModule, sourceFile, templatePropNames, diagnostic)
+            ) &&
+            !(
+              configuration.suppressNativeRefUnwrapComparisons &&
+              isElfTemplateRefUnwrapComparisonDiagnostic(
+                tsModule,
+                sourceFile,
+                templateRefNames,
+                diagnostic,
+              )
+            )
         );
       };
 
@@ -86,19 +112,198 @@ const createLanguageServiceProxy = (languageService: ts.LanguageService): ts.Lan
 
 const readPluginConfiguration = (
   value: unknown,
-): { suppressNativeTemplateLocals: boolean } => {
+): TypeScriptPluginConfiguration => {
   if (typeof value !== "object" || value === null) {
-    return { suppressNativeTemplateLocals: true };
+    return {
+      suppressNativeRefUnwrapComparisons: true,
+      suppressNativeTemplateLocals: true,
+    };
   }
 
+  const suppressNativeRefUnwrapComparisons =
+    (value as { suppressNativeRefUnwrapComparisons?: unknown })
+      .suppressNativeRefUnwrapComparisons;
   const suppressNativeTemplateLocals =
     (value as { suppressNativeTemplateLocals?: unknown }).suppressNativeTemplateLocals;
 
   return {
+    suppressNativeRefUnwrapComparisons:
+      suppressNativeRefUnwrapComparisons === undefined
+        ? true
+        : suppressNativeRefUnwrapComparisons === true,
     suppressNativeTemplateLocals:
       suppressNativeTemplateLocals === undefined ? true : suppressNativeTemplateLocals === true,
   };
 };
+
+const isElfTemplateRefUnwrapComparisonDiagnostic = (
+  tsModule: typeof ts,
+  sourceFile: ts.SourceFile,
+  templateRefNames: Set<string>,
+  diagnostic: ts.Diagnostic,
+): boolean => {
+  if (
+    diagnostic.code !== noTypeOverlapComparisonCode ||
+    diagnostic.start === undefined ||
+    templateRefNames.size === 0
+  ) {
+    return false;
+  }
+
+  const templateContext = findHtmlTemplateExpressionContext(
+    tsModule,
+    sourceFile,
+    diagnostic.start,
+  );
+
+  if (!templateContext) {
+    return false;
+  }
+
+  const diagnosticEnd = diagnostic.start + (diagnostic.length ?? 0);
+
+  return containsRefUnwrapComparison(
+    tsModule,
+    sourceFile,
+    templateContext.expression,
+    templateRefNames,
+    diagnostic.start,
+    diagnosticEnd,
+  );
+};
+
+const containsRefUnwrapComparison = (
+  tsModule: typeof ts,
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  templateRefNames: Set<string>,
+  diagnosticStart: number,
+  diagnosticEnd: number,
+): boolean => {
+  let result = false;
+
+  const visit = (node: ts.Node) => {
+    if (result) {
+      return;
+    }
+
+    if (
+      tsModule.isBinaryExpression(node) &&
+      isEqualityOperator(tsModule, node.operatorToken.kind) &&
+      node.getStart(sourceFile) <= diagnosticStart &&
+      node.getEnd() >= diagnosticEnd &&
+      (isUseRefOperand(tsModule, node.left, templateRefNames) ||
+        isUseRefOperand(tsModule, node.right, templateRefNames))
+    ) {
+      result = true;
+      return;
+    }
+
+    tsModule.forEachChild(node, visit);
+  };
+
+  visit(expression);
+  return result;
+};
+
+const isEqualityOperator = (tsModule: typeof ts, kind: ts.SyntaxKind): boolean =>
+  kind === tsModule.SyntaxKind.EqualsEqualsToken ||
+  kind === tsModule.SyntaxKind.EqualsEqualsEqualsToken ||
+  kind === tsModule.SyntaxKind.ExclamationEqualsToken ||
+  kind === tsModule.SyntaxKind.ExclamationEqualsEqualsToken;
+
+const isUseRefOperand = (
+  tsModule: typeof ts,
+  expression: ts.Expression,
+  templateRefNames: Set<string>,
+): boolean => {
+  let current = expression;
+
+  while (
+    tsModule.isParenthesizedExpression(current) ||
+    tsModule.isAsExpression(current) ||
+    tsModule.isTypeAssertionExpression(current) ||
+    tsModule.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+
+  return tsModule.isIdentifier(current) && templateRefNames.has(current.text);
+};
+
+const collectUseRefVariableNames = (
+  tsModule: typeof ts,
+  sourceFile: ts.SourceFile,
+): Set<string> => {
+  const useRefCallNames = new Set<string>();
+  const refVariableNames = new Set<string>();
+
+  sourceFile.statements.forEach((statement) => {
+    if (tsModule.isVariableStatement(statement) && hasDeclareModifier(tsModule, statement)) {
+      statement.declarationList.declarations.forEach((declaration) => {
+        if (tsModule.isIdentifier(declaration.name) && declaration.name.text === "useRef") {
+          useRefCallNames.add(declaration.name.text);
+        }
+      });
+      return;
+    }
+
+    if (
+      tsModule.isFunctionDeclaration(statement) &&
+      statement.name?.text === "useRef" &&
+      hasDeclareModifier(tsModule, statement)
+    ) {
+      useRefCallNames.add(statement.name.text);
+      return;
+    }
+
+    if (
+      !tsModule.isImportDeclaration(statement) ||
+      !tsModule.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== "@elfui/core"
+    ) {
+      return;
+    }
+
+    const bindings = statement.importClause?.namedBindings;
+
+    if (!bindings || !tsModule.isNamedImports(bindings)) {
+      return;
+    }
+
+    bindings.elements.forEach((element) => {
+      if ((element.propertyName?.text ?? element.name.text) === "useRef") {
+        useRefCallNames.add(element.name.text);
+      }
+    });
+  });
+
+  const visit = (node: ts.Node) => {
+    if (
+      tsModule.isVariableDeclaration(node) &&
+      tsModule.isIdentifier(node.name) &&
+      node.initializer &&
+      tsModule.isCallExpression(node.initializer) &&
+      tsModule.isIdentifier(node.initializer.expression) &&
+      useRefCallNames.has(node.initializer.expression.text)
+    ) {
+      refVariableNames.add(node.name.text);
+    }
+
+    tsModule.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return refVariableNames;
+};
+
+const hasDeclareModifier = (
+  tsModule: typeof ts,
+  node: ts.FunctionDeclaration | ts.VariableStatement,
+): boolean =>
+  node.modifiers?.some(
+    (modifier) => modifier.kind === tsModule.SyntaxKind.DeclareKeyword,
+  ) === true;
 
 const isElfTemplateLocalDiagnostic = (
   tsModule: typeof ts,
@@ -244,7 +449,8 @@ const findHtmlTemplateExpressionContext = (
         if (offset >= span.expression.getStart(sourceFile) && offset < span.expression.getEnd()) {
           result = {
             contentEnd: template.getEnd() - 1,
-            contentStart: template.getStart(sourceFile) + 1
+            contentStart: template.getStart(sourceFile) + 1,
+            expression: span.expression,
           };
           return;
         }

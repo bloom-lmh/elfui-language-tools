@@ -298,9 +298,11 @@ const restartLanguageClient = async (context: vscode.ExtensionContext) => {
 };
 
 const configureTypeScriptPlugin = async (): Promise<void> => {
-  const suppressionEnabled = vscode.workspace
-    .getConfiguration("elfui.languageFeatures")
+  const languageFeatures = vscode.workspace.getConfiguration("elfui.languageFeatures");
+  const templateLocalSuppressionEnabled = languageFeatures
     .get("diagnostics.suppressNativeTemplateLocals", true);
+  const refUnwrapComparisonSuppressionEnabled = languageFeatures
+    .get("diagnostics.suppressNativeRefUnwrapComparisons", true);
   const typeScriptExtension = vscode.extensions.getExtension<TypeScriptLanguageFeaturesExports>(
     "vscode.typescript-language-features",
   );
@@ -330,10 +332,13 @@ const configureTypeScriptPlugin = async (): Promise<void> => {
     }
 
     api.configurePlugin(typeScriptPluginId, {
-      suppressNativeTemplateLocals: suppressionEnabled,
+      suppressNativeRefUnwrapComparisons: refUnwrapComparisonSuppressionEnabled,
+      suppressNativeTemplateLocals: templateLocalSuppressionEnabled,
     });
     typeScriptPluginConfiguration = {
-      message: `Configured native template-local suppression: ${suppressionEnabled}.`,
+      message:
+        `Configured native template-local suppression: ${templateLocalSuppressionEnabled}; ` +
+        `ref-unwrapping comparison suppression: ${refUnwrapComparisonSuppressionEnabled}.`,
       state: "configured",
     };
     outputChannel?.appendLine(`ElfUI TypeScript plugin: ${typeScriptPluginConfiguration.message}`);

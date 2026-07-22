@@ -4,6 +4,7 @@ import * as ts from "typescript";
 import init from "../index";
 
 const fileName = "Home.ts";
+const elfuiCoreFileName = "elfui-core.d.ts";
 
 describe("ElfUI TypeScript server plugin", () => {
   it("filters TS missing-name diagnostics for v-for locals inside defineHtml literals", () => {
@@ -142,11 +143,109 @@ describe("ElfUI TypeScript server plugin", () => {
 
     expect(readDiagnosticMessages(diagnostics).some((message) => message.includes("user"))).toBe(true);
   });
+
+  it("filters native TS no-overlap comparisons for auto-unwrapped useRef values", () => {
+    const source = `
+      type Ref<T> = { readonly value: T; peek(): T };
+      declare const useRef: <T>(value: T) => Ref<T>;
+      declare const defineHtml: (value: unknown) => unknown;
+      type EditingTarget = "start" | "end";
+
+      const isOpen = true;
+      const editingTarget = useRef<EditingTarget>("start");
+      export const Picker = defineHtml(\`
+        <button :aria-expanded=\${isOpen && editingTarget === "start" ? "true" : "false"}></button>
+      \`);
+    `;
+
+    const diagnostics = readPluginDiagnostics(source);
+
+    expect(diagnostics.some((diagnostic) => diagnostic.code === 2367)).toBe(false);
+  });
+
+  it("recognizes aliased useRef imports from @elfui/core", () => {
+    const source = `
+      import { useRef as createState } from "@elfui/core";
+      declare const defineHtml: (value: unknown) => unknown;
+      type EditingTarget = "start" | "end";
+
+      const editingTarget = createState<EditingTarget>("start");
+      export const Picker = defineHtml(\`<button>\${editingTarget === "start"}</button>\`);
+    `;
+
+    const diagnostics = readPluginDiagnostics(source);
+
+    expect(diagnostics.some((diagnostic) => diagnostic.code === 2367)).toBe(false);
+  });
+
+  it("keeps native TS no-overlap comparisons outside ElfUI templates", () => {
+    const source = `
+      type Ref<T> = { readonly value: T; peek(): T };
+      declare const useRef: <T>(value: T) => Ref<T>;
+      type EditingTarget = "start" | "end";
+
+      const editingTarget = useRef<EditingTarget>("start");
+      const invalidComparison = editingTarget === "start";
+    `;
+
+    const diagnostics = readPluginDiagnostics(source);
+
+    expect(diagnostics.some((diagnostic) => diagnostic.code === 2367)).toBe(true);
+  });
+
+  it("keeps unrelated no-overlap comparisons inside ElfUI templates", () => {
+    const source = `
+      declare const defineHtml: (value: unknown) => unknown;
+      const count = 1;
+
+      export const Home = defineHtml(\`<div>\${count === "1"}</div>\`);
+    `;
+
+    const diagnostics = readPluginDiagnostics(source);
+
+    expect(diagnostics.some((diagnostic) => diagnostic.code === 2367)).toBe(true);
+  });
+
+  it("does not treat an unrelated local useRef function as the ElfUI API", () => {
+    const source = `
+      type Ref<T> = { readonly value: T };
+      const useRef = <T>(value: T): Ref<T> => ({ value });
+      declare const defineHtml: (value: unknown) => unknown;
+
+      const localRef = useRef("value");
+      export const Home = defineHtml(\`<div>\${localRef === "value"}</div>\`);
+    `;
+
+    const diagnostics = readPluginDiagnostics(source);
+
+    expect(diagnostics.some((diagnostic) => diagnostic.code === 2367)).toBe(true);
+  });
+
+  it("respects the native ref-unwrapping comparison suppression setting", () => {
+    const source = `
+      type Ref<T> = { readonly value: T; peek(): T };
+      declare const useRef: <T>(value: T) => Ref<T>;
+      declare const defineHtml: (value: unknown) => unknown;
+      type EditingTarget = "start" | "end";
+
+      const editingTarget = useRef<EditingTarget>("start");
+      export const Picker = defineHtml(\`<button>\${editingTarget === "start"}</button>\`);
+    `;
+
+    const diagnostics = readPluginDiagnostics(source, {
+      suppressNativeRefUnwrapComparisons: false,
+    });
+
+    expect(diagnostics.some((diagnostic) => diagnostic.code === 2367)).toBe(true);
+  });
 });
 
 const readPluginDiagnostics = (
   source: string,
-  config?: { suppressNativeTemplateLocals?: boolean },
+  config?: {
+    suppressNativeRefUnwrapComparisons?: boolean;
+    suppressNativeTemplateLocals?: boolean;
+  },
 ): ts.Diagnostic[] => {
   const languageService = createLanguageService(source);
   const createInfo = config === undefined ? { languageService } : { config, languageService };
@@ -161,12 +260,24 @@ const readPluginDiagnostics = (
 
 const createLanguageService = (source: string): ts.LanguageService => {
   const files = new Map<string, { source: string; version: string }>([
-    [fileName, { source, version: "1" }]
+    [fileName, { source, version: "1" }],
+    [
+      elfuiCoreFileName,
+      {
+        source: `
+          export interface Ref<T> { readonly value: T; peek(): T }
+          export declare function useRef<T>(value: T): Ref<T>;
+        `,
+        version: "1",
+      },
+    ],
   ]);
   const host: ts.LanguageServiceHost = {
     fileExists: (candidate) => files.has(candidate) || ts.sys.fileExists(candidate),
     getCompilationSettings: () => ({
+      baseUrl: ".",
       module: ts.ModuleKind.ESNext,
+      paths: { "@elfui/core": [elfuiCoreFileName] },
       noEmit: true,
       strict: true,
       target: ts.ScriptTarget.Latest

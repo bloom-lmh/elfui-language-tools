@@ -17,7 +17,8 @@ only maintained home for the ElfUI VS Code extension. Do not modify the retired
   completion.
 - Workspace and dependency component indexing with auto import, structured package metadata,
   typed prop/default hover, event payload hover, and typed slot scopes.
-- TypeScript server filtering narrowly scoped to false-positive template locals.
+- TypeScript server filtering narrowly scoped to false-positive template locals and
+  auto-unwrapped `useRef()` comparisons.
 - ElfUI Studio commands: component structure, dynamic point report, static preview, binding
   migration, workspace performance report, metadata generation, and performance history export.
 

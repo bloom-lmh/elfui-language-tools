@@ -64,6 +64,7 @@ Marketplace, the same pane can install it by name instead.
 - `elfui.languageFeatures.completion.eventBindingStyle`: event snippet style, `expression` or `quoted`.
 - `elfui.languageFeatures.semanticTokens.enabled`: enable ElfUI semantic tokens. The default is `false` so TypeScript keeps its built-in semantic highlighting.
 - `elfui.languageFeatures.diagnostics.suppressNativeTemplateLocals`: suppress native TS missing-name false positives only for ElfUI template locals. The default is `true`.
+- `elfui.languageFeatures.diagnostics.suppressNativeRefUnwrapComparisons`: suppress native `ts(2367)` false positives only for auto-unwrapped `useRef()` values in ElfUI template expressions. The default is `true`.
 - `elfui.languageFeatures.workspace.maxScanFiles`: maximum number of workspace TS/JS source files scanned for component metadata.
 - `elfui.languageFeatures.workspace.indexDebounceMs`: debounce delay before rebuilding the workspace component index after file changes.
 - `elfui.languageFeatures.workspace.perfLogging`: log workspace index timing and cache stats to the ElfUI language server output.

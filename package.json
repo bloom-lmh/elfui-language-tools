@@ -2,7 +2,7 @@
   "name": "elfui-language-features",
   "displayName": "ElfUI Language Tools",
   "description": "VS Code language features for ElfUI macro components.",
-  "version": "0.2.28",
+  "version": "0.2.29",
   "license": "MIT",
   "type": "commonjs",
   "publisher": "SWUST-WEBLAB-LMH",
@@ -175,6 +175,11 @@
           "type": "boolean",
           "default": true,
           "description": "Suppress native TypeScript missing-name diagnostics only for ElfUI template locals such as v-for items, slot scope variables, and $event."
+        },
+        "elfui.languageFeatures.diagnostics.suppressNativeRefUnwrapComparisons": {
+          "type": "boolean",
+          "default": true,
+          "description": "Suppress native TypeScript no-overlap comparison diagnostics only when an ElfUI template expression compares an auto-unwrapped useRef value."
         },
         "elfui.languageFeatures.workspace.maxScanFiles": {
           "type": "number",

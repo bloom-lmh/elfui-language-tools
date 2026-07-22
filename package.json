@@ -260,7 +260,7 @@
   ],
   "dependencies": {
     "@elfui/compiler": "0.1.0-beta.7",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vscode-css-languageservice": "latest",
     "vscode-html-languageservice": "latest",
     "vscode-languageclient": "^9.0.1",

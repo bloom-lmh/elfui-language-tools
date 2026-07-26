@@ -165,6 +165,36 @@ suite("ElfUI Language Features Smoke", function () {
     assert.match(getCompletionInsertedText(clickCompletion), /@click=\\\$\{\$\{1:handler\}\}/);
   });
 
+  test("keeps an existing handler when replacing an event name", async () => {
+    const { document, position } = await openFixtureWithCursor(
+      [
+        'import { defineHtml } from "@elfui/core";',
+        "",
+        "const handleClick = () => {};",
+        `export const Demo = defineHtml(\`<button @m${CURSOR}k=\${handleClick}></button>\`);`,
+        ""
+      ].join("\n")
+    );
+    const items = await waitForCompletionLabels(document, position, ["@mouseover"]);
+    const completion = items.find((item) => getCompletionLabel(item.label) === "@mouseover");
+
+    const completionRange =
+      completion?.range instanceof vscode.Range
+        ? completion.range
+        : completion?.range?.replacing ?? completion?.textEdit?.range;
+    const completionText = getCompletionInsertedText(completion);
+
+    assert(completionRange, "Expected @mouseover to provide a replacement range.");
+    assert.equal(completionText, "@mouseover", "Expected only the event name to be inserted.");
+    const completed = applyTextEdits(document.getText(), document, [
+      { newText: completionText, range: completionRange }
+    ]);
+
+    assert(completed.includes("@mouseover=${handleClick}"), "Expected the existing handler to remain.");
+    assert(!completed.includes("${handler}"), "Did not expect a duplicate handler snippet.");
+    assert(!completed.includes("k=${handleClick}"), "Did not expect a trailing event-name fragment.");
+  });
+
   test("provides event modifier-only completions after event dots", async () => {
     const { document, position } = await openFixtureWithCursor(
       [

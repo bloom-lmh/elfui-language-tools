@@ -19,6 +19,7 @@ const templateCompletions = [
   completion("v-model", "Two-way form binding", "v-model=\\${${1:value}}"),
   completion("v-show", "Toggle visibility", "v-show=\\${${1:visible}}"),
   completion("@click", "Click listener", "@click=\\${${1:handler}}"),
+  completion("@mouseover", "Mouse over listener", "@mouseover=\\${${1:handler}}"),
   completion(":class", "Dynamic class", ":class=\\${${1:classes}}"),
   completion(":style", "Dynamic style", ":style=\\${${1:styles}}")
 ];
@@ -47,6 +48,44 @@ const hasElfTemplate = (document: vscode.TextDocument, position?: vscode.Positio
 const isSupportedDocument = (document: vscode.TextDocument) =>
   supportedLanguages.includes(document.languageId);
 
+const createWebTemplateCompletions = (
+  document: vscode.TextDocument,
+  position: vscode.Position,
+): vscode.CompletionItem[] => {
+  const source = document.getText();
+  const offset = document.offsetAt(position);
+  const eventMatch = /(?:^|\s)(@[\w:-]*)$/.exec(source.slice(0, offset));
+
+  if (!eventMatch?.[1]) {
+    return templateCompletions;
+  }
+
+  const nameRemainder = /^[\w:-]*/.exec(source.slice(offset))?.[0] ?? "";
+  const afterName = source.slice(offset + nameRemainder.length);
+  const hasExistingValue = /^(?:\.[\w-]+)*\s*=/.test(afterName);
+  const range = new vscode.Range(
+    document.positionAt(offset - eventMatch[1].length),
+    document.positionAt(offset + nameRemainder.length),
+  );
+
+  return templateCompletions.map((item) => {
+    const label = typeof item.label === "string" ? item.label : item.label.label;
+
+    if (!label.startsWith("@")) {
+      return item;
+    }
+
+    const completionItem = new vscode.CompletionItem(label, item.kind);
+    completionItem.detail = item.detail;
+    completionItem.insertText = hasExistingValue
+      ? new vscode.SnippetString(label)
+      : item.insertText;
+    completionItem.range = range;
+    completionItem.sortText = item.sortText;
+    return completionItem;
+  });
+};
+
 export const activate = (context: vscode.ExtensionContext) => {
   const output = vscode.window.createOutputChannel("ElfUI");
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -71,7 +110,9 @@ export const activate = (context: vscode.ExtensionContext) => {
           return undefined;
         }
 
-        return hasElfTemplate(document, position) ? templateCompletions : macroCompletions;
+        return hasElfTemplate(document, position)
+          ? createWebTemplateCompletions(document, position)
+          : macroCompletions;
       }
     },
     "@",

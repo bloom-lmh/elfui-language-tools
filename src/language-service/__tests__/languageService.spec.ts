@@ -341,6 +341,58 @@ describe("ElfUI language service", () => {
     expect(modifierLabels.includes(":disabled")).toBe(false);
   });
 
+  it("preserves existing expression event handlers when changing an event name", () => {
+    const source = `
+      import { defineHtml } from "@elfui/core";
+
+      const handleClick = () => {};
+      export const Demo = defineHtml(\`<button @m|k=\${handleClick}></button>\`);
+    `.replace("|", "");
+    const document = createDocument(source);
+    const cursorOffset = source.indexOf("@mk") + "@m".length;
+    const completion = createElfCompletionList(
+      document,
+      document.positionAt(cursorOffset),
+    ).items.find((item) => item.label === "@mouseover");
+
+    expect(completion).toBeDefined();
+    expect(readCompletionNewText(completion!)).toBe("@mouseover");
+    const edit = completion?.textEdit;
+    expect(edit && "range" in edit).toBe(true);
+    if (!edit || !("range" in edit)) throw new Error("Expected a completion text edit.");
+    expect(applyTextEdits(source, [edit])).toContain(
+      "@mouseover=${handleClick}",
+    );
+    expect(applyTextEdits(source, [edit])).not.toContain(
+      "${handler}",
+    );
+  });
+
+  it("preserves existing quoted event handlers when changing an event name", () => {
+    const source = `
+      import { defineHtml } from "@elfui/core";
+
+      const handleClick = () => {};
+      export const Demo = defineHtml(\`<button @m|k="handleClick"></button>\`);
+    `.replace("|", "");
+    const document = createDocument(source);
+    const cursorOffset = source.indexOf("@mk") + "@m".length;
+    const completion = createElfCompletionList(
+      document,
+      document.positionAt(cursorOffset),
+      { completion: { eventBindingStyle: "quoted" } },
+    ).items.find((item) => item.label === "@mouseover");
+
+    expect(completion).toBeDefined();
+    expect(readCompletionNewText(completion!)).toBe("@mouseover");
+    const edit = completion?.textEdit;
+    expect(edit && "range" in edit).toBe(true);
+    if (!edit || !("range" in edit)) throw new Error("Expected a completion text edit.");
+    expect(applyTextEdits(source, [edit])).toContain(
+      '@mouseover="handleClick"',
+    );
+  });
+
   it("completes bare HTML tag names as paired tags", () => {
     const source = `
       import { ElfUI } from "elfui";

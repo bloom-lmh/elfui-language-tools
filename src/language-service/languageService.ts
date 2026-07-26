@@ -189,13 +189,17 @@ type TemplateCompletionContext =
       replaceStart: number;
     }
   | {
+      hasExistingValue: boolean;
       kind: "directive";
       prefix: string;
+      replaceEnd: number;
       replaceStart: number;
     }
   | {
+      hasExistingValue: boolean;
       kind: "event";
       prefix: string;
+      replaceEnd: number;
       replaceStart: number;
     }
   | {
@@ -215,13 +219,17 @@ type TemplateCompletionContext =
       replaceStart: number;
     }
   | {
+      hasExistingValue: boolean;
       kind: "prop-binding";
       prefix: string;
+      replaceEnd: number;
       replaceStart: number;
     }
   | {
+      hasExistingValue: boolean;
       kind: "slot";
       prefix: string;
+      replaceEnd: number;
       replaceStart: number;
     }
   | {
@@ -328,6 +336,7 @@ const commonDomEvents = [
   "keyup",
   "mouseenter",
   "mouseleave",
+  "mouseover",
   "submit"
 ];
 const formControlMembers = [
@@ -2668,7 +2677,9 @@ const createDirectiveCompletions = (
       insertTextFormat: InsertTextFormat.Snippet,
       kind: CompletionItemKind.Property,
       label: directive.label,
-      newText: createDirectiveCompletionText(directive, completionOptions),
+      newText: completionContextHasExistingValue(completionContext)
+        ? directive.label
+        : createDirectiveCompletionText(directive, completionOptions),
       sortText: `01${index.toString().padStart(2, "0")}`
     })
   );
@@ -2688,11 +2699,13 @@ const createEventCompletions = (
       insertTextFormat: InsertTextFormat.Snippet,
       kind: CompletionItemKind.Event,
       label: `@${eventName}`,
-      newText: createValueBindingSnippet(
-        `@${eventName}`,
-        completionOptions.eventBindingStyle,
-        "handler"
-      )
+      newText: completionContextHasExistingValue(completionContext)
+        ? `@${eventName}`
+        : createValueBindingSnippet(
+            `@${eventName}`,
+            completionOptions.eventBindingStyle,
+            "handler"
+          )
     })
   );
 };
@@ -3799,7 +3812,13 @@ const createPropBindingCompletions = (
       insertTextFormat: InsertTextFormat.Snippet,
       kind: CompletionItemKind.Variable,
       label: `:${label}`,
-      newText: createValueBindingSnippet(`:${label}`, completionOptions.templateBindingStyle, label)
+      newText: completionContextHasExistingValue(completionContext)
+        ? `:${label}`
+        : createValueBindingSnippet(
+            `:${label}`,
+            completionOptions.templateBindingStyle,
+            label
+          )
     })
   );
 
@@ -3866,7 +3885,9 @@ const createSlotCompletions = (
       insertTextFormat: InsertTextFormat.Snippet,
       kind: CompletionItemKind.Property,
       label: `#${label}`,
-      newText: `#${label}="$1"`
+      newText: completionContextHasExistingValue(completionContext)
+        ? `#${label}`
+        : `#${label}="$1"`
     })
   );
 
@@ -3965,8 +3986,10 @@ const createTemplateCompletionItem = (
   item: CompletionItem & { newText: string }
 ): CompletionItem => {
   const currentOffset = context.virtualDocument.offsetAt(context.virtualPosition);
+  const replaceEnd =
+    "replaceEnd" in completionContext ? completionContext.replaceEnd : currentOffset;
   const range = {
-    end: document.positionAt(context.region.contentStart + currentOffset),
+    end: document.positionAt(context.region.contentStart + replaceEnd),
     start: document.positionAt(context.region.contentStart + completionContext.replaceStart)
   };
   const { newText, ...completionItem } = item;
@@ -3979,6 +4002,11 @@ const createTemplateCompletionItem = (
     }
   };
 };
+
+const completionContextHasExistingValue = (
+  completionContext: TemplateCompletionContext,
+): boolean =>
+  "hasExistingValue" in completionContext && completionContext.hasExistingValue;
 
 const createTemplateComponentAutoImportActions = (
   document: TextDocument,
@@ -5578,7 +5606,10 @@ const resolveTemplateCompletionContext = (
   const eventMatch = /(?:^|\s)(@[\w:-]*)$/.exec(openTag.fragment);
 
   if (eventMatch) {
+    const suffix = readValueAttributeCompletionSuffix(template, offset);
+
     return {
+      ...suffix,
       kind: "event",
       prefix: eventMatch[1] ?? "",
       replaceStart: offset - (eventMatch[1]?.length ?? 0)
@@ -5588,7 +5619,10 @@ const resolveTemplateCompletionContext = (
   const propMatch = /(?:^|\s)(:[\w:-]*)$/.exec(openTag.fragment);
 
   if (propMatch) {
+    const suffix = readValueAttributeCompletionSuffix(template, offset);
+
     return {
+      ...suffix,
       kind: "prop-binding",
       prefix: propMatch[1] ?? "",
       replaceStart: offset - (propMatch[1]?.length ?? 0)
@@ -5598,7 +5632,10 @@ const resolveTemplateCompletionContext = (
   const slotMatch = /(?:^|\s)(#[\w-]*)$/.exec(openTag.fragment);
 
   if (slotMatch) {
+    const suffix = readValueAttributeCompletionSuffix(template, offset);
+
     return {
+      ...suffix,
       kind: "slot",
       prefix: slotMatch[1] ?? "",
       replaceStart: offset - (slotMatch[1]?.length ?? 0)
@@ -5608,7 +5645,10 @@ const resolveTemplateCompletionContext = (
   const directiveMatch = /(?:^|\s)(v-[\w:-]*)$/.exec(openTag.fragment);
 
   if (directiveMatch) {
+    const suffix = readValueAttributeCompletionSuffix(template, offset);
+
     return {
+      ...suffix,
       kind: "directive",
       prefix: directiveMatch[1] ?? "",
       replaceStart: offset - (directiveMatch[1]?.length ?? 0)
@@ -5628,6 +5668,20 @@ const resolveTemplateCompletionContext = (
   }
 
   return null;
+};
+
+const readValueAttributeCompletionSuffix = (
+  template: string,
+  offset: number,
+): { hasExistingValue: boolean; replaceEnd: number } => {
+  const suffix = template.slice(offset);
+  const nameRemainder = /^[\w:-]*/.exec(suffix)?.[0] ?? "";
+  const afterName = suffix.slice(nameRemainder.length);
+
+  return {
+    hasExistingValue: /^(?:\.[\w-]+)*\s*=/.test(afterName),
+    replaceEnd: offset + nameRemainder.length,
+  };
 };
 
 const resolveExpressionCompletionContext = (

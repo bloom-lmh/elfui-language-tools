@@ -26,6 +26,16 @@ interface LanguageServerPerformanceSummary {
     count: number;
     maxDurationMs: number;
   };
+  diagnostics: {
+    averageDurationMs: number;
+    count: number;
+    maxDurationMs: number;
+  };
+  formatting: {
+    averageDurationMs: number;
+    count: number;
+    maxDurationMs: number;
+  };
   index: Array<{
     durationMs: number;
     filesIndexed: number;
@@ -744,11 +754,19 @@ interface StructureNode {
 
 class ElfComponentStructureProvider implements vscode.TreeDataProvider<StructureNode> {
   private readonly changeEmitter = new vscode.EventEmitter<StructureNode | undefined>();
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
   refresh() {
-    this.changeEmitter.fire(undefined);
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      this.changeEmitter.fire(undefined);
+    }, 120);
   }
 
   getTreeItem(node: StructureNode): vscode.TreeItem {
@@ -1856,6 +1874,8 @@ const createWorkspaceIndexReportHtml = (report: WorkspaceIndexReport): string =>
           <tr><th>Language server startup</th><td>${formatDuration(report.languageServerStartupMs)}</td></tr>
           <tr><th>Latest language-server index</th><td>${formatIndexDuration(latestIndex)}</td></tr>
           <tr><th>Completion latency</th><td>${formatCompletionLatency(completion)}</td></tr>
+          <tr><th>Formatting latency</th><td>${formatCompletionLatency(report.languageServer?.formatting)}</td></tr>
+          <tr><th>Diagnostics latency</th><td>${formatCompletionLatency(report.languageServer?.diagnostics)}</td></tr>
         </tbody>
       </table>
       <h2>Recent report scans</h2>

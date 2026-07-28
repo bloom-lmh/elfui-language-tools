@@ -351,6 +351,52 @@ describe("workspace component index", () => {
     });
   });
 
+  it("reuses per-document project options until the index changes", () => {
+    const root = createTempRoot();
+    const componentFile = writeComponent(root, "CachedButton.ts", "CachedButton");
+    const index = createWorkspaceComponentIndex();
+    const documentUri = pathToFileURL(path.join(root, "Consumer.ts")).toString();
+    const baseOptions = {};
+
+    rebuildWorkspaceComponentIndex([root], index, "options-cache");
+
+    const first = createLanguageServiceOptionsForDocument(
+      baseOptions,
+      index.componentsByUri,
+      documentUri
+    );
+    const second = createLanguageServiceOptionsForDocument(
+      baseOptions,
+      index.componentsByUri,
+      documentUri
+    );
+
+    expect(second).toBe(first);
+
+    updateIndexedDocument(
+      TextDocument.create(
+        pathToFileURL(componentFile).toString(),
+        "typescript",
+        1,
+        [
+          'import { defineHtml } from "elfui";',
+          "",
+          "export const CachedButton = defineHtml(`<button></button>`);",
+          ""
+        ].join("\n")
+      ),
+      index
+    );
+
+    const afterIndexChange = createLanguageServiceOptionsForDocument(
+      baseOptions,
+      index.componentsByUri,
+      documentUri
+    );
+
+    expect(afterIndexChange).not.toBe(first);
+  });
+
   it("ignores malformed dependency package metadata without throwing", () => {
     const root = createTempRoot();
     const packageRoot = path.join(root, "node_modules", "broken-kit");

@@ -71,11 +71,13 @@ export interface WorkspaceIndexStats {
   truncated: boolean;
 }
 
-export interface CompletionPerformanceStats {
+export interface FeaturePerformanceStats {
   averageDurationMs: number;
   count: number;
   maxDurationMs: number;
 }
+
+export type CompletionPerformanceStats = FeaturePerformanceStats;
 
 export interface WorkspaceIndexPerformanceSample extends WorkspaceIndexStats {
   recordedAt: number;
@@ -83,6 +85,8 @@ export interface WorkspaceIndexPerformanceSample extends WorkspaceIndexStats {
 
 export interface LanguageServerPerformanceSummary {
   completion: CompletionPerformanceStats;
+  diagnostics: FeaturePerformanceStats;
+  formatting: FeaturePerformanceStats;
   index: WorkspaceIndexPerformanceSample[];
 }
 
@@ -107,6 +111,7 @@ export interface WorkspaceComponentIndex {
   componentsByUri: Map<string, IndexedProjectComponent[]>;
   fileCacheByUri: Map<string, WorkspaceIndexFileCacheEntry>;
   options: WorkspaceIndexOptions;
+  revision: number;
 }
 
 export const defaultWorkspaceIndexOptions: WorkspaceIndexOptions = {
@@ -116,17 +121,44 @@ export const defaultWorkspaceIndexOptions: WorkspaceIndexOptions = {
 };
 
 const performanceSampleLimit = 20;
+const componentMapRevisions = new WeakMap<
+  Map<string, IndexedProjectComponent[]>,
+  number
+>();
+const documentLanguageServiceOptionsCache = new WeakMap<
+  Map<string, IndexedProjectComponent[]>,
+  Map<
+    string,
+    {
+      baseOptions: ElfLanguageServiceOptions;
+      options: ElfLanguageServiceOptions;
+      revision: number;
+    }
+  >
+>();
 
 export const createWorkspaceComponentIndex = (
   options: Partial<WorkspaceIndexOptions> = {}
-): WorkspaceComponentIndex => ({
-  componentsByUri: new Map(),
-  fileCacheByUri: new Map(),
-  options: {
-    ...defaultWorkspaceIndexOptions,
-    ...options
-  }
-});
+): WorkspaceComponentIndex => {
+  const componentsByUri = new Map<string, IndexedProjectComponent[]>();
+
+  componentMapRevisions.set(componentsByUri, 0);
+
+  return {
+    componentsByUri,
+    fileCacheByUri: new Map(),
+    options: {
+      ...defaultWorkspaceIndexOptions,
+      ...options
+    },
+    revision: 0
+  };
+};
+
+const bumpWorkspaceIndexRevision = (index: WorkspaceComponentIndex) => {
+  index.revision += 1;
+  componentMapRevisions.set(index.componentsByUri, index.revision);
+};
 
 export const startElfLanguageServer = (connection: Connection) => {
   const documents = new TextDocuments(TextDocument);
@@ -137,11 +169,15 @@ export const startElfLanguageServer = (connection: Connection) => {
   const pendingDocumentIndexUpdates = new Map<string, TextDocument>();
   let pendingDocumentIndexTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingWorkspaceIndexTimer: ReturnType<typeof setTimeout> | undefined;
+  const pendingDiagnostics = new Map<string, TextDocument>();
+  let pendingDiagnosticsTimer: ReturnType<typeof setTimeout> | undefined;
+  const pendingWatchedFileChanges = new Map<string, FileEvent>();
+  let pendingWatchedFileChangesTimer: ReturnType<typeof setTimeout> | undefined;
   const indexPerformanceHistory: WorkspaceIndexPerformanceSample[] = [];
-  const completionPerformance = {
-    count: 0,
-    maxDurationMs: 0,
-    totalDurationMs: 0
+  const featurePerformance = {
+    completion: createFeaturePerformanceStats(),
+    diagnostics: createFeaturePerformanceStats(),
+    formatting: createFeaturePerformanceStats()
   };
 
   const logWorkspaceIndexStats = (stats: WorkspaceIndexStats) => {
@@ -175,16 +211,18 @@ export const startElfLanguageServer = (connection: Connection) => {
     logWorkspaceIndexStats(stats);
   };
 
-  const recordCompletionDuration = (durationMs: number) => {
-    completionPerformance.count += 1;
-    completionPerformance.totalDurationMs += durationMs;
-    completionPerformance.maxDurationMs = Math.max(completionPerformance.maxDurationMs, durationMs);
+  const recordFeatureDuration = (
+    feature: keyof typeof featurePerformance,
+    durationMs: number
+  ) => {
+    const stats = featurePerformance[feature];
+    stats.count += 1;
+    stats.totalDurationMs += durationMs;
+    stats.maxDurationMs = Math.max(stats.maxDurationMs, durationMs);
   };
 
   const refreshOpenDocumentDiagnostics = () => {
-    documents.all().forEach((document) => {
-      publishDiagnostics(document);
-    });
+    documents.all().forEach((document) => scheduleDiagnostics(document));
   };
 
   const syncOpenDocumentsToIndex = () => {
@@ -210,6 +248,30 @@ export const startElfLanguageServer = (connection: Connection) => {
     }, workspaceIndex.options.indexDebounceMs);
   };
 
+  const flushDiagnostics = () => {
+    pendingDiagnosticsTimer = undefined;
+    const documentsToCheck = [...pendingDiagnostics.values()];
+    pendingDiagnostics.clear();
+
+    documentsToCheck.forEach((document) => {
+      if (documents.get(document.uri)?.version !== document.version) {
+        return;
+      }
+
+      publishDiagnostics(document);
+    });
+  };
+
+  const scheduleDiagnostics = (document: TextDocument, delayMs = 120) => {
+    pendingDiagnostics.set(document.uri, document);
+
+    if (pendingDiagnosticsTimer) {
+      clearTimeout(pendingDiagnosticsTimer);
+    }
+
+    pendingDiagnosticsTimer = setTimeout(flushDiagnostics, delayMs);
+  };
+
   const scheduleDocumentIndexUpdate = (document: TextDocument) => {
     pendingDocumentIndexUpdates.set(document.uri, document);
 
@@ -219,12 +281,43 @@ export const startElfLanguageServer = (connection: Connection) => {
 
     pendingDocumentIndexTimer = setTimeout(() => {
       pendingDocumentIndexTimer = undefined;
-      pendingDocumentIndexUpdates.forEach((pendingDocument) =>
-        updateIndexedDocument(pendingDocument, workspaceIndex)
-      );
+      const documentsToUpdate = [...pendingDocumentIndexUpdates.values()];
       pendingDocumentIndexUpdates.clear();
-      refreshOpenDocumentDiagnostics();
+      documentsToUpdate.forEach((pendingDocument) => {
+        updateIndexedDocument(pendingDocument, workspaceIndex);
+        scheduleDiagnostics(pendingDocument, 0);
+      });
     }, workspaceIndex.options.indexDebounceMs);
+  };
+
+  const flushWatchedFileChanges = () => {
+    pendingWatchedFileChangesTimer = undefined;
+    const changes = [...pendingWatchedFileChanges.values()];
+    pendingWatchedFileChanges.clear();
+
+    if (changes.length === 0) {
+      return;
+    }
+
+    const stats = applyWatchedFileChangesToIndex(changes, workspaceIndex, "watch");
+
+    recordWorkspaceIndexStats(stats);
+    scheduleWorkspaceIndexRebuild("watch");
+  };
+
+  const scheduleWatchedFileChanges = (changes: FileEvent[]) => {
+    changes.forEach((change) => {
+      pendingWatchedFileChanges.set(change.uri, change);
+    });
+
+    if (pendingWatchedFileChangesTimer) {
+      clearTimeout(pendingWatchedFileChangesTimer);
+    }
+
+    pendingWatchedFileChangesTimer = setTimeout(
+      flushWatchedFileChanges,
+      Math.min(workspaceIndex.options.indexDebounceMs, 120)
+    );
   };
 
   connection.onInitialize((params): InitializeResult => {
@@ -295,21 +388,15 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDidChangeWatchedFiles((params) => {
-    const stats = applyWatchedFileChangesToIndex(params.changes, workspaceIndex, "watch");
-
-    recordWorkspaceIndexStats(stats);
-    scheduleWorkspaceIndexRebuild("watch");
+    scheduleWatchedFileChanges(params.changes);
   });
 
   connection.onRequest("elfui/getPerformanceSummary", (): LanguageServerPerformanceSummary => ({
     completion: {
-      averageDurationMs:
-        completionPerformance.count > 0
-          ? completionPerformance.totalDurationMs / completionPerformance.count
-          : 0,
-      count: completionPerformance.count,
-      maxDurationMs: completionPerformance.maxDurationMs
+      ...readFeaturePerformanceStats(featurePerformance.completion)
     },
+    diagnostics: readFeaturePerformanceStats(featurePerformance.diagnostics),
+    formatting: readFeaturePerformanceStats(featurePerformance.formatting),
     index: [...indexPerformanceHistory]
   }));
 
@@ -339,7 +426,7 @@ export const startElfLanguageServer = (connection: Connection) => {
           items: []
         };
 
-    recordCompletionDuration(performance.now() - started);
+    recordFeatureDuration("completion", performance.now() - started);
 
     return result;
   });
@@ -599,7 +686,12 @@ export const startElfLanguageServer = (connection: Connection) => {
       return [];
     }
 
-    return createElfFormattingEdits(document, params.options);
+    const started = performance.now();
+    const result = createElfFormattingEdits(document, params.options);
+
+    recordFeatureDuration("formatting", performance.now() - started);
+
+    return result;
   });
 
   connection.onDocumentRangeFormatting((params) => {
@@ -609,7 +701,12 @@ export const startElfLanguageServer = (connection: Connection) => {
       return [];
     }
 
-    return createElfRangeFormattingEdits(document, params.range, params.options);
+    const started = performance.now();
+    const result = createElfRangeFormattingEdits(document, params.range, params.options);
+
+    recordFeatureDuration("formatting", performance.now() - started);
+
+    return result;
   });
 
   connection.onDocumentOnTypeFormatting((params) => {
@@ -619,16 +716,23 @@ export const startElfLanguageServer = (connection: Connection) => {
       return [];
     }
 
-    return createElfOnTypeFormattingEdits(document, params.position, params.ch);
+    const started = performance.now();
+    const result = createElfOnTypeFormattingEdits(document, params.position, params.ch);
+
+    recordFeatureDuration("formatting", performance.now() - started);
+
+    return result;
   });
 
   documents.onDidOpen((change) => {
     updateIndexedDocument(change.document, workspaceIndex);
-    publishDiagnostics(change.document);
+    scheduleDiagnostics(change.document, 80);
   });
 
   documents.onDidChangeContent((change) => {
-    publishDiagnostics(change.document);
+    // Diagnostics include macro compilation and template parsing. Keep them
+    // off the request path while the user is typing.
+    scheduleDiagnostics(change.document);
     scheduleDocumentIndexUpdate(change.document);
   });
 
@@ -643,6 +747,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   connection.listen();
 
   function publishDiagnostics(document: TextDocument) {
+    const started = performance.now();
     connection.sendDiagnostics({
       diagnostics: createElfDiagnostics(
         document,
@@ -654,8 +759,23 @@ export const startElfLanguageServer = (connection: Connection) => {
       ),
       uri: document.uri
     });
+    recordFeatureDuration("diagnostics", performance.now() - started);
   }
 };
+
+const createFeaturePerformanceStats = () => ({
+  count: 0,
+  maxDurationMs: 0,
+  totalDurationMs: 0
+});
+
+const readFeaturePerformanceStats = (
+  stats: ReturnType<typeof createFeaturePerformanceStats>
+): FeaturePerformanceStats => ({
+  averageDurationMs: stats.count > 0 ? stats.totalDurationMs / stats.count : 0,
+  count: stats.count,
+  maxDurationMs: stats.maxDurationMs
+});
 
 export const readLanguageServiceOptions = (settings: unknown): ElfLanguageServiceOptions => {
   const record = isRecord(settings) ? settings : {};
@@ -873,6 +993,7 @@ export const rebuildWorkspaceComponentIndex = (
 
       index.componentsByUri.delete(uri);
       index.fileCacheByUri.delete(uri);
+      bumpWorkspaceIndexRevision(index);
       stats.filesRemoved += 1;
     });
   }
@@ -897,6 +1018,7 @@ export const updateIndexedDocument = (
     readIndexedComponents(document.getText(), fileName, document.uri)
   );
   index.fileCacheByUri.delete(document.uri);
+  bumpWorkspaceIndexRevision(index);
 
   return true;
 };
@@ -930,6 +1052,7 @@ export const applyWatchedFileChangesToIndex = (
     if (change.type === FileChangeType.Deleted) {
       index.componentsByUri.delete(change.uri);
       index.fileCacheByUri.delete(change.uri);
+      bumpWorkspaceIndexRevision(index);
       stats.filesRemoved += 1;
       return;
     }
@@ -970,6 +1093,7 @@ export const updateIndexedFile = (
       mtimeMs: stat.mtimeMs,
       size: stat.size
     });
+    bumpWorkspaceIndexRevision(index);
 
     return "indexed";
   } catch {
@@ -1048,6 +1172,7 @@ const updateIndexedPackageMetadataFile = (
       mtimeMs: stat.mtimeMs,
       size: stat.size
     });
+    bumpWorkspaceIndexRevision(index);
 
     return "indexed";
   } catch {
@@ -1980,20 +2105,44 @@ export const createLanguageServiceOptionsForDocument = (
   baseOptions: ElfLanguageServiceOptions,
   componentsByUri: Map<string, IndexedProjectComponent[]>,
   documentUri: string
-): ElfLanguageServiceOptions => ({
-  ...baseOptions,
-  project: {
-    components: [...componentsByUri.values()]
-      .flat()
-      .filter((component) => component.uri !== documentUri)
-      .map((component) => ({
-        ...component,
-        importPath:
-          component.packageImportPath ?? createRelativeImportPath(documentUri, component.uri)
-      }))
-      .filter((component) => component.importPath.length > 0)
+): ElfLanguageServiceOptions => {
+  const revision = componentMapRevisions.get(componentsByUri) ?? 0;
+  let cache = documentLanguageServiceOptionsCache.get(componentsByUri);
+
+  if (!cache) {
+    cache = new Map();
+    documentLanguageServiceOptionsCache.set(componentsByUri, cache);
   }
-});
+
+  const cached = cache.get(documentUri);
+
+  if (cached?.baseOptions === baseOptions && cached.revision === revision) {
+    return cached.options;
+  }
+
+  const options: ElfLanguageServiceOptions = {
+    ...baseOptions,
+    project: {
+      components: [...componentsByUri.values()]
+        .flat()
+        .filter((component) => component.uri !== documentUri)
+        .map((component) => ({
+          ...component,
+          importPath:
+            component.packageImportPath ?? createRelativeImportPath(documentUri, component.uri)
+        }))
+        .filter((component) => component.importPath.length > 0)
+    }
+  };
+
+  cache.set(documentUri, {
+    baseOptions,
+    options,
+    revision
+  });
+
+  return options;
+};
 
 const createRelativeImportPath = (fromUri: string, toUri: string): string => {
   const fromFileName = documentUriToFileName(fromUri);

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import { TextDocument } from "vscode-languageserver-textdocument";
 
@@ -174,6 +175,37 @@ describe("ElfUI language service", () => {
 
     expect(completions.items.some((item) => item.label === "div")).toBe(true);
     expect(completions.items.some((item) => item.label === "button")).toBe(true);
+  });
+
+  it("keeps warm syntax completion and formatting in the millisecond budget", () => {
+    const source = `
+      import { ElfUI } from "elfui";
+
+      const Demo = ElfUI.createComponent();
+      Demo.setup(() => ({ save() {} }));
+      Demo.template(\`<section><button @click=\\\${save}></button></section>\`);
+      Demo.style(\`:host{color:red;display:block;}\`);
+    `;
+    const document = TextDocument.create("file:///performance.ts", "typescript", 1, source);
+    const position = positionAfter(document, source, "@click");
+
+    createElfCompletionList(document, position);
+    createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 });
+
+    const completionStart = performance.now();
+    for (let index = 0; index < 10; index += 1) {
+      createElfCompletionList(document, position);
+    }
+    const completionAverage = (performance.now() - completionStart) / 10;
+
+    const formattingStart = performance.now();
+    for (let index = 0; index < 10; index += 1) {
+      createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 });
+    }
+    const formattingAverage = (performance.now() - formattingStart) / 10;
+
+    expect(completionAverage).toBeLessThan(50);
+    expect(formattingAverage).toBeLessThan(50);
   });
 
   it("provides event completions for @elfui/core macro components", () => {

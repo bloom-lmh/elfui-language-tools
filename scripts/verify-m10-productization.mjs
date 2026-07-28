@@ -121,6 +121,10 @@ requireGate(
   hasAll(serverSpec, ["reuses cached file metadata", "multiple workspace roots"]),
   "Server tests cover metadata cache and multi-root indexing"
 );
+requireGate(
+  languageServiceSpec.includes("millisecond budget"),
+  "Language-service warm completion and formatting latency gate"
+);
 
 if (failures.length > 0) {
   console.error("");

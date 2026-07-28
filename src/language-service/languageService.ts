@@ -242,6 +242,55 @@ type TemplateCompletionContext =
 const htmlLanguageService = getHtmlLanguageService();
 const cssLanguageService = getCSSLanguageService();
 
+interface CachedEmbeddedRegionDocuments {
+  content: string;
+  htmlDocument?: HTMLDocument;
+  htmlParsingDocument?: TextDocument;
+  htmlParsingHtmlDocument?: HTMLDocument;
+  stylesheet?: ReturnType<typeof cssLanguageService.parseStylesheet>;
+  virtualDocument: TextDocument;
+}
+
+const embeddedRegionDocumentCache = new Map<string, CachedEmbeddedRegionDocuments>();
+const embeddedRegionDocumentCacheLimit = 96;
+
+const getCachedEmbeddedRegionDocuments = (
+  sourceUri: string,
+  region: EmbeddedRegion
+): CachedEmbeddedRegionDocuments => {
+  const key = `${sourceUri}:${region.kind}:${region.contentStart}:${region.method}`;
+  const cached = embeddedRegionDocumentCache.get(key);
+
+  if (cached?.content === region.content) {
+    embeddedRegionDocumentCache.delete(key);
+    embeddedRegionDocumentCache.set(key, cached);
+
+    return cached;
+  }
+
+  const entry: CachedEmbeddedRegionDocuments = {
+    content: region.content,
+    virtualDocument: TextDocument.create(
+      `${sourceUri}.${region.kind}-${region.contentStart}.${region.languageId}`,
+      region.languageId,
+      0,
+      region.content
+    )
+  };
+
+  embeddedRegionDocumentCache.set(key, entry);
+
+  if (embeddedRegionDocumentCache.size > embeddedRegionDocumentCacheLimit) {
+    const oldestKey = embeddedRegionDocumentCache.keys().next().value;
+
+    if (oldestKey) {
+      embeddedRegionDocumentCache.delete(oldestKey);
+    }
+  }
+
+  return entry;
+};
+
 interface CachedSourceAnalysis {
   analysis: ReturnType<typeof analyzeElfSource>;
   source: string;
@@ -295,6 +344,10 @@ const defaultCompletionOptions: ResolvedElfCompletionOptions = {
   eventBindingStyle: "expression",
   templateBindingStyle: "expression"
 };
+const resolvedLanguageServiceOptionsCache = new WeakMap<
+  ElfLanguageServiceOptions,
+  ResolvedElfLanguageServiceOptions
+>();
 
 const templateDirectives: Array<
   | {
@@ -533,7 +586,7 @@ export const createElfCompletionList = (
   const styleContext = findEmbeddedDocumentContext(document, position, "style");
 
   if (styleContext) {
-    const stylesheet = cssLanguageService.parseStylesheet(styleContext.virtualDocument);
+    const stylesheet = parseStylesheet(styleContext);
     const cssCompletions = cssLanguageService.doComplete(
       styleContext.virtualDocument,
       styleContext.virtualPosition,
@@ -617,7 +670,7 @@ export const createElfHover = (
     const hover = cssLanguageService.doHover(
       styleContext.virtualDocument,
       styleContext.virtualPosition,
-      cssLanguageService.parseStylesheet(styleContext.virtualDocument),
+      parseStylesheet(styleContext),
       {
         documentation: true,
         references: true
@@ -1194,7 +1247,7 @@ const createTemplateDocumentLinks = (
   region: EmbeddedRegion
 ): DocumentLink[] => {
   const virtualDocument = createVirtualDocument(document.uri, region);
-  const htmlDocument = htmlLanguageService.parseHTMLDocument(virtualDocument);
+  const htmlDocument = parseHTMLForRegion(document.uri, region);
   const template = virtualDocument.getText();
   const links: DocumentLink[] = [];
   const linkAttributes = new Set(["action", "href", "poster", "src"]);
@@ -1430,7 +1483,7 @@ export const createElfSelectionRanges = (
     const styleContext = findEmbeddedDocumentContext(document, position, "style");
 
     if (styleContext) {
-      const stylesheet = cssLanguageService.parseStylesheet(styleContext.virtualDocument);
+      const stylesheet = parseStylesheet(styleContext);
       const [selectionRange] = cssLanguageService.getSelectionRanges(
         styleContext.virtualDocument,
         [styleContext.virtualPosition],
@@ -1588,7 +1641,7 @@ const createTemplateSemanticTokens = (
   projectComponents: ElfProjectComponent[]
 ): ElfSemanticToken[] => {
   const virtualDocument = createVirtualDocument(document.uri, region);
-  const htmlDocument = htmlLanguageService.parseHTMLDocument(virtualDocument);
+  const htmlDocument = parseHTMLForRegion(document.uri, region);
   const tokens: ElfSemanticToken[] = [];
   const pushVirtualToken = (
     start: number,
@@ -1900,7 +1953,7 @@ export const createElfDocumentColors = (document: TextDocument): ColorInformatio
   return analysis.components.flatMap((component) =>
     component.styles.flatMap((region) => {
       const virtualDocument = createVirtualDocument(document.uri, region);
-      const stylesheet = cssLanguageService.parseStylesheet(virtualDocument);
+      const stylesheet = parseStylesheetForRegion(document.uri, region);
 
       return cssLanguageService.findDocumentColors(virtualDocument, stylesheet).map((color) => ({
         ...color,
@@ -1921,7 +1974,7 @@ export const createElfColorPresentations = (
     return [];
   }
 
-  const stylesheet = cssLanguageService.parseStylesheet(styleContext.virtualDocument);
+  const stylesheet = parseStylesheet(styleContext);
   const virtualRange = mapSourceRange(
     document,
     styleContext.region,
@@ -2238,7 +2291,7 @@ const collectProjectReferenceItems = (
 ): ElfReferenceItem[] =>
   target.owner.templates.flatMap((region) => {
     const virtualDocument = createVirtualDocument(document.uri, region);
-    const htmlDocument = htmlLanguageService.parseHTMLDocument(virtualDocument);
+    const htmlDocument = parseHTMLForRegion(document.uri, region);
 
     return collectProjectReferencesFromNodes(
       document,
@@ -2352,7 +2405,7 @@ const createTemplateInlayHints = (
   region: EmbeddedRegion
 ): InlayHint[] => {
   const virtualDocument = createVirtualDocument(document.uri, region);
-  const htmlDocument = htmlLanguageService.parseHTMLDocument(virtualDocument);
+  const htmlDocument = parseHTMLForRegion(document.uri, region);
   const hints: InlayHint[] = [];
 
   const visit = (node: HTMLNode) => {
@@ -2855,63 +2908,103 @@ const readTypeScriptCompletionsAtExpression = (
       })?.entries ?? []
   );
 
+interface CachedTypeScriptLanguageService {
+  files: Map<string, { source: string; version: string }>;
+  service: ts.LanguageService;
+  touch: number;
+}
+
+const templateTypeScriptServiceCache = new Map<string, CachedTypeScriptLanguageService>();
+const templateTypeScriptServiceCacheLimit = 16;
+let templateTypeScriptServiceVersion = 0;
+
 const withTypeScriptLanguageService = <T>(
   document: TextDocument,
   virtual: { fileName: string; source: string },
   read: (service: ts.LanguageService) => T
 ): T => {
   const elfuiTypesFileName = "elfui-template-types.d.ts";
-  const files = new Map<string, { version: string; source: string }>([
-    [virtual.fileName, { source: virtual.source, version: String(document.version) }],
-    [elfuiTypesFileName, { source: elfuiTemplateTypes, version: "1" }]
-  ]);
-  const host: ts.LanguageServiceHost = {
-    fileExists: (fileName) =>
-      files.has(fileName) ||
-      ts.sys.fileExists(fileName) ||
-      readTypeScriptLibFile(fileName) !== undefined,
-    getCompilationSettings: () => ({
-      allowJs: true,
-      jsx: ts.JsxEmit.Preserve,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.NodeJs,
-      noEmit: true,
-      skipLibCheck: true,
-      strict: true,
-      target: ts.ScriptTarget.Latest
-    }),
-    getCurrentDirectory: () => "",
-    getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
-    getScriptFileNames: () => [...files.keys()],
-    getScriptSnapshot: (fileName) => {
-      const file = files.get(fileName);
+  let cached = templateTypeScriptServiceCache.get(document.uri);
 
-      if (file) {
-        return ts.ScriptSnapshot.fromString(file.source);
-      }
+  if (!cached) {
+    const files = new Map<string, { version: string; source: string }>([
+      [elfuiTypesFileName, { source: elfuiTemplateTypes, version: "1" }]
+    ]);
+    const host: ts.LanguageServiceHost = {
+      fileExists: (fileName) =>
+        files.has(fileName) ||
+        ts.sys.fileExists(fileName) ||
+        readTypeScriptLibFile(fileName) !== undefined,
+      getCompilationSettings: () => ({
+        allowJs: true,
+        jsx: ts.JsxEmit.Preserve,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.NodeJs,
+        noEmit: true,
+        skipLibCheck: true,
+        strict: true,
+        target: ts.ScriptTarget.Latest
+      }),
+      getCurrentDirectory: () => "",
+      getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+      getScriptFileNames: () => [...files.keys()],
+      getScriptSnapshot: (fileName) => {
+        const file = files.get(fileName);
 
-      const libSource = readTypeScriptLibFile(fileName);
+        if (file) {
+          return ts.ScriptSnapshot.fromString(file.source);
+        }
 
-      if (libSource !== undefined) {
-        return ts.ScriptSnapshot.fromString(libSource);
-      }
+        const libSource = readTypeScriptLibFile(fileName);
 
-      if (!ts.sys.fileExists(fileName)) {
-        return undefined;
-      }
+        if (libSource !== undefined) {
+          return ts.ScriptSnapshot.fromString(libSource);
+        }
 
-      return ts.ScriptSnapshot.fromString(ts.sys.readFile(fileName) ?? "");
-    },
-    getScriptVersion: (fileName) => files.get(fileName)?.version ?? "0",
-    readFile: (fileName) =>
-      files.get(fileName)?.source ?? ts.sys.readFile(fileName) ?? readTypeScriptLibFile(fileName)
-  };
-  const service = ts.createLanguageService(host, ts.createDocumentRegistry());
-  try {
-    return read(service);
-  } finally {
-    service.dispose();
+        if (!ts.sys.fileExists(fileName)) {
+          return undefined;
+        }
+
+        return ts.ScriptSnapshot.fromString(ts.sys.readFile(fileName) ?? "");
+      },
+      getScriptVersion: (fileName) => files.get(fileName)?.version ?? "0",
+      readFile: (fileName) =>
+        files.get(fileName)?.source ?? ts.sys.readFile(fileName) ?? readTypeScriptLibFile(fileName)
+    };
+
+    cached = {
+      files,
+      service: ts.createLanguageService(host, ts.createDocumentRegistry()),
+      touch: ++templateTypeScriptServiceVersion
+    };
+    templateTypeScriptServiceCache.set(document.uri, cached);
   }
+
+  [...cached.files.keys()]
+    .filter((fileName) => fileName !== elfuiTypesFileName && fileName !== virtual.fileName)
+    .forEach((fileName) => cached?.files.delete(fileName));
+
+  const previous = cached.files.get(virtual.fileName);
+  cached.files.set(virtual.fileName, {
+    source: virtual.source,
+    version:
+      previous?.source === virtual.source
+        ? previous.version
+        : String(++templateTypeScriptServiceVersion)
+  });
+  cached.touch = ++templateTypeScriptServiceVersion;
+
+  if (templateTypeScriptServiceCache.size > templateTypeScriptServiceCacheLimit) {
+    const leastRecentlyUsed = [...templateTypeScriptServiceCache.entries()]
+      .sort((left, right) => left[1].touch - right[1].touch)[0];
+
+    if (leastRecentlyUsed && leastRecentlyUsed[0] !== document.uri) {
+      leastRecentlyUsed[1].service.dispose();
+      templateTypeScriptServiceCache.delete(leastRecentlyUsed[0]);
+    }
+  }
+
+  return read(cached.service);
 };
 
 const readVForMappedTypeScriptCompletions = (
@@ -3255,69 +3348,39 @@ const readTypeScriptMembersAtExpression = (
   }
 
   const fileName = "elf-template-member.ts";
-  const elfuiTypesFileName = "elfui-template-types.d.ts";
   const prefix = `${document.getText()}\n\n${elfTemplateValueHelper}\nconst __elfMemberTarget = (`;
   const source = `${prefix}${targetExpression});\n`;
-  const compilerOptions: ts.CompilerOptions = {
-    allowJs: true,
-    jsx: ts.JsxEmit.Preserve,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.NodeJs,
-    noEmit: true,
-    skipLibCheck: true,
-    strict: false,
-    target: ts.ScriptTarget.Latest
-  };
-  const files = new Map<string, string>([
-    [fileName, source],
-    [elfuiTypesFileName, elfuiTemplateTypes]
-  ]);
-  const host = ts.createCompilerHost(compilerOptions);
-  const readFile = host.readFile.bind(host);
-  const fileExists = host.fileExists.bind(host);
+  return withTypeScriptLanguageService(document, { fileName, source }, (service) => {
+    const program = service.getProgram();
+    const sourceFile = program?.getSourceFile(fileName);
 
-  host.fileExists = (candidate) =>
-    files.has(candidate) || fileExists(candidate) || readTypeScriptLibFile(candidate) !== undefined;
-  host.readFile = (candidate) =>
-    files.get(candidate) ?? readFile(candidate) ?? readTypeScriptLibFile(candidate);
-  host.getSourceFile = (candidate, languageVersion) => {
-    const content = files.get(candidate) ?? readFile(candidate) ?? readTypeScriptLibFile(candidate);
+    if (!program || !sourceFile) {
+      return [];
+    }
 
-    return content === undefined
-      ? undefined
-      : ts.createSourceFile(candidate, content, languageVersion, true);
-  };
+    const target = findExpressionNodeContainingRange(
+      sourceFile,
+      prefix.length,
+      prefix.length + targetExpression.length
+    );
 
-  const program = ts.createProgram([fileName, elfuiTypesFileName], compilerOptions, host);
-  const sourceFile = program.getSourceFile(fileName);
+    if (!target) {
+      return [];
+    }
 
-  if (!sourceFile) {
-    return [];
-  }
+    const checker = program.getTypeChecker();
 
-  const target = findExpressionNodeContainingRange(
-    sourceFile,
-    prefix.length,
-    prefix.length + targetExpression.length
-  );
-
-  if (!target) {
-    return [];
-  }
-
-  const checker = program.getTypeChecker();
-  const type = checker.getTypeAtLocation(target);
-
-  return checker
-    .getPropertiesOfType(type)
-    .map((symbol) => ({
-      kind: isCallableTypeSymbol(symbol)
-        ? ts.ScriptElementKind.memberFunctionElement
-        : ts.ScriptElementKind.memberVariableElement,
-      name: symbol.getName(),
-      sortText: symbol.getName()
-    }))
-    .sort((left, right) => left.name.localeCompare(right.name));
+    return checker
+      .getPropertiesOfType(checker.getTypeAtLocation(target))
+      .map((symbol) => ({
+        kind: isCallableTypeSymbol(symbol)
+          ? ts.ScriptElementKind.memberFunctionElement
+          : ts.ScriptElementKind.memberVariableElement,
+        name: symbol.getName(),
+        sortText: symbol.getName()
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  });
 };
 
 const findExpressionNodeContainingRange = (
@@ -3824,17 +3887,29 @@ const createPropBindingCompletions = (
 
 const resolveLanguageServiceOptions = (
   options: ElfLanguageServiceOptions = {}
-): ResolvedElfLanguageServiceOptions => ({
-  completion: {
-    eventBindingStyle: isTemplateBindingStyle(options.completion?.eventBindingStyle)
-      ? options.completion.eventBindingStyle
-      : defaultCompletionOptions.eventBindingStyle,
-    templateBindingStyle: isTemplateBindingStyle(options.completion?.templateBindingStyle)
-      ? options.completion.templateBindingStyle
-      : defaultCompletionOptions.templateBindingStyle
-  },
-  projectComponents: options.project?.components?.filter(isUsableProjectComponent) ?? []
-});
+): ResolvedElfLanguageServiceOptions => {
+  const cached = resolvedLanguageServiceOptionsCache.get(options);
+
+  if (cached) {
+    return cached;
+  }
+
+  const resolved: ResolvedElfLanguageServiceOptions = {
+    completion: {
+      eventBindingStyle: isTemplateBindingStyle(options.completion?.eventBindingStyle)
+        ? options.completion.eventBindingStyle
+        : defaultCompletionOptions.eventBindingStyle,
+      templateBindingStyle: isTemplateBindingStyle(options.completion?.templateBindingStyle)
+        ? options.completion.templateBindingStyle
+        : defaultCompletionOptions.templateBindingStyle
+    },
+    projectComponents: options.project?.components?.filter(isUsableProjectComponent) ?? []
+  };
+
+  resolvedLanguageServiceOptionsCache.set(options, resolved);
+
+  return resolved;
+};
 
 const isTemplateBindingStyle = (value: unknown): value is ElfTemplateBindingStyle =>
   value === "expression" || value === "quoted";
@@ -5950,7 +6025,7 @@ const visitComponentTemplateNodes = (
 ) => {
   context.component.templates.forEach((region) => {
     const virtualDocument = createVirtualDocument(context.virtualDocument.uri, region);
-    const htmlDocument = htmlLanguageService.parseHTMLDocument(virtualDocument);
+    const htmlDocument = parseHTMLForRegion(context.virtualDocument.uri, region);
     const template = virtualDocument.getText();
     const walk = (node: HTMLNode) => {
       visit(node, template);
@@ -6376,6 +6451,12 @@ const findEmbeddedDocumentContext = (
   kind: EmbeddedRegion["kind"]
 ): EmbeddedDocumentContext | null => {
   const offset = document.offsetAt(position);
+  const source = document.getText();
+
+  if (!mayBeInsideEmbeddedRegion(source, offset, kind)) {
+    return null;
+  }
+
   const analysis = analyzeDocument(document);
 
   for (const component of analysis.components) {
@@ -6399,6 +6480,60 @@ const findEmbeddedDocumentContext = (
   return null;
 };
 
+const mayBeInsideEmbeddedRegion = (
+  source: string,
+  offset: number,
+  kind: EmbeddedRegion["kind"]
+): boolean => {
+  const pattern =
+    kind === "template"
+      ? /(?:\bdefineHtml\b|\.template\b)\s*(?:<[^`]*?>\s*)?\(\s*`/g
+      : /(?:\bdefineStyle\b|\.(?:style|globalStyle)\b)\s*(?:<[^`]*?>\s*)?\(\s*`/g;
+  let lastOpen = -1;
+
+  for (const match of source.matchAll(pattern)) {
+    const open = match.index === undefined ? -1 : match.index + match[0].length - 1;
+
+    if (open >= 0 && open < offset) {
+      lastOpen = open;
+    }
+  }
+
+  if (lastOpen < 0) {
+    return isInsideAnyTemplateLiteral(source, offset);
+  }
+
+  let backtickCount = 0;
+
+  for (let index = lastOpen; index < offset; index += 1) {
+    if (source[index] !== "`" || source[index - 1] === "\\") {
+      continue;
+    }
+
+    backtickCount += 1;
+  }
+
+  return backtickCount % 2 === 1 || isInsideAnyTemplateLiteral(source, offset);
+};
+
+const isInsideAnyTemplateLiteral = (source: string, offset: number): boolean => {
+  if (source.indexOf("`") < 0) {
+    return false;
+  }
+
+  let count = 0;
+
+  for (let index = 0; index < offset; index += 1) {
+    if (source[index] !== "`" || source[index - 1] === "\\") {
+      continue;
+    }
+
+    count += 1;
+  }
+
+  return count % 2 === 1;
+};
+
 const createTemplateDiagnostics = (
   document: TextDocument,
   components: ComponentMeta[],
@@ -6408,7 +6543,7 @@ const createTemplateDiagnostics = (
 ): Diagnostic[] => {
   const virtualDocument = createVirtualDocument(document.uri, region);
   const htmlVirtualDocument = createHtmlParsingVirtualDocument(document.uri, region);
-  const htmlDocument = htmlLanguageService.parseHTMLDocument(htmlVirtualDocument);
+  const htmlDocument = parseHTMLParsingDocument(document.uri, region);
   const diagnostics: Diagnostic[] = [];
   const scanner = htmlLanguageService.createScanner(htmlVirtualDocument.getText());
 
@@ -6454,7 +6589,7 @@ const createTemplateDiagnostics = (
 
 const createStyleDiagnostics = (document: TextDocument, region: EmbeddedRegion): Diagnostic[] => {
   const virtualDocument = createVirtualDocument(document.uri, region);
-  const stylesheet = cssLanguageService.parseStylesheet(virtualDocument);
+  const stylesheet = parseStylesheetForRegion(document.uri, region);
 
   return cssLanguageService.doValidation(virtualDocument, stylesheet).map((diagnostic) => ({
     ...diagnostic,
@@ -7884,23 +8019,66 @@ const isWordCharacter = (char: string | undefined) => Boolean(char && /[\w$-]/.t
 const isNonEmptyString = (value: string | undefined): value is string => Boolean(value);
 
 const parseHTML = (context: EmbeddedDocumentContext) =>
-  htmlLanguageService.parseHTMLDocument(context.virtualDocument);
+  parseHTMLForRegion(context.virtualDocument.uri, context.region);
+
+const parseHTMLForRegion = (sourceUri: string, region: EmbeddedRegion): HTMLDocument => {
+  const cached = getCachedEmbeddedRegionDocuments(sourceUri, region);
+
+  cached.htmlDocument ??= htmlLanguageService.parseHTMLDocument(cached.virtualDocument);
+
+  return cached.htmlDocument;
+};
+
+const parseHTMLParsingDocument = (sourceUri: string, region: EmbeddedRegion): HTMLDocument => {
+  const cached = getCachedEmbeddedRegionDocuments(sourceUri, region);
+
+  if (!cached.htmlParsingDocument) {
+    cached.htmlParsingDocument = TextDocument.create(
+      `${sourceUri}.${region.kind}-${region.contentStart}.html`,
+      "html",
+      0,
+      sanitizeTemplateForHtmlParsing(region.content)
+    );
+  }
+
+  cached.htmlParsingHtmlDocument ??= htmlLanguageService.parseHTMLDocument(
+    cached.htmlParsingDocument
+  );
+
+  return cached.htmlParsingHtmlDocument;
+};
+
+const parseStylesheet = (context: EmbeddedDocumentContext) =>
+  parseStylesheetForRegion(context.virtualDocument.uri, context.region);
+
+const parseStylesheetForRegion = (
+  sourceUri: string,
+  region: EmbeddedRegion
+): ReturnType<typeof cssLanguageService.parseStylesheet> => {
+  const cached = getCachedEmbeddedRegionDocuments(sourceUri, region);
+
+  cached.stylesheet ??= cssLanguageService.parseStylesheet(cached.virtualDocument);
+
+  return cached.stylesheet;
+};
 
 const createVirtualDocument = (sourceUri: string, region: EmbeddedRegion) =>
-  TextDocument.create(
-    `${sourceUri}.${region.kind}-${region.contentStart}.${region.languageId}`,
-    region.languageId,
-    0,
-    region.content
-  );
+  getCachedEmbeddedRegionDocuments(sourceUri, region).virtualDocument;
 
-const createHtmlParsingVirtualDocument = (sourceUri: string, region: EmbeddedRegion) =>
-  TextDocument.create(
-    `${sourceUri}.${region.kind}-${region.contentStart}.html`,
-    "html",
-    0,
-    sanitizeTemplateForHtmlParsing(region.content)
-  );
+const createHtmlParsingVirtualDocument = (sourceUri: string, region: EmbeddedRegion) => {
+  const cached = getCachedEmbeddedRegionDocuments(sourceUri, region);
+
+  if (!cached.htmlParsingDocument) {
+    cached.htmlParsingDocument = TextDocument.create(
+      `${sourceUri}.${region.kind}-${region.contentStart}.html`,
+      "html",
+      0,
+      sanitizeTemplateForHtmlParsing(region.content)
+    );
+  }
+
+  return cached.htmlParsingDocument;
+};
 
 const sanitizeTemplateForHtmlParsing = (template: string): string => {
   const characters = template.split("");

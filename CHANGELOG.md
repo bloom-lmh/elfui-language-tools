@@ -1,5 +1,12 @@
 # elfui-language-features
 
+## 0.3.8
+
+### Patch Changes
+
+- e2c9a67: Keep TypeScript semantic highlighting out of ElfUI HTML/CSS comments while preserving
+  normal semantic coloring outside macro comment ranges.
+
 ## 0.3.7
 
 ### Patch Changes

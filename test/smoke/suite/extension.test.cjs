@@ -681,6 +681,55 @@ suite("ElfUI Language Features Smoke", function () {
     }
   });
 
+  test("keeps named Fragment formatting idempotent across repeated saves", async () => {
+    const document = await openFixture(
+      [
+        'import { defineFragment, defineHtml } from "@elfui/core";',
+        "",
+        "const MenuPanel = defineFragment(() => `",
+        "  <button :class=\"{",
+        "                          'is-disabled': item.disabled,",
+        "                          'is-selected': isSelected(item)",
+        "                        }\">{{ item.label }}</button>",
+        "`);",
+        "",
+        "export const Menu = defineHtml(`<MenuPanel />`);",
+        ""
+      ].join("\n")
+    );
+    const firstEdits = await waitFor(async () => {
+      const edits = await vscode.commands.executeCommand(
+        "vscode.executeFormatDocumentProvider",
+        document.uri,
+        { insertSpaces: true, tabSize: 2 }
+      );
+
+      return Array.isArray(edits) && edits.length > 0 ? edits : undefined;
+    }, "named Fragment formatting");
+    const workspaceEdit = new vscode.WorkspaceEdit();
+
+    firstEdits.forEach((edit) => workspaceEdit.replace(document.uri, edit.range, edit.newText));
+    assert.equal(await vscode.workspace.applyEdit(workspaceEdit), true);
+
+    const formattedOnce = document.getText();
+    const formattedTwice = await waitFor(async () => {
+      const secondEdits = await vscode.commands.executeCommand(
+        "vscode.executeFormatDocumentProvider",
+        document.uri,
+        { insertSpaces: true, tabSize: 2 }
+      );
+      const candidate = applyTextEdits(formattedOnce, document, secondEdits ?? []);
+
+      return candidate === formattedOnce ? candidate : undefined;
+    }, "synchronized idempotent Fragment formatting");
+
+    assert.equal(formattedTwice, formattedOnce);
+    assert.match(
+      formattedOnce,
+      /:class="\{\n\s+'is-disabled': item\.disabled,\n\s+'is-selected': isSelected\(item\)\n\s+\}"/
+    );
+  });
+
   test("applies the configured component tag color to real ElfUI TextMate scopes", async () => {
     const editorConfiguration = vscode.workspace.getConfiguration("editor");
     const rule = await waitFor(

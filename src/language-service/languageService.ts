@@ -6790,35 +6790,47 @@ const formatEmbeddedRegion = (
 };
 
 interface ProtectedTemplateExpressions {
-  replacements: Map<string, string>;
+  replacements: Map<
+    string,
+    {
+      kind: "quoted-binding" | "template-expression";
+      value: string;
+    }
+  >;
   source: string;
 }
 
 const protectTemplateExpressions = (template: string): ProtectedTemplateExpressions => {
-  const replacements = new Map<string, string>();
+  const replacements: ProtectedTemplateExpressions["replacements"] = new Map();
+  const quotedBindings = protectMultilineQuotedBindings(template, replacements);
   let result = "";
   let cursor = 0;
-  let expressionIndex = 0;
+  let expressionIndex = quotedBindings.nextIndex;
 
-  while (cursor < template.length) {
-    const start = template.indexOf("${", cursor);
+  while (cursor < quotedBindings.source.length) {
+    const start = quotedBindings.source.indexOf("${", cursor);
     if (start < 0) {
-      result += template.slice(cursor);
+      result += quotedBindings.source.slice(cursor);
       break;
     }
 
-    const end = findBalancedTemplateExpressionEnd(template, start);
+    const end = findBalancedTemplateExpressionEnd(quotedBindings.source, start);
     if (end === null) {
-      result += template.slice(cursor);
+      result += quotedBindings.source.slice(cursor);
       break;
     }
 
-    const expression = template.slice(start, end + 1);
-    const attributeExpression = isAttributeExpressionStart(template, start);
-    const markerLength = expression.length - (attributeExpression ? 2 : 0);
+    const expression = quotedBindings.source.slice(start, end + 1);
+    const attributeExpression = isAttributeExpressionStart(quotedBindings.source, start);
+    const markerLength = stableTemplateExpressionMarkerLength(
+      attributeExpression ? expression.slice(2, -1) : expression
+    );
     const marker = createTemplateExpressionMarker(expressionIndex++, markerLength);
-    replacements.set(marker, expression);
-    result += template.slice(cursor, start);
+    replacements.set(marker, {
+      kind: "template-expression",
+      value: expression
+    });
+    result += quotedBindings.source.slice(cursor, start);
     result += attributeExpression ? `"${marker}"` : marker;
     cursor = end + 1;
   }
@@ -6826,11 +6838,88 @@ const protectTemplateExpressions = (template: string): ProtectedTemplateExpressi
   return { replacements, source: result };
 };
 
+const protectMultilineQuotedBindings = (
+  template: string,
+  replacements: ProtectedTemplateExpressions["replacements"]
+): { nextIndex: number; source: string } => {
+  const bindingPattern =
+    /(?:^|[\s<])(?:v-[A-Za-z][\w:-]*|[@:#.][A-Za-z][\w:-]*)\s*=\s*(["'])/g;
+  let result = "";
+  let cursor = 0;
+  let expressionIndex = 0;
+
+  for (const match of template.matchAll(bindingPattern)) {
+    if (match.index === undefined || !match[1]) {
+      continue;
+    }
+
+    const quoteStart = match.index + match[0].lastIndexOf(match[1]);
+    const valueStart = quoteStart + 1;
+    const valueEnd = findQuotedAttributeValueEnd(template, valueStart, match[1]);
+
+    if (valueEnd === null || valueStart < cursor) {
+      continue;
+    }
+
+    const value = template.slice(valueStart, valueEnd);
+
+    if (!/\r?\n/.test(value)) {
+      continue;
+    }
+
+    const marker = createTemplateExpressionMarker(
+      expressionIndex++,
+      stableTemplateExpressionMarkerLength(value)
+    );
+    replacements.set(marker, {
+      kind: "quoted-binding",
+      value
+    });
+    result += template.slice(cursor, valueStart);
+    result += marker;
+    cursor = valueEnd;
+  }
+
+  result += template.slice(cursor);
+  return { nextIndex: expressionIndex, source: result };
+};
+
+const findQuotedAttributeValueEnd = (
+  source: string,
+  start: number,
+  quote: string
+): number | null => {
+  let escaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === quote) {
+      return index;
+    }
+  }
+
+  return null;
+};
+
 const createTemplateExpressionMarker = (index: number, length: number) => {
   const value = `e${index.toString(36)}`;
 
   return value.length >= length ? value.slice(0, length) : `${value}${"_".repeat(length - value.length)}`;
 };
+
+const stableTemplateExpressionMarkerLength = (value: string) =>
+  /\r?\n/.test(value) ? value.replace(/\s+/g, " ").trim().length : value.length;
 
 const restoreTemplateExpressions = (
   value: string,
@@ -6841,21 +6930,74 @@ const restoreTemplateExpressions = (
     return value;
   }
 
-  return [...protectedTemplate.replacements].reduce((result, [marker, expression]) => {
+  return [...protectedTemplate.replacements].reduce((result, [marker, replacement]) => {
     const quotedMarker = `"${marker}"`;
-    const markerOffset = result.indexOf(quotedMarker);
-    const target = markerOffset >= 0 ? quotedMarker : marker;
-    const offset = markerOffset >= 0 ? markerOffset : result.indexOf(marker);
+    const quotedMarkerOffset = result.indexOf(quotedMarker);
+    const markerOffset = result.indexOf(marker);
+    const target =
+      replacement.kind === "quoted-binding"
+        ? marker
+        : quotedMarkerOffset >= 0
+          ? quotedMarker
+          : marker;
+    const offset =
+      replacement.kind === "quoted-binding"
+        ? markerOffset
+        : quotedMarkerOffset >= 0
+          ? quotedMarkerOffset
+          : markerOffset;
     const restoredExpression = options
-      ? formatMultilineObjectExpression(
-          expression,
-          offset >= 0 ? readLineIndent(result, offset) : "",
-          options
-        )
-      : expression;
+      ? replacement.kind === "quoted-binding"
+        ? formatMultilineQuotedBinding(
+            replacement.value,
+            offset >= 0 ? readLineIndent(result, offset) : "",
+            options
+          )
+        : formatMultilineObjectExpression(
+            replacement.value,
+            offset >= 0 ? readLineIndent(result, offset) : "",
+            options
+          )
+      : replacement.value;
 
     return result.replace(target, restoredExpression);
   }, value);
+};
+
+const formatMultilineQuotedBinding = (
+  expression: string,
+  attributeIndent: string,
+  options: ElfFormattingOptions
+) => {
+  const trimmed = expression.trim();
+  const newLine = expression.includes("\r\n") ? "\r\n" : "\n";
+  const lines = trimmed.split(/\r?\n/);
+  const opening = lines[0]?.trim();
+  const closing = lines.at(-1)?.trim();
+
+  if (
+    lines.length < 3 ||
+    !((opening === "{" && closing === "}") || (opening === "[" && closing === "]"))
+  ) {
+    return expression;
+  }
+
+  const body = lines.slice(1, -1);
+  const contentLines = body.filter((line) => line.trim());
+
+  if (contentLines.length === 0) {
+    return `${opening}${closing}`;
+  }
+
+  const commonIndent = Math.min(
+    ...contentLines.map((line) => line.match(/^[ \t]*/)?.[0].length ?? 0)
+  );
+  const contentIndent = `${attributeIndent}${createIndentUnit(options)}`;
+  const normalizedBody = body.map((line) =>
+    line.trim() ? `${contentIndent}${line.slice(commonIndent)}` : ""
+  );
+
+  return `${opening}${newLine}${normalizedBody.join(newLine)}${newLine}${attributeIndent}${closing}`;
 };
 
 const formatMultilineObjectExpression = (

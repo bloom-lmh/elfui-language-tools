@@ -266,10 +266,67 @@
       },
       "patterns": [
         {
+          "include": "#elfuiTagContent"
+        }
+      ]
+    },
+    "elfuiNativeTag": {
+      "begin": "(</?)([a-z][a-z0-9]*)\\b",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
+        }
+      },
+      "end": "(/?>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.html"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#elfuiTagContent"
+        }
+      ]
+    },
+    "elfuiTagContent": {
+      "patterns": [
+        {
           "include": "#interpolation"
         },
         {
           "include": "#quotedDirectiveExpression"
+        },
+        {
+          "match": "(?:[:@][\\w:-]+(?:\\.[\\w-]+)*|v-(?:bind(?::[\\w-]+)?|if|else-if|show|model|text|html|memo))(?=\\s*=)",
+          "name": "entity.other.attribute-name.directive.elfui"
+        },
+        {
+          "match": "[A-Za-z_][\\w:.-]*(?=\\s*=)",
+          "name": "entity.other.attribute-name.html"
+        },
+        {
+          "begin": "([\\\"'])",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.begin.html"
+            }
+          },
+          "end": "\\1",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.html"
+            }
+          },
+          "contentName": "string.quoted.html",
+          "patterns": [
+            {
+              "include": "#interpolation"
+            }
+          ]
         },
         {
           "include": "text.html.basic"
@@ -286,6 +343,9 @@
         },
         {
           "include": "#elfuiComponentTag"
+        },
+        {
+          "include": "#elfuiNativeTag"
         },
         {
           "include": "text.html.basic"

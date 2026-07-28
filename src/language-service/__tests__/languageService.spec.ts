@@ -1006,6 +1006,47 @@ describe("ElfUI language service", () => {
     expect(formatted).not.toContain('prop="{');
   });
 
+  it("keeps multiline quoted bindings in named Fragments idempotent across saves", () => {
+    const source = [
+      'import { defineFragment, defineHtml } from "@elfui/core";',
+      "",
+      "const MenuPanel = defineFragment(() => `",
+      '  <button :class="{',
+      "                            'is-disabled': child.disabled,",
+      "                            'is-selected': isSelected(child)",
+      '                          }">',
+      "    {{ child.label }}</button>",
+      "`);",
+      "",
+      "export const Menu = defineHtml(`",
+      "  <MenuPanel />",
+      "`);",
+      ""
+    ].join("\n");
+    const format = (current: string) =>
+      applyTextEdits(
+        current,
+        createElfFormattingEdits(createDocument(current), {
+          insertSpaces: true,
+          tabSize: 2
+        })
+      );
+    const formattedOnce = format(source);
+    const formattedTwice = format(formattedOnce);
+    const formattedThreeTimes = format(formattedTwice);
+    const lines = formattedOnce.split("\n");
+    const attributeLine = lines.find((line) => line.includes(':class="{')) ?? "";
+    const memberLine = lines.find((line) => line.includes("'is-disabled'")) ?? "";
+    const closingLine = lines.find((line) => line.includes('}"')) ?? "";
+    const indentSize = (line: string) => line.match(/^[ \t]*/)?.[0].length ?? 0;
+
+    expect(formattedTwice).toBe(formattedOnce);
+    expect(formattedThreeTimes).toBe(formattedOnce);
+    expect(indentSize(memberLine)).toBe(indentSize(attributeLine) + 2);
+    expect(indentSize(closingLine)).toBe(indentSize(attributeLine));
+    expect(formattedOnce).toContain("<MenuPanel />");
+  });
+
   it("reports macro template TypeScript diagnostics", () => {
     const source = `
       /// <!--@elf component-->

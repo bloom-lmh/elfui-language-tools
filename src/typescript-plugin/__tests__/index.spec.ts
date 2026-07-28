@@ -160,6 +160,45 @@ describe("ElfUI TypeScript server plugin", () => {
     expect(readDiagnosticMessages(diagnostics).some((message) => message.includes("user"))).toBe(true);
   });
 
+  it("filters unused diagnostics for defineFragment values consumed as template tags", () => {
+    const source = `
+      import { defineFragment, defineHtml } from "@elfui/core";
+
+      const MenuPanel = defineFragment(() => \`<div>Menu</div>\`);
+      export const Menu = defineHtml(\`<MenuPanel />\`);
+    `;
+    const diagnostics = readPluginDiagnostics(source, undefined, {
+      noUnusedLocals: true,
+    });
+
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === 6133 &&
+          readDiagnosticMessages([diagnostic]).some((message) => message.includes("MenuPanel")),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps unused diagnostics for unconsumed and commented defineFragment values", () => {
+    const source = `
+      import { defineFragment, defineHtml } from "@elfui/core";
+
+      const UnusedPanel = defineFragment(() => \`<div>Unused</div>\`);
+      const CommentedPanel = defineFragment(() => \`<div>Commented</div>\`);
+      export const Menu = defineHtml(\`<!-- <CommentedPanel /> --><main>Menu</main>\`);
+    `;
+    const diagnostics = readPluginDiagnostics(source, undefined, {
+      noUnusedLocals: true,
+    });
+    const messages = readDiagnosticMessages(
+      diagnostics.filter((diagnostic) => diagnostic.code === 6133),
+    );
+
+    expect(messages.some((message) => message.includes("UnusedPanel"))).toBe(true);
+    expect(messages.some((message) => message.includes("CommentedPanel"))).toBe(true);
+  });
+
   it("filters native TS no-overlap comparisons for auto-unwrapped useRef values", () => {
     const source = `
       type Ref<T> = { readonly value: T; peek(): T };
@@ -262,8 +301,11 @@ const readPluginDiagnostics = (
     suppressNativeRefUnwrapComparisons?: boolean;
     suppressNativeTemplateLocals?: boolean;
   },
+  compilerOptions?: {
+    noUnusedLocals?: boolean;
+  },
 ): ts.Diagnostic[] => {
-  const languageService = createLanguageService(source);
+  const languageService = createLanguageService(source, compilerOptions);
   const createInfo = config === undefined ? { languageService } : { config, languageService };
   const plugin = init({ typescript: ts }).create(createInfo);
 
@@ -274,7 +316,12 @@ const readPluginDiagnostics = (
   }
 };
 
-const createLanguageService = (source: string): ts.LanguageService => {
+const createLanguageService = (
+  source: string,
+  compilerOptions?: {
+    noUnusedLocals?: boolean;
+  },
+): ts.LanguageService => {
   const files = new Map<string, { source: string; version: string }>([
     [fileName, { source, version: "1" }],
     [
@@ -283,6 +330,10 @@ const createLanguageService = (source: string): ts.LanguageService => {
         source: `
           export interface Ref<T> { readonly value: T; peek(): T }
           export declare function useRef<T>(value: T): Ref<T>;
+          export declare function defineHtml(value: string): unknown;
+          export declare function defineFragment<Props extends object = Record<string, unknown>>(
+            render: (props: Readonly<Props>) => string
+          ): (props: Readonly<Props>) => string;
         `,
         version: "1",
       },
@@ -295,6 +346,7 @@ const createLanguageService = (source: string): ts.LanguageService => {
       module: ts.ModuleKind.ESNext,
       paths: { "@elfui/core": [elfuiCoreFileName] },
       noEmit: true,
+      noUnusedLocals: compilerOptions?.noUnusedLocals,
       strict: true,
       target: ts.ScriptTarget.Latest
     }),

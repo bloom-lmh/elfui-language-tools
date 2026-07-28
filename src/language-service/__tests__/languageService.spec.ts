@@ -1386,7 +1386,7 @@ describe("ElfUI language service", () => {
       useComponents({ PackageButton });
 
       export default defineHtml(\`
-        <PackageButton :open=\${visible} @confirm=\${onConfirm}>
+        <PackageButton v-if=\${visible} :open=\${visible} @confirm=\${onConfirm}>
           <template #footer="footer">Footer</template>
         </PackageButton>
       \`);
@@ -1432,6 +1432,9 @@ describe("ElfUI language service", () => {
     expect(
       readHoverText(createElfHover(document, positionAfter(document, source, "#footer"), options))
     ).toContain("Scope: `{ close(): void }`");
+    expect(readDiagnosticMessages(createElfDiagnostics(document, options))).not.toContain(
+      'Prop "vIf" is not declared on <PackageButton>.'
+    );
   });
 
   it("supports named Fragment completion, props, definition, references and rename", () => {

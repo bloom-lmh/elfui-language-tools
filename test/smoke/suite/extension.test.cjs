@@ -100,6 +100,43 @@ suite("ElfUI Language Features Smoke", function () {
     assert(hasCompletionLabel(items, "Teleport"), "Expected Teleport built-in completion.");
   });
 
+  test("does not validate ElfUI directives as component props", async () => {
+    writeExternalPackageMetadata();
+    await vscode.commands.executeCommand("elfui.restartLanguageServer");
+
+    try {
+      const document = await openFixture(
+        [
+          'import { defineHtml, useComponents } from "@elfui/core";',
+          'import { PackageButton } from "@acme/elfui-kit";',
+          "",
+          "const visible = true;",
+          "useComponents({ PackageButton });",
+          "",
+          "export default defineHtml(`",
+          "  <elf-package-button v-if=${visible} :open=${visible} unknown-prop></elf-package-button>",
+          "`);",
+          ""
+        ].join("\n")
+      );
+      const diagnostics = await waitFor(async () => {
+        const value = vscode.languages.getDiagnostics(document.uri);
+
+        return value.some((item) => item.message.includes('Prop "unknownProp"'))
+          ? value
+          : undefined;
+      }, "component prop diagnostics");
+
+      assert(
+        !diagnostics.some((item) => item.message.includes('Prop "vIf"')),
+        "Expected v-if to be excluded from component prop diagnostics."
+      );
+    } finally {
+      cleanupExternalPackageMetadata();
+      await vscode.commands.executeCommand("elfui.restartLanguageServer");
+    }
+  });
+
   test("keeps an existing handler when replacing an event name", async () => {
     const { document, position } = await openFixtureWithCursor(
       [

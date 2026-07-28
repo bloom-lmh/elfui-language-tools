@@ -8036,6 +8036,10 @@ const normalizePropAttributeName = (attribute: string): string | null => {
     return normalizePropName(attribute.slice("v-model:".length));
   }
 
+  if (attribute.startsWith("v-")) {
+    return null;
+  }
+
   return normalizePropName(attribute);
 };
 

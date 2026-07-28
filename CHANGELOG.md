@@ -1,5 +1,11 @@
 # elfui-language-features
 
+## 0.3.7
+
+### Patch Changes
+
+- 71b91fd: Keep defineFragment arrow callbacks and their template opening backticks on the same line during formatting.
+
 ## 0.3.6
 
 ### Patch Changes

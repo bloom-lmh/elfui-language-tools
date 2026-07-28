@@ -1,5 +1,11 @@
 # elfui-language-features
 
+## 0.3.6
+
+### Patch Changes
+
+- 38ad850: Highlight templates returned from defineFragment block callbacks and prevent external formatters from fighting ElfUI inline Fragment layout during save.
+
 ## 0.3.5
 
 ### Patch Changes

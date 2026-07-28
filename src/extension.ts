@@ -746,18 +746,18 @@ const createEmbeddedSaveFormattingEdits = async (
       },
     );
 
-    return (edits ?? []).map(
-      (edit) =>
-        new vscode.TextEdit(
-          new vscode.Range(
-            edit.range.start.line,
-            edit.range.start.character,
-            edit.range.end.line,
-            edit.range.end.character,
-          ),
-          edit.newText,
-        ),
-    );
+    return (edits ?? [])
+      .map((edit) => {
+        const range = new vscode.Range(
+          edit.range.start.line,
+          edit.range.start.character,
+          edit.range.end.line,
+          edit.range.end.character,
+        );
+
+        return new vscode.TextEdit(range, edit.newText);
+      })
+      .filter((edit) => document.getText(edit.range) !== edit.newText);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     outputChannel?.appendLine(`ElfUI save formatting skipped: ${message}`);

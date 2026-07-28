@@ -241,6 +241,55 @@ describe("ElfUI language service", () => {
     expect(formatted).toContain("fragment`");
     expect(formatted).toContain("<section>");
     expect(formatted).toContain("<strong>Value</strong>");
+
+    const formattedDocument = createDocument(formatted);
+    const secondEdits = createElfFormattingEdits(formattedDocument, {
+      insertSpaces: true,
+      tabSize: 2
+    });
+
+    expect(applyTextEdits(formatted, secondEdits)).toBe(formatted);
+    expect(secondEdits).toEqual([]);
+  });
+
+  it("suppresses compiler-generated inline Fragment scope diagnostics", () => {
+    const source = `
+      import { defineHtml, fragment } from "@elfui/core";
+
+      interface SummaryItem {
+        label: string;
+        trend: number;
+        unit: string;
+        value: number;
+      }
+
+      const summaryData: SummaryItem[] = [];
+
+      export const Summary = defineHtml(\`
+        <div class="summary-row">
+          \${summaryData.map(
+            (item) => fragment\`
+              <div class="summary-card">
+                <div class="label">\${item.label}</div>
+                <span class="value">\${item.value}</span>
+                <span class="unit">\${item.unit}</span>
+                <div class="trend" :class=\${item.trend >= 0 ? "up" : "down"}>
+                  \${item.trend >= 0 ? "up" : "down"} \${Math.abs(item.trend)}%
+                </div>
+              </div>
+            \`
+          )}
+        </div>
+      \`);
+    `;
+    const diagnostics = readDiagnosticMessages(createElfDiagnostics(createDocument(source)));
+
+    expect(diagnostics.some((message) => message.includes("__elfInlineFragment"))).toBe(false);
+    expect(
+      diagnostics.some(
+        (message) => message.includes("Cannot find name 'item'") || message.includes("找不到名称“item”")
+      )
+    ).toBe(false);
   });
 
   it("keeps warm Fragment completion and formatting in the millisecond budget", () => {
@@ -495,6 +544,7 @@ describe("ElfUI language service", () => {
     const stateSource = `
       import { defineHtml } from "@elfui/core";
 
+      const nearbyStateMarker = true;
       export default defineHtml(\`<main v-if="condition"></main>\`);
     `;
     const stateDocument = createDocument(stateSource);
@@ -510,10 +560,17 @@ describe("ElfUI language service", () => {
     );
 
     expect(stateResult).toContain("const condition = useRef();");
+    expect(stateResult.indexOf("const condition = useRef();")).toBeGreaterThan(
+      stateResult.indexOf("const nearbyStateMarker")
+    );
+    expect(stateResult.indexOf("const condition = useRef();")).toBeLessThan(
+      stateResult.indexOf("export default defineHtml")
+    );
 
     const handlerSource = `
       import { defineHtml } from "@elfui/core";
 
+      const nearbyHandlerMarker = true;
       export default defineHtml(\`<button @click=\${handleClick}></button>\`);
     `;
     const handlerDocument = createDocument(handlerSource);
@@ -529,6 +586,12 @@ describe("ElfUI language service", () => {
     );
 
     expect(handlerResult).toContain("const handleClick = (e: Event) => {");
+    expect(handlerResult.indexOf("const handleClick = (e: Event) => {")).toBeGreaterThan(
+      handlerResult.indexOf("const nearbyHandlerMarker")
+    );
+    expect(handlerResult.indexOf("const handleClick = (e: Event) => {")).toBeLessThan(
+      handlerResult.indexOf("export default defineHtml")
+    );
 
     const methodSource = `
       import { defineHtml } from "@elfui/core";

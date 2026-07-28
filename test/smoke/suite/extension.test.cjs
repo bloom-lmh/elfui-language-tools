@@ -230,6 +230,7 @@ suite("ElfUI Language Features Smoke", function () {
       [
         'import { defineHtml } from "@elfui/core";',
         "",
+        "const nearbyStateMarker = true;",
         `export default defineHtml(\`<main v-if="condition${CURSOR}"></main>\`);`,
         ""
       ].join("\n")
@@ -243,11 +244,20 @@ suite("ElfUI Language Features Smoke", function () {
       () => stateDocument.getText().includes("const condition = useRef();"),
       "Alt+backslash state declaration"
     );
+    assert(
+      stateDocument.getText().indexOf("const condition = useRef();") >
+        stateDocument.getText().indexOf("const nearbyStateMarker")
+    );
+    assert(
+      stateDocument.getText().indexOf("const condition = useRef();") <
+        stateDocument.getText().indexOf("export default defineHtml")
+    );
 
     const { document: handlerDocument } = await openFixtureWithCursor(
       [
         'import { defineHtml } from "@elfui/core";',
         "",
+        "const nearbyHandlerMarker = true;",
         `export default defineHtml(\`<button @click=\${handleClick${CURSOR}}></button>\`);`,
         ""
       ].join("\n")
@@ -260,6 +270,14 @@ suite("ElfUI Language Features Smoke", function () {
     await waitFor(
       () => handlerDocument.getText().includes("const handleClick = (e: Event) => {"),
       "Alt+backslash handler declaration"
+    );
+    assert(
+      handlerDocument.getText().indexOf("const handleClick = (e: Event) => {") >
+        handlerDocument.getText().indexOf("const nearbyHandlerMarker")
+    );
+    assert(
+      handlerDocument.getText().indexOf("const handleClick = (e: Event) => {") <
+        handlerDocument.getText().indexOf("export default defineHtml")
     );
 
     const { document: methodDocument } = await openFixtureWithCursor(
@@ -634,6 +652,53 @@ suite("ElfUI Language Features Smoke", function () {
     assert(hoverText.includes("index"), "Expected index hover details.");
   });
 
+  test("keeps inline Fragment list locals free of compiler false positives", async () => {
+    const document = await openFixture(
+      [
+        'import { defineHtml, fragment } from "@elfui/core";',
+        "",
+        'const summaryData = [{ label: "Total", trend: 1, unit: "%", value: 42 }];',
+        "",
+        "export const Summary = defineHtml(`",
+        '  <div class="summary-row">',
+        "    ${summaryData.map((item) => fragment`",
+        '      <div class="summary-card">',
+        '        <div class="label">${item.label}</div>',
+        '        <span class="value">${item.value}</span>',
+        '        <span class="unit">${item.unit}</span>',
+        '        <div class="trend" :class=${item.trend >= 0 ? "up" : "down"}>',
+        '          ${item.trend >= 0 ? "up" : "down"} ${Math.abs(item.trend)}%',
+        "        </div>",
+        "      </div>",
+        "    `)}",
+        "    <span>${missingInlineValue}</span>",
+        "  </div>",
+        "`);",
+        ""
+      ].join("\n")
+    );
+    const diagnostics = await waitFor(async () => {
+      const value = vscode.languages.getDiagnostics(document.uri);
+
+      return value.some((item) => item.message.includes("missingInlineValue"))
+        ? value
+        : undefined;
+    }, "inline Fragment diagnostics");
+
+    assert(
+      !diagnostics.some((item) => item.message.includes("__elfInlineFragment")),
+      "Expected compiler-generated Fragment names to remain hidden."
+    );
+    assert(
+      !diagnostics.some(
+        (item) =>
+          item.message.includes("Cannot find name 'item'") ||
+          (item.message.includes("找不到名称") && item.message.includes("item"))
+      ),
+      "Expected inline Fragment callback locals to remain in scope."
+    );
+  });
+
   test("provides named Fragment props and same-file definition in the real host", async () => {
     const { document, position } = await openFixtureWithCursor(
       [
@@ -826,10 +891,11 @@ suite("ElfUI Language Features Smoke", function () {
       );
       const candidate = applyTextEdits(formattedOnce, document, secondEdits ?? []);
 
-      return candidate === formattedOnce ? candidate : undefined;
+      return candidate === formattedOnce ? { candidate, edits: secondEdits ?? [] } : undefined;
     }, "synchronized idempotent Fragment formatting");
 
-    assert.equal(formattedTwice, formattedOnce);
+    assert.equal(formattedTwice.candidate, formattedOnce);
+    assert.equal(formattedTwice.edits.length, 0, "Expected no redundant full-region formatting edit.");
     assert.match(
       formattedOnce,
       /:class="\{\n\s+'is-disabled': item\.disabled,\n\s+'is-selected': isSelected\(item\)\n\s+\}"/

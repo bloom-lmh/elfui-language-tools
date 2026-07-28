@@ -876,6 +876,8 @@ const createMacroDiagnostics = (
       .filter(
         (diagnostic) =>
           !isDiagnosticInsideTemplateComment(document, components, diagnostic) &&
+          !isCompilerGeneratedInlineFragmentDiagnostic(diagnostic) &&
+          !isResolvedFragmentScopeDiagnostic(document, components, diagnostic) &&
           !isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic) &&
           !isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic) &&
           !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic)
@@ -2209,6 +2211,80 @@ const formatEmbeddedRegionTree = (
   regions: EmbeddedRegion[],
   options: ElfFormattingOptions
 ): TextEdit[] => {
+  const hasNestedRegion = regions.some(
+    (candidate) =>
+      candidate.kind === region.kind && strictlyContainsRegion(region, candidate)
+  );
+
+  if (!hasNestedRegion) {
+    return formatEmbeddedRegion(document, region, options);
+  }
+
+  const originalText = document.getText().slice(region.contentStart, region.contentEnd);
+  let currentDocument = document;
+  let currentRegion = region;
+  let currentRegions = regions;
+  let replacement = originalText;
+
+  // Settle nested Fragment indentation in memory so VS Code applies one stable edit.
+  for (let pass = 0; pass < 3; pass += 1) {
+    const edit = formatEmbeddedRegionTreePass(
+      currentDocument,
+      currentRegion,
+      currentRegions,
+      options
+    )[0];
+
+    if (!edit || edit.newText === replacement) {
+      break;
+    }
+
+    replacement = edit.newText;
+    const currentSource = currentDocument.getText();
+    const nextSource =
+      currentSource.slice(0, currentRegion.contentStart) +
+      replacement +
+      currentSource.slice(currentRegion.contentEnd);
+    currentDocument = TextDocument.create(
+      document.uri,
+      document.languageId,
+      document.version + pass + 1,
+      nextSource
+    );
+    currentRegions = collectUniqueEmbeddedRegions(analyzeDocument(currentDocument).components);
+    const nextRegion = currentRegions.find(
+      (candidate) =>
+        candidate.kind === region.kind &&
+        candidate.method === region.method &&
+        candidate.contentStart === region.contentStart
+    );
+
+    if (!nextRegion) {
+      break;
+    }
+
+    currentRegion = nextRegion;
+  }
+
+  return replacement === originalText
+    ? []
+    : [
+        {
+          newText: replacement,
+          range: {
+            end: document.positionAt(region.contentEnd),
+            start: document.positionAt(region.contentStart)
+          }
+        }
+      ];
+};
+
+const formatEmbeddedRegionTreePass = (
+  document: TextDocument,
+  region: EmbeddedRegion,
+  regions: EmbeddedRegion[],
+  options: ElfFormattingOptions
+): TextEdit[] => {
   const nested = regions.filter(
     (candidate) =>
       candidate.kind === region.kind &&
@@ -2233,7 +2309,7 @@ const formatEmbeddedRegionTree = (
   children
     .sort((left, right) => right.contentStart - left.contentStart)
     .forEach((child) => {
-      const childEdit = formatEmbeddedRegionTree(document, child, regions, options)[0];
+      const childEdit = formatEmbeddedRegionTreePass(document, child, regions, options)[0];
 
       if (!childEdit) {
         return;
@@ -3385,6 +3461,43 @@ const isResolvedVForLocalUnknownDiagnostic = (
   });
 };
 
+const isCompilerGeneratedInlineFragmentDiagnostic = (diagnostic: Diagnostic): boolean => {
+  if (diagnostic.code !== "ELF_TEMPLATE_TYPE") {
+    return false;
+  }
+
+  const parsed = readMacroUnknownLocalDiagnostic(readDiagnosticMessage(diagnostic));
+
+  return Boolean(parsed && /^__elfInlineFragment(?:List)?\d+$/.test(parsed.localName));
+};
+
+const isResolvedFragmentScopeDiagnostic = (
+  document: TextDocument,
+  components: ComponentMeta[],
+  diagnostic: Diagnostic
+): boolean => {
+  if (diagnostic.code !== "ELF_TEMPLATE_TYPE") {
+    return false;
+  }
+
+  const parsed = readMacroUnknownLocalDiagnostic(readDiagnosticMessage(diagnostic));
+
+  if (!parsed) {
+    return false;
+  }
+
+  const sourceOffset = document.offsetAt(diagnostic.range.start);
+
+  return components
+    .flatMap((component) => component.templates)
+    .some(
+      (region) =>
+        region.method === "fragment" &&
+        isInsideEmbeddedRegion(region, sourceOffset) &&
+        (region.scopeNames ?? []).includes(parsed.localName)
+    );
+};
+
 const isResolvedInterpolationRefValueDiagnostic = (
   document: TextDocument,
   components: ComponentMeta[],
@@ -4531,11 +4644,12 @@ const createTemplateDeclarationActionAtRange = (
 
   const eventBinding = isTemplateEventExpression(template, expression.start);
   const methodCall = isIdentifierCallExpression(expression.value, word.end);
+  const sourceOffset = document.offsetAt(range.start);
   const edits = eventBinding
-    ? createTemplateHandlerDeclarationEdits(document, context.component, word.value)
+    ? createTemplateHandlerDeclarationEdits(document, context.component, word.value, sourceOffset)
     : methodCall
-      ? createTemplateMethodDeclarationEdits(document, context.component, word.value)
-      : createTemplateStateDeclarationEdits(document, context.component, word.value);
+      ? createTemplateMethodDeclarationEdits(document, context.component, word.value, sourceOffset)
+      : createTemplateStateDeclarationEdits(document, context.component, word.value, sourceOffset);
 
   if (edits.length === 0) {
     return null;
@@ -4634,10 +4748,8 @@ const createTemplateDeclarationCodeActions = (
       return;
     }
 
-    const owner = findComponentByTemplateRange(
-      analysis.components,
-      document.offsetAt(diagnostic.range.start)
-    );
+    const diagnosticOffset = document.offsetAt(diagnostic.range.start);
+    const owner = findComponentByTemplateRange(analysis.components, diagnosticOffset);
     const parsed = readTemplateDeclarationDiagnostic(diagnostic);
 
     if (owner) {
@@ -4665,7 +4777,7 @@ const createTemplateDeclarationCodeActions = (
           document,
           diagnostic,
           `Create handler "${parsed.name}"`,
-          createTemplateHandlerDeclarationEdits(document, owner, parsed.name)
+          createTemplateHandlerDeclarationEdits(document, owner, parsed.name, diagnosticOffset)
         );
         return;
       }
@@ -4676,7 +4788,7 @@ const createTemplateDeclarationCodeActions = (
           document,
           diagnostic,
           `Create method "${parsed.name}"`,
-          createTemplateMethodDeclarationEdits(document, owner, parsed.name)
+          createTemplateMethodDeclarationEdits(document, owner, parsed.name, diagnosticOffset)
         );
         return;
       }
@@ -4686,14 +4798,14 @@ const createTemplateDeclarationCodeActions = (
         document,
         diagnostic,
         `Create state "${parsed.name}" with useRef()`,
-        createTemplateStateDeclarationEdits(document, owner, parsed.name)
+        createTemplateStateDeclarationEdits(document, owner, parsed.name, diagnosticOffset)
       );
       pushDeclarationAction(
         actions,
         document,
         diagnostic,
         `Expose "${parsed.name}" from setup()`,
-        createTemplateVariableDeclarationEdits(document, owner, parsed.name)
+        createTemplateVariableDeclarationEdits(document, owner, parsed.name, diagnosticOffset)
       );
       pushDeclarationAction(
         actions,
@@ -4711,7 +4823,7 @@ const createTemplateDeclarationCodeActions = (
         document,
         diagnostic,
         `Create handler "${parsed.name}"`,
-        createTemplateHandlerDeclarationEdits(document, owner, parsed.name)
+        createTemplateHandlerDeclarationEdits(document, owner, parsed.name, diagnosticOffset)
       );
       return;
     }
@@ -4850,7 +4962,8 @@ const createAllMissingTemplateDeclarationAction = (
     document,
     owner,
     stateNames,
-    handlerNames
+    handlerNames,
+    missing[0]?.offset
   );
 
   if (edits.length === 0) {
@@ -5147,49 +5260,53 @@ const createComponentAutoImportEdits = (
 const createTemplateVariableDeclarationEdits = (
   document: TextDocument,
   component: ComponentMeta,
-  name: string
+  name: string,
+  sourceOffset?: number
 ): TextEdit[] => {
   if (!isValidIdentifier(name) || component.setupReturns.includes(name)) {
     return [];
   }
 
-  return createMacroVariableDeclarationEdits(document, name);
+  return createMacroVariableDeclarationEdits(document, component, name, sourceOffset);
 };
 
 const createTemplateStateDeclarationEdits = (
   document: TextDocument,
   component: ComponentMeta,
-  name: string
+  name: string,
+  sourceOffset?: number
 ): TextEdit[] => {
   if (!isValidIdentifier(name) || component.setupReturns.includes(name)) {
     return [];
   }
 
-  return createMacroStateDeclarationEdits(document, name);
+  return createMacroStateDeclarationEdits(document, component, name, sourceOffset);
 };
 
 const createTemplateHandlerDeclarationEdits = (
   document: TextDocument,
   component: ComponentMeta,
-  name: string
+  name: string,
+  sourceOffset?: number
 ): TextEdit[] => {
   if (!isValidIdentifier(name) || component.setupReturns.includes(name)) {
     return [];
   }
 
-  return createMacroHandlerDeclarationEdits(document, name);
+  return createMacroHandlerDeclarationEdits(document, component, name, sourceOffset);
 };
 
 const createTemplateMethodDeclarationEdits = (
   document: TextDocument,
   component: ComponentMeta,
-  name: string
+  name: string,
+  sourceOffset?: number
 ): TextEdit[] => {
   if (!isValidIdentifier(name) || component.setupReturns.includes(name)) {
     return [];
   }
 
-  return createMacroMethodDeclarationEdits(document, name);
+  return createMacroMethodDeclarationEdits(document, component, name, sourceOffset);
 };
 
 const createPropDeclarationEdits = (
@@ -5228,70 +5345,115 @@ const createSlotDeclarationEdits = (
   return createMacroDefineSlotsEdits(document, name);
 };
 
-const createMacroVariableDeclarationEdits = (document: TextDocument, name: string): TextEdit[] => {
-  const insertOffset = findImportInsertionOffset(document.getText());
+const createMacroVariableDeclarationEdits = (
+  document: TextDocument,
+  component: ComponentMeta,
+  name: string,
+  sourceOffset?: number
+): TextEdit[] => [
+  createMacroTemplateDeclarationEdit(
+    document,
+    component,
+    `const ${name} = undefined;\n`,
+    sourceOffset
+  )
+];
 
-  return [
-    {
-      newText: `const ${name} = undefined;\n`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
-    }
-  ];
-};
-
-const createMacroStateDeclarationEdits = (document: TextDocument, name: string): TextEdit[] => {
-  const insertOffset = findImportInsertionOffset(document.getText());
-
+const createMacroStateDeclarationEdits = (
+  document: TextDocument,
+  component: ComponentMeta,
+  name: string,
+  sourceOffset?: number
+): TextEdit[] => {
   return [
     ...createElfuiNamedImportEdits(document, "useRef"),
-    {
-      newText: `const ${name} = useRef();\n`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
-    }
+    createMacroTemplateDeclarationEdit(
+      document,
+      component,
+      `const ${name} = useRef();\n`,
+      sourceOffset
+    )
   ];
 };
 
-const createMacroHandlerDeclarationEdits = (document: TextDocument, name: string): TextEdit[] => {
-  const insertOffset = findImportInsertionOffset(document.getText());
+const createMacroHandlerDeclarationEdits = (
+  document: TextDocument,
+  component: ComponentMeta,
+  name: string,
+  sourceOffset?: number
+): TextEdit[] => [
+  createMacroTemplateDeclarationEdit(
+    document,
+    component,
+    `const ${name} = (e: Event) => {\n};\n`,
+    sourceOffset
+  )
+];
 
-  return [
-    {
-      newText: `const ${name} = (e: Event) => {\n};\n`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
-    }
-  ];
-};
+const createMacroMethodDeclarationEdits = (
+  document: TextDocument,
+  component: ComponentMeta,
+  name: string,
+  sourceOffset?: number
+): TextEdit[] => [
+  createMacroTemplateDeclarationEdit(
+    document,
+    component,
+    `const ${name} = () => {\n};\n`,
+    sourceOffset
+  )
+];
 
-const createMacroMethodDeclarationEdits = (document: TextDocument, name: string): TextEdit[] => {
-  const insertOffset = findImportInsertionOffset(document.getText());
+const createMacroTemplateDeclarationEdit = (
+  document: TextDocument,
+  component: ComponentMeta,
+  newText: string,
+  sourceOffset?: number
+): TextEdit => {
+  const insertOffset = findTemplateDeclarationInsertionOffset(
+    document.getText(),
+    component,
+    sourceOffset
+  );
 
-  return [
-    {
-      newText: `const ${name} = () => {\n};\n`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
-    }
-  ];
+  return {
+    newText,
+    range: createRangeFromOffsets(document, insertOffset, insertOffset)
+  };
 };
 
 const createAllMissingTemplateDeclarationEdits = (
   document: TextDocument,
   component: ComponentMeta,
   stateNames: string[],
-  handlerNames: string[]
+  handlerNames: string[],
+  sourceOffset?: number
 ): TextEdit[] => {
   if (stateNames.length === 0 && handlerNames.length === 0) {
     return [];
   }
 
-  return createMacroMissingTemplateDeclarationEdits(document, stateNames, handlerNames);
+  return createMacroMissingTemplateDeclarationEdits(
+    document,
+    component,
+    stateNames,
+    handlerNames,
+    sourceOffset
+  );
 };
 
 const createMacroMissingTemplateDeclarationEdits = (
   document: TextDocument,
+  component: ComponentMeta,
   stateNames: string[],
-  handlerNames: string[]
+  handlerNames: string[],
+  sourceOffset?: number
 ): TextEdit[] => {
-  const insertOffset = findImportInsertionOffset(document.getText());
+  const insertOffset = findTemplateDeclarationInsertionOffset(
+    document.getText(),
+    component,
+    sourceOffset
+  );
   const declarationText = [
     ...stateNames.map((name) => `const ${name} = useRef();\n`),
     ...handlerNames.map((name) => `const ${name} = (e: Event) => {\n};\n`)
@@ -5724,6 +5886,31 @@ const nodeRange = (node: ts.Node, sourceFile: ts.SourceFile): { end: number; sta
   end: node.getEnd(),
   start: node.getStart(sourceFile)
 });
+
+const findTemplateDeclarationInsertionOffset = (
+  source: string,
+  component: ComponentMeta,
+  sourceOffset?: number
+): number => {
+  const sourceFile = createTsSourceFile(source);
+  const targetRegion =
+    (sourceOffset === undefined
+      ? undefined
+      : component.templates.find((region) => isInsideEmbeddedRegion(region, sourceOffset))) ??
+    component.templates.find((region) => region.method === "defineHtml") ??
+    component.templates[0];
+  const targetOffset = targetRegion?.contentStart;
+
+  if (targetOffset === undefined) {
+    return findImportInsertionOffset(source);
+  }
+
+  const statement = sourceFile.statements.find(
+    (candidate) => candidate.getFullStart() <= targetOffset && candidate.getEnd() >= targetOffset
+  );
+
+  return statement?.getStart(sourceFile) ?? findImportInsertionOffset(source);
+};
 
 const findImportInsertionOffset = (source: string): number => {
   const sourceFile = createTsSourceFile(source);
@@ -6890,10 +7077,15 @@ const formatEmbeddedRegion = (
       protectedTemplate,
       options
     );
+    const newText = formatEmbeddedCodeBlock(document, region, formattedContent, options);
+
+    if (document.getText().slice(region.contentStart, region.contentEnd) === newText) {
+      return [];
+    }
 
     return [
       {
-        newText: formatEmbeddedCodeBlock(document, region, formattedContent, options),
+        newText,
         range: {
           end: document.positionAt(region.contentEnd),
           start: document.positionAt(region.contentStart)

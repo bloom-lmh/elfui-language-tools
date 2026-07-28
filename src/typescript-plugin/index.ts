@@ -42,6 +42,11 @@ interface TemplateLocalScope {
   start: number;
 }
 
+interface SourceRange {
+  end: number;
+  start: number;
+}
+
 const init = (modules: TypeScriptServerPluginModules) => {
   const tsModule = modules.typescript;
   let configuration: TypeScriptPluginConfiguration = {
@@ -56,7 +61,10 @@ const init = (modules: TypeScriptServerPluginModules) => {
       const getSemanticDiagnostics = info.languageService.getSemanticDiagnostics.bind(
         info.languageService
       );
+      const getEncodedSemanticClassifications =
+        info.languageService.getEncodedSemanticClassifications.bind(info.languageService);
       const consumedFragmentNamesCache = new WeakMap<ts.SourceFile, Set<string>>();
+      const templateCommentRangesCache = new WeakMap<ts.SourceFile, SourceRange[]>();
 
       proxy.getSemanticDiagnostics = (fileName) => {
         const diagnostics = getSemanticDiagnostics(fileName);
@@ -107,12 +115,176 @@ const init = (modules: TypeScriptServerPluginModules) => {
         );
       };
 
+      proxy.getEncodedSemanticClassifications = (fileName, span, format) => {
+        const classifications = getEncodedSemanticClassifications(fileName, span, format);
+        const sourceFile = info.languageService.getProgram()?.getSourceFile(fileName);
+
+        if (!sourceFile || classifications.spans.length === 0) {
+          return classifications;
+        }
+
+        const commentRanges = readCachedTemplateCommentRanges(
+          tsModule,
+          sourceFile,
+          templateCommentRangesCache,
+        );
+
+        if (commentRanges.length === 0) {
+          return classifications;
+        }
+
+        return {
+          ...classifications,
+          spans: filterSemanticClassificationSpans(classifications.spans, commentRanges),
+        };
+      };
+
       return proxy;
     },
     onConfigurationChanged(nextConfiguration: unknown) {
       configuration = readPluginConfiguration(nextConfiguration);
     },
   };
+};
+
+const readCachedTemplateCommentRanges = (
+  tsModule: typeof ts,
+  sourceFile: ts.SourceFile,
+  cache: WeakMap<ts.SourceFile, SourceRange[]>,
+): SourceRange[] => {
+  const cached = cache.get(sourceFile);
+
+  if (cached) {
+    return cached;
+  }
+
+  const ranges = collectTemplateCommentRanges(tsModule, sourceFile);
+  cache.set(sourceFile, ranges);
+  return ranges;
+};
+
+const collectTemplateCommentRanges = (
+  tsModule: typeof ts,
+  sourceFile: ts.SourceFile,
+): SourceRange[] => {
+  const defineHtmlNames = new Set([
+    "defineHtml",
+    ...collectElfuiImportNames(tsModule, sourceFile, "defineHtml"),
+  ]);
+  const defineStyleNames = new Set([
+    "defineStyle",
+    ...collectElfuiImportNames(tsModule, sourceFile, "defineStyle"),
+  ]);
+  const defineFragmentNames = new Set([
+    "defineFragment",
+    ...collectElfuiImportNames(tsModule, sourceFile, "defineFragment"),
+  ]);
+  const fragmentNames = new Set([
+    "fragment",
+    ...collectElfuiImportNames(tsModule, sourceFile, "fragment"),
+  ]);
+  const ranges: SourceRange[] = [];
+  const visitedTemplates = new Set<ts.TemplateLiteral>();
+  const collectTemplate = (
+    template: ts.TemplateLiteral | null | undefined,
+    open: string,
+    close: string,
+  ) => {
+    if (!template || visitedTemplates.has(template)) {
+      return;
+    }
+
+    visitedTemplates.add(template);
+    const contentStart = template.getStart(sourceFile) + 1;
+    const contentEnd = template.getEnd() - 1;
+    const content = sourceFile.text.slice(contentStart, contentEnd);
+    let cursor = 0;
+
+    while (cursor < content.length) {
+      const relativeStart = content.indexOf(open, cursor);
+
+      if (relativeStart < 0) {
+        break;
+      }
+
+      const closeStart = content.indexOf(close, relativeStart + open.length);
+      const relativeEnd = closeStart < 0 ? content.length : closeStart + close.length;
+
+      ranges.push({
+        end: contentStart + relativeEnd,
+        start: contentStart + relativeStart,
+      });
+      cursor = relativeEnd;
+    }
+  };
+  const visit = (node: ts.Node) => {
+    if (
+      tsModule.isCallExpression(node) &&
+      tsModule.isIdentifier(node.expression)
+    ) {
+      const name = node.expression.text;
+
+      if (defineHtmlNames.has(name)) {
+        const template = node.arguments[0];
+        collectTemplate(
+          template && tsModule.isTemplateLiteral(template) ? template : null,
+          "<!--",
+          "-->",
+        );
+      } else if (defineStyleNames.has(name)) {
+        const template = node.arguments[0];
+        collectTemplate(
+          template && tsModule.isTemplateLiteral(template) ? template : null,
+          "/*",
+          "*/",
+        );
+      } else if (defineFragmentNames.has(name)) {
+        collectTemplate(readDefineFragmentTemplate(tsModule, node), "<!--", "-->");
+      }
+    } else if (
+      tsModule.isTaggedTemplateExpression(node) &&
+      tsModule.isIdentifier(node.tag) &&
+      fragmentNames.has(node.tag.text)
+    ) {
+      collectTemplate(node.template, "<!--", "-->");
+    }
+
+    tsModule.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return ranges.sort((left, right) => left.start - right.start);
+};
+
+const filterSemanticClassificationSpans = (
+  spans: number[],
+  commentRanges: SourceRange[],
+): number[] => {
+  const filtered: number[] = [];
+  let rangeIndex = 0;
+
+  for (let index = 0; index + 2 < spans.length; index += 3) {
+    const start = spans[index] ?? 0;
+    const length = spans[index + 1] ?? 0;
+    const end = start + length;
+
+    while (
+      rangeIndex < commentRanges.length &&
+      (commentRanges[rangeIndex]?.end ?? 0) <= start
+    ) {
+      rangeIndex += 1;
+    }
+
+    const range = commentRanges[rangeIndex];
+
+    if (range && start < range.end && end > range.start) {
+      continue;
+    }
+
+    filtered.push(start, length, spans[index + 2] ?? 0);
+  }
+
+  return filtered;
 };
 
 const readCachedConsumedFragmentNames = (
@@ -209,7 +381,7 @@ const collectConsumedDefineFragmentNames = (
 const collectElfuiImportNames = (
   tsModule: typeof ts,
   sourceFile: ts.SourceFile,
-  importedName: "defineFragment" | "defineHtml",
+  importedName: "defineFragment" | "defineHtml" | "defineStyle" | "fragment",
 ): Set<string> => {
   const names = new Set<string>();
 

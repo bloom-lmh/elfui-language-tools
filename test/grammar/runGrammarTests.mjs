@@ -97,6 +97,7 @@ const tokenize = (source) => {
 };
 
 const findToken = (tokens, text) => tokens.find((token) => token.text.includes(text));
+const findTokens = (tokens, text) => tokens.filter((token) => token.text.includes(text));
 const expectScope = (token, scope, message) => {
   if (!token || !token.scopes.some((item) => item.includes(scope))) {
     throw new Error(`${message}: expected ${scope}, got ${token?.scopes?.join(", ") ?? "none"}`);
@@ -230,15 +231,35 @@ const cases = [
     "keeps HTML comments out of template expression highlighting",
     () => {
       const tokens = tokenize(
-        "defineHtml(`<!-- <CommentedButton v-if=\"hidden\">${hidden}</CommentedButton> -->`);"
+        [
+          "defineHtml(`",
+          "<!--",
+          "  <CommentedButton v-if=\"hidden\">${hidden} {{ hidden }}</CommentedButton>",
+          "-->",
+          "`);"
+        ].join("\n")
       );
       const tag = findToken(tokens, "CommentedButton");
-      const expression = findToken(tokens, "hidden");
+      const expressions = findTokens(tokens, "hidden");
 
       expectScope(tag, "comment.block.html", "commented tag");
-      expectScope(expression, "comment.block.html", "commented expression");
       expectNoScope(tag, "entity.name.tag.component.elfui", "commented component");
-      expectNoScope(expression, "meta.embedded.expression.elfui", "commented expression");
+      if (expressions.length === 0) {
+        throw new Error("commented expressions: expected at least one matching token");
+      }
+      expressions.forEach((expression, index) => {
+        expectScope(expression, "comment.block.html", `commented expression ${index + 1}`);
+        expectNoScope(
+          expression,
+          "meta.embedded.expression.elfui",
+          `commented expression ${index + 1}`
+        );
+        expectNoScope(
+          expression,
+          "meta.template.expression.ts",
+          `commented template interpolation ${index + 1}`
+        );
+      });
     }
   ],
   [

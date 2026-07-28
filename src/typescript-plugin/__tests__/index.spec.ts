@@ -126,6 +126,44 @@ describe("ElfUI TypeScript server plugin", () => {
     expect(messages).toContain("Cannot find name 'liveMissing'.");
   });
 
+  it("removes native TS semantic highlighting only inside ElfUI comments", () => {
+    const source = `
+      declare const defineHtml: (value: unknown) => unknown;
+      declare const defineStyle: (value: unknown) => unknown;
+      declare const fragment: (parts: TemplateStringsArray, ...values: unknown[]) => string;
+      const commentedTemplateValue = "commented";
+      const liveTemplateValue = "live";
+      const commentedStyleValue = "red";
+      const ordinaryTemplateValue = "ordinary";
+
+      export const Home = defineHtml(\`
+        <!-- <button>\${commentedTemplateValue}</button> -->
+        <button>\${liveTemplateValue}</button>
+        \${fragment\`<!-- <span>\${commentedTemplateValue}</span> -->\`}
+      \`);
+      defineStyle(\`/* color: \${commentedStyleValue}; */\`);
+      const ordinaryTemplate = \`<!-- \${ordinaryTemplateValue} -->\`;
+    `;
+    const classifications = readPluginSemanticClassifications(source);
+    const classifiedStarts = readClassificationStarts(classifications);
+    const commentedTemplateStarts = readAllTextStarts(source, "commentedTemplateValue");
+    const liveTemplateStarts = readAllTextStarts(source, "liveTemplateValue");
+    const commentedStyleStarts = readAllTextStarts(source, "commentedStyleValue");
+    const ordinaryTemplateStarts = readAllTextStarts(source, "ordinaryTemplateValue");
+
+    expect(commentedTemplateStarts).toHaveLength(3);
+    expect(commentedStyleStarts).toHaveLength(2);
+    expect(classifiedStarts.has(commentedTemplateStarts[0]!)).toBe(true);
+    expect(classifiedStarts.has(commentedTemplateStarts[1]!)).toBe(false);
+    expect(classifiedStarts.has(commentedTemplateStarts[2]!)).toBe(false);
+    expect(classifiedStarts.has(liveTemplateStarts[0]!)).toBe(true);
+    expect(classifiedStarts.has(liveTemplateStarts[1]!)).toBe(true);
+    expect(classifiedStarts.has(commentedStyleStarts[0]!)).toBe(true);
+    expect(classifiedStarts.has(commentedStyleStarts[1]!)).toBe(false);
+    expect(classifiedStarts.has(ordinaryTemplateStarts[0]!)).toBe(true);
+    expect(classifiedStarts.has(ordinaryTemplateStarts[1]!)).toBe(true);
+  });
+
   it("does not filter v-for locals after the owner tag is closed", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;
@@ -314,6 +352,49 @@ const readPluginDiagnostics = (
   } finally {
     languageService.dispose();
   }
+};
+
+const readPluginSemanticClassifications = (source: string): ts.Classifications => {
+  const languageService = createLanguageService(source);
+  const plugin = init({ typescript: ts }).create({ languageService });
+
+  try {
+    return plugin.getEncodedSemanticClassifications(
+      fileName,
+      { length: source.length, start: 0 },
+      ts.SemanticClassificationFormat.TwentyTwenty,
+    );
+  } finally {
+    languageService.dispose();
+  }
+};
+
+const readClassificationStarts = (classifications: ts.Classifications): Set<number> => {
+  const starts = new Set<number>();
+
+  for (let index = 0; index + 2 < classifications.spans.length; index += 3) {
+    starts.add(classifications.spans[index]!);
+  }
+
+  return starts;
+};
+
+const readAllTextStarts = (source: string, text: string): number[] => {
+  const starts: number[] = [];
+  let cursor = 0;
+
+  while (cursor < source.length) {
+    const start = source.indexOf(text, cursor);
+
+    if (start < 0) {
+      break;
+    }
+
+    starts.push(start);
+    cursor = start + text.length;
+  }
+
+  return starts;
 };
 
 const createLanguageService = (

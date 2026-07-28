@@ -42,7 +42,7 @@ Marketplace, the same pane can install it by name instead.
 - Contextual DOM event typing for `$event` in event bindings, including `MouseEvent`, `KeyboardEvent`, and `InputEvent` member completions.
 - Event and binding-name completions preserve existing expression or quoted values when renaming attributes.
 - Quoted dynamic bindings such as `:key="item.id"`, `v-if="visible"`, and `@click="select(item)"` are highlighted as TypeScript expressions, while ordinary HTML values such as `class="row"` remain strings.
-- HTML `<!-- ... -->` and CSS `/* ... */` comments are silent regions: embedded expressions are not highlighted, completed, or diagnosed inside them.
+- HTML `<!-- ... -->` and CSS `/* ... */` comments are silent regions: embedded expressions are not highlighted by TextMate or TypeScript semantic coloring, completed, or diagnosed inside them.
 - A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `defineHtml(\`...\`)` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
 - HTML/CSS syntax highlighting inside `defineHtml(\`...\`)` and `defineStyle(\`...\`)` through embedded TextMate scopes.
 - HTML/CSS document and range formatting inside `defineHtml(\`...\`)` and `defineStyle(\`...\`)`.

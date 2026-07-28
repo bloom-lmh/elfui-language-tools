@@ -804,6 +804,64 @@ describe("ElfUI language service", () => {
     expect(labels).toContain("label");
   });
 
+  it("types and highlights tuple-style v-for value and index locals", () => {
+    const source = [
+      'import { defineHtml } from "@elfui/core";',
+      "",
+      "interface SummaryCell {",
+      "  key: string;",
+      "  label: string;",
+      "  total: number;",
+      "}",
+      "",
+      "const summaryCells = (): SummaryCell[] => [];",
+      "const summaryCellClass = (index: number) => ({ active: index === 0 });",
+      "const summaryCellStyle = (index: number) => ({ order: index });",
+      "",
+      "export const Summary = defineHtml(`",
+      '  <td v-for="(value, index) in summaryCells()" :key="index" :class="summaryCellClass(index)"',
+      '    :style="summaryCellStyle(index)">',
+      '    <span class="summary-text">{{ value.label }}</span>',
+      "  </td>",
+      "`);",
+      ""
+    ].join("\n");
+    const valueCompletionSource = source.replace("value.label", "value.");
+    const valueCompletionDocument = createDocument(valueCompletionSource);
+    const valueLabels = createElfCompletionList(
+      valueCompletionDocument,
+      positionAfter(valueCompletionDocument, valueCompletionSource, "{{ value.")
+    ).items.map((item) => item.label);
+    const indexCompletionSource = source.replace(':key="index"', ':key="index."');
+    const indexCompletionDocument = createDocument(indexCompletionSource);
+    const indexLabels = createElfCompletionList(
+      indexCompletionDocument,
+      positionAfter(indexCompletionDocument, indexCompletionSource, ':key="index.')
+    ).items.map((item) => item.label);
+    const document = createDocument(source);
+    const hoverText = readHoverText(
+      createElfHover(document, positionAfter(document, source, ':key="index'))
+    );
+    const semanticTokens = readSemanticTokenEntries(
+      document,
+      createElfSemanticTokens(document)
+    );
+    const declarations = semanticTokens.filter((token) =>
+      token.modifiers.includes("declaration")
+    );
+
+    expect(valueLabels).toEqual(expect.arrayContaining(["key", "label", "total"]));
+    expect(indexLabels).toContain("toFixed");
+    expect(hoverText).toContain("index");
+    expect(hoverText).toContain("number");
+    expect(
+      declarations.some((token) => token.text === "value" && token.type === "variable")
+    ).toBe(true);
+    expect(
+      declarations.some((token) => token.text === "index" && token.type === "variable")
+    ).toBe(true);
+  });
+
   it("provides typed v-for member completions inside quoted bindings", () => {
     const source = `
       import { defineHtml, useRef } from "@elfui/core";

@@ -301,7 +301,7 @@
           "include": "#quotedDirectiveExpression"
         },
         {
-          "match": "(?:[:@][\\w:-]+(?:\\.[\\w-]+)*|v-(?:bind(?::[\\w-]+)?|if|else-if|show|model|text|html|memo))(?=\\s*=)",
+          "match": "(?:[:@][\\w:-]+(?:\\.[\\w-]+)*|v-(?:bind(?::[\\w-]+)?|if|else-if|for|show|model|text|html|memo))(?=\\s*=)",
           "name": "entity.other.attribute-name.directive.elfui"
         },
         {
@@ -383,7 +383,7 @@
       }
     },
     "quotedDirectiveExpression": {
-      "begin": "((?:[:@][\\w:-]+(?:\\.[\\w-]+)*|v-(?:bind(?::[\\w-]+)?|if|else-if|show|model|text|html|memo)))(\\s*=\\s*)([\\\"'])",
+      "begin": "((?:[:@][\\w:-]+(?:\\.[\\w-]+)*|v-(?:bind(?::[\\w-]+)?|if|else-if|for|show|model|text|html|memo)))(\\s*=\\s*)([\\\"'])",
       "beginCaptures": {
         "1": {
           "name": "entity.other.attribute-name.directive.elfui"

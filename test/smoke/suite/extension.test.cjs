@@ -528,6 +528,75 @@ suite("ElfUI Language Features Smoke", function () {
     assert(hasCompletionLabel(items, "label"), "Expected typed prop completion.");
   });
 
+  test("types tuple-style v-for value and index locals", async () => {
+    const declarationLines = [
+      'import { defineHtml } from "@elfui/core";',
+      "",
+      "interface SummaryCell {",
+      "  key: string;",
+      "  label: string;",
+      "  total: number;",
+      "}",
+      "",
+      "const summaryCells = (): SummaryCell[] => [];",
+      "const summaryCellClass = (index: number) => ({ active: index === 0 });",
+      ""
+    ];
+    const { document: valueDocument, position: valuePosition } = await openFixtureWithCursor(
+      [
+        ...declarationLines,
+        "export const Summary = defineHtml(`",
+        '  <td v-for="(value, index) in summaryCells()" :key="index" :class="summaryCellClass(index)">',
+        `    <span>{{ value.${CURSOR} }}</span>`,
+        "  </td>",
+        "`);",
+        ""
+      ].join("\n")
+    );
+    const valueItems = await waitForCompletionLabels(
+      valueDocument,
+      valuePosition,
+      ["key", "label", "total"]
+    );
+
+    assert(hasCompletionLabel(valueItems, "label"), "Expected SummaryCell member completion.");
+
+    const { document: indexDocument, position: indexPosition } = await openFixtureWithCursor(
+      [
+        ...declarationLines,
+        "export const Summary = defineHtml(`",
+        `  <td v-for="(value, index) in summaryCells()" :key="index.${CURSOR}" :class="summaryCellClass(index)">`,
+        "    <span>{{ value.label }}</span>",
+        "  </td>",
+        "`);",
+        ""
+      ].join("\n")
+    );
+    const indexItems = await waitForCompletionLabels(indexDocument, indexPosition, ["toFixed"]);
+
+    assert(hasCompletionLabel(indexItems, "toFixed"), "Expected array index to be typed as number.");
+
+    const hoverDocument = await openFixture(
+      [
+        ...declarationLines,
+        "export const Summary = defineHtml(`",
+        '  <td v-for="(value, index) in summaryCells()" :key="index" :class="summaryCellClass(index)">',
+        "    <span>{{ value.label }}</span>",
+        "  </td>",
+        "`);",
+        ""
+      ].join("\n")
+    );
+    const hoverOffset = hoverDocument.getText().indexOf(':key="index') + ':key="'.length + 2;
+    const hoverText = await waitForHoverText(
+      hoverDocument,
+      hoverDocument.positionAt(hoverOffset),
+      "number"
+    );
+
+    assert(hoverText.includes("index"), "Expected index hover details.");
+  });
+
   test("provides named Fragment props and same-file definition in the real host", async () => {
     const { document, position } = await openFixtureWithCursor(
       [

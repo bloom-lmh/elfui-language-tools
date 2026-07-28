@@ -179,9 +179,32 @@ const cases = [
     "highlights directive expressions and interpolation",
     () => {
       const tokens = tokenize("defineHtml(`<button v-if=\"visible\">${label}</button>`);");
+      const vForTokens = tokenize(
+        'defineHtml(`<td v-for="(value, index) in summaryCells()" :key="index">{{ value }}</td>`);'
+      );
       expectScope(findToken(tokens, "v-if"), "entity.other.attribute-name.directive.elfui", "quoted directive");
       expectScope(findToken(tokens, "visible"), "meta.embedded.expression.elfui", "directive value");
       expectScope(findToken(tokens, "${"), "punctuation.definition.template-expression.begin", "interpolation");
+      expectScope(
+        findToken(vForTokens, "v-for"),
+        "entity.other.attribute-name.directive.elfui",
+        "v-for directive"
+      );
+      expectScope(
+        findToken(vForTokens, "value"),
+        "meta.embedded.expression.elfui",
+        "v-for value local"
+      );
+      expectScope(
+        findToken(vForTokens, "index"),
+        "meta.embedded.expression.elfui",
+        "v-for index local"
+      );
+      expectScope(
+        findToken(vForTokens, "summaryCells"),
+        "meta.embedded.expression.elfui",
+        "v-for source"
+      );
     }
   ],
   [

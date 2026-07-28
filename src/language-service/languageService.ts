@@ -1849,7 +1849,59 @@ const createTemplateSemanticTokens = (
   };
 
   htmlDocument.roots.forEach((node) => visit(node));
+  tokens.push(...createVForDeclarationSemanticTokens(region));
   tokens.push(...createTemplateExpressionSemanticTokens(component, region));
+
+  return tokens;
+};
+
+const createVForDeclarationSemanticTokens = (
+  region: EmbeddedRegion
+): ElfSemanticToken[] => {
+  const visibleTemplate = maskEmbeddedComments(region.content);
+  const pattern = /\sv-for\s*=\s*(["'])([\s\S]*?)\1/g;
+  const tokens: ElfSemanticToken[] = [];
+
+  for (const match of visibleTemplate.matchAll(pattern)) {
+    if (match.index === undefined || !match[2]) {
+      continue;
+    }
+
+    const source = readForSourceExpression(match[2]);
+
+    if (!source) {
+      continue;
+    }
+
+    const rawLocalPart = match[2].slice(0, source.inIndex);
+    const leadingWhitespace = rawLocalPart.search(/\S/);
+    const localPartStart = leadingWhitespace < 0 ? 0 : leadingWhitespace;
+    const localPart = rawLocalPart.slice(localPartStart).trimEnd();
+    const localNames = new Set(readTemplateLocalDeclarations(localPart));
+    const rawExpressionStart = match[0].lastIndexOf(match[2]);
+
+    if (localNames.size === 0 || rawExpressionStart < 0) {
+      continue;
+    }
+
+    for (const identifier of localPart.matchAll(/(?<![\w$])[A-Za-z_$][\w$]*/g)) {
+      if (identifier.index === undefined || !localNames.has(identifier[0])) {
+        continue;
+      }
+
+      tokens.push({
+        length: identifier[0].length,
+        modifiers: ["declaration"],
+        start:
+          region.contentStart +
+          match.index +
+          rawExpressionStart +
+          localPartStart +
+          identifier.index,
+        type: "variable"
+      });
+    }
+  }
 
   return tokens;
 };
@@ -3950,12 +4002,14 @@ const createForLocalDeclarations = (localPart: string, sourceName: string): stri
 
   const itemTypeName = `${sourceName}Item`;
   const itemValueName = `${sourceName}Value`;
+  const keyTypeName = `${sourceName}Key`;
 
   return [
     `type ${itemTypeName}<T> = T extends readonly (infer Item)[] ? Item : T extends Iterable<infer Item> ? Item : T extends Record<PropertyKey, infer Item> ? Item : unknown;`,
+    `type ${keyTypeName}<T> = T extends readonly unknown[] ? number : T extends Iterable<unknown> ? number : T extends object ? keyof T : number;`,
     `const ${itemValueName} = null as unknown as ${itemTypeName}<typeof ${sourceName}>;`,
     ...createForValueLocalDeclarations(value.name, itemValueName),
-    ...createForSecondaryLocalDeclarations(key, index)
+    ...createForSecondaryLocalDeclarations(key, index, `${keyTypeName}<typeof ${sourceName}>`)
   ];
 };
 
@@ -4009,9 +4063,12 @@ const createObjectBindingElementAccess = (
 
 const createForSecondaryLocalDeclarations = (
   key: ts.ParameterDeclaration | undefined,
-  index: ts.ParameterDeclaration | undefined
+  index: ts.ParameterDeclaration | undefined,
+  keyType: string
 ): string[] => [
-  ...(key && ts.isIdentifier(key.name) ? [`const ${key.name.text} = "" as string | number;`] : []),
+  ...(key && ts.isIdentifier(key.name)
+    ? [`const ${key.name.text} = null as unknown as ${keyType};`]
+    : []),
   ...(index && ts.isIdentifier(index.name) ? [`const ${index.name.text} = 0;`] : [])
 ];
 
@@ -6423,6 +6480,17 @@ const createTemplateMetadataHover = (
     };
   }
 
+  const templateLocalHover = createTemplateLocalTypeHover(
+    document,
+    context,
+    word.value,
+    sourceRange
+  );
+
+  if (templateLocalHover) {
+    return templateLocalHover;
+  }
+
   if (context.component.setupReturns.includes(word.value)) {
     return {
       contents: {
@@ -6434,6 +6502,59 @@ const createTemplateMetadataHover = (
   }
 
   return null;
+};
+
+const createTemplateLocalTypeHover = (
+  document: TextDocument,
+  context: EmbeddedDocumentContext,
+  name: string,
+  range: Range
+): Hover | null => {
+  if (!collectTemplateLocalNames(context.virtualDocument.getText()).has(name)) {
+    return null;
+  }
+
+  const templateOffset = context.virtualDocument.offsetAt(context.virtualPosition);
+  const localDeclarations = createTemplateForLocalDeclarations(
+    context.virtualDocument.getText(),
+    templateOffset,
+    context,
+    []
+  );
+
+  const declarationPattern = new RegExp(`\\b${escapeRegExp(name)}\\b`);
+
+  if (!localDeclarations.some((declaration) => declarationPattern.test(declaration))) {
+    return null;
+  }
+
+  const virtual = createTypeScriptExpressionSource(
+    document.getText(),
+    name,
+    localDeclarations
+  );
+  const quickInfo = withTypeScriptLanguageService(document, virtual, (service) =>
+    service.getQuickInfoAtPosition(
+      virtual.fileName,
+      Math.max(0, virtual.offset - Math.max(1, Math.floor(name.length / 2)))
+    )
+  );
+
+  if (!quickInfo) {
+    return null;
+  }
+
+  const display = ts.displayPartsToString(quickInfo.displayParts);
+  const documentation = ts.displayPartsToString(quickInfo.documentation);
+  const value = ["```ts", display, "```", documentation].filter(Boolean).join("\n\n");
+
+  return {
+    contents: {
+      kind: "markdown",
+      value
+    },
+    range
+  };
 };
 
 const createProjectMetadataHover = (

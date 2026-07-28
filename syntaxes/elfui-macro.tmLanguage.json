@@ -1,25 +1,13 @@
 {
-  "name": "ElfUI Chain Embedded Languages",
-  "scopeName": "elfui.chain.injection",
+  "name": "ElfUI Macro Embedded Languages",
+  "scopeName": "elfui.macro.injection",
   "injectionSelector": "L:source.ts -comment -string, L:source.js -comment -string, L:text.html.basic, L:text.html.derivative",
   "patterns": [
-    {
-      "include": "#templateCall"
-    },
-    {
-      "include": "#templateCallMultiLine"
-    },
     {
       "include": "#defineHtmlCall"
     },
     {
       "include": "#defineHtmlCallMultiLine"
-    },
-    {
-      "include": "#quotedDirectiveExpression"
-    },
-    {
-      "include": "#interpolation"
     },
     {
       "include": "#styleCall"
@@ -28,84 +16,13 @@
       "include": "#styleCallMultiLine"
     },
     {
-      "include": "#themeCall"
+      "include": "#quotedDirectiveExpression"
     },
     {
-      "include": "#themeCallMultiLine"
+      "include": "#interpolation"
     }
   ],
   "repository": {
-    "templateCall": {
-      "begin": "(?:(?<=\\.)|\\b)(template)\\s*(\\()\\s*(`)",
-      "beginCaptures": {
-        "1": {
-          "name": "support.function.elfui.template entity.name.function.elfui"
-        },
-        "2": {
-          "name": "punctuation.section.parens.begin.elfui meta.brace.round.ts"
-        },
-        "3": {
-          "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
-        }
-      },
-      "end": "(`)\\s*(\\))?",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.definition.string.template.end.elfui string.template.ts"
-        },
-        "2": {
-          "name": "punctuation.section.parens.end.elfui meta.brace.round.ts"
-        }
-      },
-      "contentName": "meta.embedded.block.html text.html.derivative",
-      "patterns": [
-        {
-          "include": "#templateContent"
-        }
-      ]
-    },
-    "templateCallMultiLine": {
-      "begin": "(?:(?<=\\.)|\\b)(template)\\s*(\\()(?=\\s*$)",
-      "beginCaptures": {
-        "1": {
-          "name": "support.function.elfui.template entity.name.function.elfui"
-        },
-        "2": {
-          "name": "punctuation.section.parens.begin.elfui meta.brace.round.ts"
-        }
-      },
-      "end": "\\)",
-      "endCaptures": {
-        "0": {
-          "name": "punctuation.section.parens.end.elfui meta.brace.round.ts"
-        }
-      },
-      "patterns": [
-        {
-          "begin": "`",
-          "beginCaptures": {
-            "0": {
-              "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
-            }
-          },
-          "end": "`",
-          "endCaptures": {
-            "0": {
-              "name": "punctuation.definition.string.template.end.elfui string.template.ts"
-            }
-          },
-          "contentName": "meta.embedded.block.html text.html.derivative",
-          "patterns": [
-            {
-              "include": "#templateContent"
-            }
-          ]
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    },
     "defineHtmlCall": {
       "begin": "\\b(defineHtml)\\s*(?:<[^`]*?>\\s*)?(\\()\\s*(`)",
       "beginCaptures": {
@@ -178,7 +95,7 @@
       ]
     },
     "styleCall": {
-      "begin": "(?:(?<=\\.)|\\b)(style|globalStyle|defineStyle)\\s*(\\()\\s*(`)",
+      "begin": "\\b(defineStyle)\\s*(\\()\\s*(`)",
       "beginCaptures": {
         "1": {
           "name": "support.function.elfui.style entity.name.function.elfui"
@@ -210,84 +127,7 @@
       ]
     },
     "styleCallMultiLine": {
-      "begin": "(?:(?<=\\.)|\\b)(style|globalStyle|defineStyle)\\s*(\\()(?=\\s*$)",
-      "beginCaptures": {
-        "1": {
-          "name": "support.function.elfui.style entity.name.function.elfui"
-        },
-        "2": {
-          "name": "punctuation.section.parens.begin.elfui meta.brace.round.ts"
-        }
-      },
-      "end": "\\)",
-      "endCaptures": {
-        "0": {
-          "name": "punctuation.section.parens.end.elfui meta.brace.round.ts"
-        }
-      },
-      "patterns": [
-        {
-          "begin": "`",
-          "beginCaptures": {
-            "0": {
-              "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
-            }
-          },
-          "end": "`",
-          "endCaptures": {
-            "0": {
-              "name": "punctuation.definition.string.template.end.elfui string.template.ts"
-            }
-          },
-          "contentName": "meta.embedded.block.css source.css",
-          "patterns": [
-            {
-              "include": "#interpolation"
-            },
-            {
-              "include": "source.css"
-            }
-          ]
-        },
-        {
-          "include": "source.ts"
-        }
-      ]
-    },
-    "themeCall": {
-      "begin": "(?:(?<=\\.)|\\b)(theme)\\s*(\\()(?:[^`]*,\\s*)?(`)",
-      "beginCaptures": {
-        "1": {
-          "name": "support.function.elfui.style entity.name.function.elfui"
-        },
-        "2": {
-          "name": "punctuation.section.parens.begin.elfui meta.brace.round.ts"
-        },
-        "3": {
-          "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
-        }
-      },
-      "end": "(`)\\s*(\\))?",
-      "endCaptures": {
-        "1": {
-          "name": "punctuation.definition.string.template.end.elfui string.template.ts"
-        },
-        "2": {
-          "name": "punctuation.section.parens.end.elfui meta.brace.round.ts"
-        }
-      },
-      "contentName": "meta.embedded.block.css source.css",
-      "patterns": [
-        {
-          "include": "#interpolation"
-        },
-        {
-          "include": "source.css"
-        }
-      ]
-    },
-    "themeCallMultiLine": {
-      "begin": "(?:(?<=\\.)|\\b)(theme)\\s*(\\()(?=\\s*$)",
+      "begin": "\\b(defineStyle)\\s*(\\()(?=\\s*$)",
       "beginCaptures": {
         "1": {
           "name": "support.function.elfui.style entity.name.function.elfui"

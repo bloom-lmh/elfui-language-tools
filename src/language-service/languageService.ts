@@ -1186,7 +1186,7 @@ export const createElfDocumentSymbols = (document: TextDocument): DocumentSymbol
 
     return {
       children,
-      detail: component.macro ? "ElfUI macro component" : "ElfUI chain component",
+      detail: "ElfUI macro component",
       kind: SymbolKind.Class,
       name: component.localName ?? component.name ?? component.id ?? `component #${index + 1}`,
       range,
@@ -3491,7 +3491,7 @@ const mapTypeScriptCompletionKind = (kind: string): CompletionItemKind => {
 };
 
 const elfuiTemplateTypes = `
-declare module "elfui" {
+declare module "@elfui/core" {
   export interface ElfTemplateRef<T> {
     value: T;
     peek(): T;
@@ -3512,10 +3512,6 @@ declare module "elfui" {
   };
   export function onMounted(callback: () => void): void;
   export function onUnmounted(callback: () => void): void;
-}
-
-declare module "@elfui/core" {
-  export * from "elfui";
 }
 `;
 
@@ -4652,13 +4648,11 @@ const createProjectComponentDetail = (component: ElfProjectComponent): string =>
 
 const createComponentAutoImportEdits = (
   document: TextDocument,
-  owner: ComponentMeta,
+  _owner: ComponentMeta,
   component: ElfProjectComponent
 ): TextEdit[] => {
   const importEdits = createComponentImportEdits(document, component);
-  const registrationEdits = owner.macro
-    ? createMacroComponentRegistrationEdits(document, component.localName)
-    : createChainComponentRegistrationEdits(document, owner, component.localName);
+  const registrationEdits = createMacroComponentRegistrationEdits(document, component.localName);
 
   return [...importEdits, ...registrationEdits];
 };
@@ -4672,9 +4666,7 @@ const createTemplateVariableDeclarationEdits = (
     return [];
   }
 
-  return component.macro
-    ? createMacroVariableDeclarationEdits(document, name)
-    : createChainSetupDeclarationEdits(document, component, name);
+  return createMacroVariableDeclarationEdits(document, name);
 };
 
 const createTemplateStateDeclarationEdits = (
@@ -4686,9 +4678,7 @@ const createTemplateStateDeclarationEdits = (
     return [];
   }
 
-  return component.macro
-    ? createMacroStateDeclarationEdits(document, name)
-    : createChainStateDeclarationEdits(document, component, name);
+  return createMacroStateDeclarationEdits(document, name);
 };
 
 const createTemplateHandlerDeclarationEdits = (
@@ -4700,9 +4690,7 @@ const createTemplateHandlerDeclarationEdits = (
     return [];
   }
 
-  return component.macro
-    ? createMacroHandlerDeclarationEdits(document, name)
-    : createChainHandlerDeclarationEdits(document, component, name);
+  return createMacroHandlerDeclarationEdits(document, name);
 };
 
 const createPropDeclarationEdits = (
@@ -4714,9 +4702,7 @@ const createPropDeclarationEdits = (
     return [];
   }
 
-  return component.macro
-    ? createMacroDefinePropsEdits(document, name)
-    : createChainPropDeclarationEdits(document, component, name);
+  return createMacroDefinePropsEdits(document, name);
 };
 
 const createEmitDeclarationEdits = (
@@ -4728,9 +4714,7 @@ const createEmitDeclarationEdits = (
     return [];
   }
 
-  return component.macro
-    ? createMacroDefineEmitsEdits(document, name)
-    : createChainEmitDeclarationEdits(document, component, name);
+  return createMacroDefineEmitsEdits(document, name);
 };
 
 const createSlotDeclarationEdits = (
@@ -4742,9 +4726,7 @@ const createSlotDeclarationEdits = (
     return [];
   }
 
-  return component.macro
-    ? createMacroDefineSlotsEdits(document, name)
-    : createChainSlotDeclarationEdits(document, component, name);
+  return createMacroDefineSlotsEdits(document, name);
 };
 
 const createMacroVariableDeclarationEdits = (document: TextDocument, name: string): TextEdit[] => {
@@ -4781,27 +4763,6 @@ const createMacroHandlerDeclarationEdits = (document: TextDocument, name: string
   ];
 };
 
-const createChainSetupDeclarationEdits = (
-  document: TextDocument,
-  component: ComponentMeta,
-  name: string
-): TextEdit[] => createChainSetupValueDeclarationEdits(document, component, name, "undefined");
-
-const createChainStateDeclarationEdits = (
-  document: TextDocument,
-  component: ComponentMeta,
-  name: string
-): TextEdit[] => [
-  ...createElfuiNamedImportEdits(document, "useRef"),
-  ...createChainSetupValueDeclarationEdits(document, component, name, "useRef()")
-];
-
-const createChainHandlerDeclarationEdits = (
-  document: TextDocument,
-  component: ComponentMeta,
-  name: string
-): TextEdit[] => createChainSetupValueDeclarationEdits(document, component, name, "(e: Event) => {}");
-
 const createAllMissingTemplateDeclarationEdits = (
   document: TextDocument,
   component: ComponentMeta,
@@ -4812,9 +4773,7 @@ const createAllMissingTemplateDeclarationEdits = (
     return [];
   }
 
-  return component.macro
-    ? createMacroMissingTemplateDeclarationEdits(document, stateNames, handlerNames)
-    : createChainMissingTemplateDeclarationEdits(document, component, stateNames, handlerNames);
+  return createMacroMissingTemplateDeclarationEdits(document, stateNames, handlerNames);
 };
 
 const createMacroMissingTemplateDeclarationEdits = (
@@ -4833,37 +4792,6 @@ const createMacroMissingTemplateDeclarationEdits = (
     insertOffset,
     stateNames.length > 0 ? createElfuiNamedImportEdits(document, "useRef") : [],
     declarationText
-  );
-};
-
-const createChainMissingTemplateDeclarationEdits = (
-  document: TextDocument,
-  component: ComponentMeta,
-  stateNames: string[],
-  handlerNames: string[]
-): TextEdit[] => {
-  const source = document.getText();
-  const properties = [
-    ...stateNames.map((name) => createObjectPropertyText(name, "useRef()")),
-    ...handlerNames.map((name) => createObjectPropertyText(name, "(e: Event) => {}"))
-  ].join(", ");
-  const setupObject = findChainSetupReturnObjectRange(source, component.id);
-
-  if (setupObject) {
-    return [
-      ...(stateNames.length > 0 ? createElfuiNamedImportEdits(document, "useRef") : []),
-      createObjectPropertyAppendEdit(document, setupObject, properties)
-    ];
-  }
-
-  const insertOffset =
-    findChainComponentDeclarationEnd(source, component.id) ?? findImportInsertionOffset(source);
-
-  return mergeInsertionEdits(
-    document,
-    insertOffset,
-    stateNames.length > 0 ? createElfuiNamedImportEdits(document, "useRef") : [],
-    `\n${component.id}.setup(() => ({ ${properties} }));`
   );
 };
 
@@ -4892,125 +4820,6 @@ const mergeInsertionEdits = (
     {
       ...sameOffset,
       newText: `${sameOffset.newText}${declarationText}`
-    }
-  ];
-};
-
-const createChainSetupValueDeclarationEdits = (
-  document: TextDocument,
-  component: ComponentMeta,
-  name: string,
-  valueText: string
-): TextEdit[] => {
-  const source = document.getText();
-  const setupObject = findChainSetupReturnObjectRange(source, component.id);
-
-  if (setupObject) {
-    return [
-      createObjectPropertyAppendEdit(
-        document,
-        setupObject,
-        createObjectPropertyText(name, valueText)
-      )
-    ];
-  }
-
-  const insertOffset =
-    findChainComponentDeclarationEnd(source, component.id) ?? findImportInsertionOffset(source);
-
-  return [
-    {
-      newText: `\n${component.id}.setup(() => ({ ${createObjectPropertyText(name, valueText)} }));`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
-    }
-  ];
-};
-
-const createChainPropDeclarationEdits = (
-  document: TextDocument,
-  component: ComponentMeta,
-  name: string
-): TextEdit[] => {
-  const source = document.getText();
-  const propsObject = findCallObjectArgumentRange(source, `${component.id}.props`);
-
-  if (propsObject) {
-    return [
-      createObjectPropertyAppendEdit(
-        document,
-        propsObject,
-        createObjectPropertyText(name, "undefined")
-      )
-    ];
-  }
-
-  const insertOffset =
-    findChainComponentDeclarationEnd(source, component.id) ?? findImportInsertionOffset(source);
-
-  return [
-    {
-      newText: `\n${component.id}.props({ ${createObjectPropertyText(name, "undefined")} });`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
-    }
-  ];
-};
-
-const createChainEmitDeclarationEdits = (
-  document: TextDocument,
-  component: ComponentMeta,
-  name: string
-): TextEdit[] => {
-  const source = document.getText();
-  const emitsArray = findCallArrayArgumentRange(source, `${component.id}.emits`);
-
-  if (emitsArray) {
-    return [createArrayAppendEdit(document, emitsArray, JSON.stringify(name))];
-  }
-
-  const emitsObject = findCallObjectArgumentRange(source, `${component.id}.emits`);
-
-  if (emitsObject) {
-    return [
-      createObjectPropertyAppendEdit(document, emitsObject, createObjectPropertyText(name, "null"))
-    ];
-  }
-
-  const insertOffset =
-    findChainComponentDeclarationEnd(source, component.id) ?? findImportInsertionOffset(source);
-
-  return [
-    {
-      newText: `\n${component.id}.emits([${JSON.stringify(name)}]);`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
-    }
-  ];
-};
-
-const createChainSlotDeclarationEdits = (
-  document: TextDocument,
-  component: ComponentMeta,
-  name: string
-): TextEdit[] => {
-  const source = document.getText();
-  const slotsObject = findCallObjectArgumentRange(source, `${component.id}.slots`);
-
-  if (slotsObject) {
-    return [
-      createObjectPropertyAppendEdit(
-        document,
-        slotsObject,
-        createObjectPropertyText(name, "undefined")
-      )
-    ];
-  }
-
-  const insertOffset =
-    findChainComponentDeclarationEnd(source, component.id) ?? findImportInsertionOffset(source);
-
-  return [
-    {
-      newText: `\n${component.id}.slot(${JSON.stringify(name)});`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
     }
   ];
 };
@@ -5210,7 +5019,7 @@ const createUseComponentsImportEdits = (document: TextDocument): TextEdit[] => {
 const createElfuiNamedImportEdits = (document: TextDocument, importName: string): TextEdit[] => {
   const source = document.getText();
   const sourceFile = createTsSourceFile(source);
-  const moduleSpecifiers = ["@elfui/core", "elfui"];
+  const moduleSpecifiers = ["@elfui/core"];
 
   for (const moduleSpecifier of moduleSpecifiers) {
     for (const statement of sourceFile.statements) {
@@ -5256,29 +5065,6 @@ const createElfuiNamedImportEdits = (document: TextDocument, importName: string)
   return [
     {
       newText: `import { ${importName} } from "@elfui/core";\n`,
-      range: createRangeFromOffsets(document, insertOffset, insertOffset)
-    }
-  ];
-};
-
-const createChainComponentRegistrationEdits = (
-  document: TextDocument,
-  owner: ComponentMeta,
-  localName: string
-): TextEdit[] => {
-  const source = document.getText();
-  const existingUseObject = findCallObjectArgumentRange(source, `${owner.id}.use`);
-
-  if (existingUseObject) {
-    return [createObjectAppendEdit(document, existingUseObject, localName)];
-  }
-
-  const insertOffset =
-    findChainComponentDeclarationEnd(source, owner.id) ?? findImportInsertionOffset(source);
-
-  return [
-    {
-      newText: `\n${owner.id}.use({ ${localName} });`,
       range: createRangeFromOffsets(document, insertOffset, insertOffset)
     }
   ];
@@ -5366,24 +5152,6 @@ const findCallObjectArgumentRange = (
   return objectEnd === null ? null : { end: objectEnd + 1, start: objectStart };
 };
 
-const findCallArrayArgumentRange = (
-  source: string,
-  callName: string
-): { end: number; start: number } | null => {
-  const escaped = escapeRegExp(callName).replace(/\\\./g, "\\s*\\.\\s*");
-  const pattern = new RegExp(`${escaped}\\s*\\(\\s*\\[`, "m");
-  const match = pattern.exec(source);
-
-  if (!match) {
-    return null;
-  }
-
-  const arrayStart = match.index + match[0].lastIndexOf("[");
-  const arrayEnd = findMatchingBracket(source, arrayStart);
-
-  return arrayEnd === null ? null : { end: arrayEnd + 1, start: arrayStart };
-};
-
 const findMatchingBrace = (source: string, openOffset: number): number | null => {
   let depth = 0;
 
@@ -5399,68 +5167,6 @@ const findMatchingBrace = (source: string, openOffset: number): number | null =>
         return offset;
       }
     }
-  }
-
-  return null;
-};
-
-const findMatchingBracket = (source: string, openOffset: number): number | null => {
-  let depth = 0;
-
-  for (let offset = openOffset; offset < source.length; offset += 1) {
-    const char = source[offset];
-
-    if (char === "[") {
-      depth += 1;
-    } else if (char === "]") {
-      depth -= 1;
-
-      if (depth === 0) {
-        return offset;
-      }
-    }
-  }
-
-  return null;
-};
-
-const findChainSetupReturnObjectRange = (
-  source: string,
-  componentId: string
-): { end: number; start: number } | null => {
-  const call = findFirstComponentMethodCall(source, componentId, "setup");
-  const firstArg = call?.node.arguments[0];
-
-  if (!call || !firstArg) {
-    return null;
-  }
-
-  const objectLiteral = readReturnedObjectLiteral(firstArg);
-
-  return objectLiteral ? nodeRange(objectLiteral, call.sourceFile) : null;
-};
-
-const readReturnedObjectLiteral = (node: ts.Node): ts.ObjectLiteralExpression | null => {
-  if (ts.isParenthesizedExpression(node)) {
-    return readReturnedObjectLiteral(node.expression);
-  }
-
-  if (ts.isObjectLiteralExpression(node)) {
-    return node;
-  }
-
-  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
-    if (ts.isBlock(node.body)) {
-      for (const statement of node.body.statements) {
-        if (ts.isReturnStatement(statement) && statement.expression) {
-          return readReturnedObjectLiteral(statement.expression);
-        }
-      }
-
-      return null;
-    }
-
-    return readReturnedObjectLiteral(node.body);
   }
 
   return null;
@@ -5504,50 +5210,10 @@ const readCallExpressionName = (call: ts.CallExpression): string | null => {
   return null;
 };
 
-const findFirstComponentMethodCall = (
-  source: string,
-  componentId: string,
-  methodName: string
-): { node: ts.CallExpression; sourceFile: ts.SourceFile } | null => {
-  const sourceFile = createTsSourceFile(source);
-  let result: ts.CallExpression | null = null;
-  const visit = (node: ts.Node) => {
-    if (result) {
-      return;
-    }
-
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      node.expression.name.text === methodName &&
-      node.expression.expression.getText(sourceFile).replace(/\s/g, "") === componentId
-    ) {
-      result = node;
-      return;
-    }
-
-    ts.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
-
-  return result ? { node: result, sourceFile } : null;
-};
-
 const nodeRange = (node: ts.Node, sourceFile: ts.SourceFile): { end: number; start: number } => ({
   end: node.getEnd(),
   start: node.getStart(sourceFile)
 });
-
-const findChainComponentDeclarationEnd = (source: string, componentId: string): number | null => {
-  const pattern = new RegExp(
-    `\\b(?:const|let|var)\\s+${escapeRegExp(componentId)}\\s*=\\s*[\\s\\S]*?createComponent[\\s\\S]*?;`,
-    "m"
-  );
-  const match = pattern.exec(source);
-
-  return match ? match.index + match[0].length : null;
-};
 
 const findImportInsertionOffset = (source: string): number => {
   const sourceFile = createTsSourceFile(source);
@@ -6488,7 +6154,7 @@ const mayBeInsideEmbeddedRegion = (
   const pattern =
     kind === "template"
       ? /(?:\bdefineHtml\b|\.template\b)\s*(?:<[^`]*?>\s*)?\(\s*`/g
-      : /(?:\bdefineStyle\b|\.(?:style|globalStyle)\b)\s*(?:<[^`]*?>\s*)?\(\s*`/g;
+      : /\bdefineStyle\b\s*(?:<[^`]*?>\s*)?\(\s*`/g;
   let lastOpen = -1;
 
   for (const match of source.matchAll(pattern)) {
@@ -6580,10 +6246,6 @@ const createTemplateDiagnostics = (
     diagnostics
   );
   collectVModelWritableDiagnostics(document, component, region, virtualDocument, diagnostics);
-  if (!component.macro) {
-    collectUnknownExpressionDiagnostics(document, component, region, virtualDocument, diagnostics);
-  }
-
   return diagnostics;
 };
 
@@ -7092,100 +6754,6 @@ const collectVModelWritableDiagnostics = (
         virtualDocument,
         match.index + expressionStart,
         match.index + expressionStart + expression.length
-      ),
-      severity: DiagnosticSeverity.Warning,
-      source: "ElfUI"
-    });
-  }
-};
-
-const collectUnknownExpressionDiagnostics = (
-  document: TextDocument,
-  component: ComponentMeta,
-  region: EmbeddedRegion,
-  virtualDocument: TextDocument,
-  diagnostics: Diagnostic[]
-) => {
-  const knownNames = createKnownTemplateNames(component);
-  const expressions = collectTemplateExpressions(virtualDocument.getText());
-
-  expressions.forEach((expression) => {
-    const locals = new Set([...expression.locals, ...knownNames]);
-    const sanitized = blankStringLiterals(expression.value);
-    const seen = new Set<string>();
-    // Identifiers may start with `$` (e.g. `$event`, `$emit`). Lookbehind avoids
-    // matching the tail of `$event` as a separate `event` identifier when the
-    // standard `\b` cannot create a boundary before `$`.
-    const identifierPattern = /(?<![\w$])[A-Za-z_$][\w$]*/g;
-
-    collectUnknownEmitDiagnostics(
-      document,
-      component,
-      region,
-      virtualDocument,
-      expression,
-      diagnostics
-    );
-
-    for (const match of sanitized.matchAll(identifierPattern)) {
-      const name = match[0];
-      const index = match.index;
-
-      if (
-        index === undefined ||
-        seen.has(name) ||
-        locals.has(name) ||
-        templateGlobals.has(name) ||
-        templateReservedWords.has(name) ||
-        isPropertyAccess(sanitized, index) ||
-        isObjectPropertyKey(sanitized, index + name.length)
-      ) {
-        continue;
-      }
-
-      seen.add(name);
-      diagnostics.push({
-        message: `Unknown template variable "${name}".`,
-        range: mapVirtualRangeByOffsets(
-          document,
-          region,
-          virtualDocument,
-          expression.start + index,
-          expression.start + index + name.length
-        ),
-        severity: DiagnosticSeverity.Warning,
-        source: "ElfUI"
-      });
-    }
-  });
-};
-
-const collectUnknownEmitDiagnostics = (
-  document: TextDocument,
-  component: ComponentMeta,
-  region: EmbeddedRegion,
-  virtualDocument: TextDocument,
-  expression: TemplateExpression,
-  diagnostics: Diagnostic[]
-) => {
-  const declaredEmits = new Set(component.emits);
-  const emitPattern = /(?:\bemit|\$emit)\(\s*(["'])([\w:-]+)\1/g;
-
-  for (const match of expression.value.matchAll(emitPattern)) {
-    if (match.index === undefined || match[2] === undefined || declaredEmits.has(match[2])) {
-      continue;
-    }
-
-    const eventOffset = match[0].lastIndexOf(match[2]);
-
-    diagnostics.push({
-      message: `Event "${match[2]}" is not declared in emits().`,
-      range: mapVirtualRangeByOffsets(
-        document,
-        region,
-        virtualDocument,
-        expression.start + match.index + eventOffset,
-        expression.start + match.index + eventOffset + match[2].length
       ),
       severity: DiagnosticSeverity.Warning,
       source: "ElfUI"

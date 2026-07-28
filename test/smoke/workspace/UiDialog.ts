@@ -1,4 +1,4 @@
-import { defineEmits, defineHtml, defineModel, defineProps, defineSlots, useComponents } from "elfui";
+import { defineEmits, defineHtml, defineModel, defineProps, defineSlots, useComponents } from "@elfui/core";
 import { DialogActionButton } from "./DialogActionButton";
 
 interface DialogProps {

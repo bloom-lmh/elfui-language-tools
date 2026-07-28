@@ -1,4 +1,4 @@
-import { defineEmits, defineHtml, defineProps, defineSlots } from "elfui";
+import { defineEmits, defineHtml, defineProps, defineSlots } from "@elfui/core";
 
 interface Props {
   label: string;

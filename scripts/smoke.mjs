@@ -11,7 +11,7 @@ const requiredFiles = [
   packageJson.browser,
   packageJson.icon,
   "README.md",
-  "syntaxes/elfui-chain.tmLanguage.json",
+  "syntaxes/elfui-macro.tmLanguage.json",
   "dist/lsp-server.js",
   "dist/typescript-lib/lib.dom.d.ts",
   "dist/typescript-lib/lib.dom.iterable.d.ts",
@@ -29,12 +29,12 @@ if (missingFiles.length > 0) {
 }
 
 const grammar = packageJson.contributes?.grammars?.find(
-  (item) => item.scopeName === "elfui.chain.injection"
+  (item) => item.scopeName === "elfui.macro.injection"
 );
 
 if (!grammar) {
   console.error("ElfUI VS Code extension smoke check failed.");
-  console.error("Missing ElfUI chain injection grammar contribution.");
+  console.error("Missing ElfUI macro injection grammar contribution.");
   process.exit(1);
 }
 

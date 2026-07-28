@@ -1,8 +1,8 @@
 {
   "name": "elfui-language-features",
   "displayName": "ElfUI Language Tools",
-  "description": "VS Code language features for ElfUI macro components.",
-  "version": "0.2.32",
+  "description": "VS Code language features for ElfUI macro components. Chain builder support is provided by the optional ElfUI Chain Language Tools extension.",
+  "version": "0.2.33",
   "license": "MIT",
   "type": "commonjs",
   "publisher": "SWUST-WEBLAB-LMH",
@@ -98,8 +98,8 @@
     },
     "grammars": [
       {
-        "scopeName": "elfui.chain.injection",
-        "path": "./syntaxes/elfui-chain.tmLanguage.json",
+        "scopeName": "elfui.macro.injection",
+        "path": "./syntaxes/elfui-macro.tmLanguage.json",
         "injectTo": [
           "source.ts",
           "source.tsx",

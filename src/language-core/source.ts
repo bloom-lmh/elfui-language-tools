@@ -5,10 +5,7 @@ import { analyzeElfMacroUsage } from "@elfui/compiler/vite";
 export type EmbeddedRegionKind = "template" | "style";
 export type EmbeddedRegionMethod =
   | "defineHtml"
-  | "defineStyle"
-  | "globalStyle"
-  | "style"
-  | "template";
+  | "defineStyle";
 
 export interface EmbeddedRegion {
   content: string;
@@ -95,7 +92,7 @@ interface MacroSymbols {
   uses: NamedMeta[];
 }
 
-const macroRuntimePackages = ["elfui", "@elfui/core"];
+const macroRuntimePackages = ["@elfui/core"];
 
 export const createEmptyComponentMeta = (id: string): ComponentMeta => ({
   emits: [],
@@ -127,64 +124,6 @@ export const analyzeElfSource = (
   );
   const components = new Map<string, MutableComponentMeta>();
   const macroComponent = isMacroComponentSource(source, fileName);
-
-  const ensureComponent = (id: string) => {
-    const existing = components.get(id);
-
-    if (existing) {
-      return existing;
-    }
-
-    const component = createEmptyComponentMeta(id);
-    components.set(id, component);
-
-    return component;
-  };
-
-  const visit = (node: ts.Node) => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-      if (containsCreateComponentCall(node.initializer)) {
-        const component = ensureComponent(node.name.text);
-        applyBuilderCallChain(node.initializer, component, sourceFile);
-      }
-
-      const standaloneRegion = readStandaloneEmbeddedRegion(
-        node.name.text,
-        node.initializer,
-        sourceFile
-      );
-
-      if (standaloneRegion) {
-        const component = ensureComponent(
-          `standalone:${node.name.text}:${standaloneRegion.contentStart}`
-        );
-
-        if (standaloneRegion.kind === "template") {
-          component.templates.push(standaloneRegion);
-        } else {
-          component.styles.push(standaloneRegion);
-        }
-      }
-    }
-
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-      const receiver = readBuilderReceiverIdentifier(node.expression.expression);
-
-      if (receiver) {
-        const component = components.get(receiver);
-
-        if (component) {
-          applyBuilderCallChain(node, component, sourceFile);
-
-          return;
-        }
-      }
-    }
-
-    ts.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
 
   if (macroComponent) {
     applyMacroAnalysis(source, sourceFile, components, fileName);
@@ -350,236 +289,6 @@ const inferScriptKind = (fileName: string) => {
   return ts.ScriptKind.TS;
 };
 
-const containsCreateComponentCall = (node: ts.Node): boolean => {
-  if (
-    ts.isCallExpression(node) &&
-    ts.isPropertyAccessExpression(node.expression) &&
-    node.expression.name.text === "createComponent"
-  ) {
-    return true;
-  }
-
-  return node.getChildCount() > 0 && node.getChildren().some(containsCreateComponentCall);
-};
-
-const applyBuilderCallChain = (
-  node: ts.Expression,
-  component: MutableComponentMeta,
-  sourceFile: ts.SourceFile
-) => {
-  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) {
-    return;
-  }
-
-  const receiver = node.expression.expression;
-
-  if (ts.isCallExpression(receiver)) {
-    applyBuilderCallChain(receiver, component, sourceFile);
-  }
-
-  applyBuilderMethod(node.expression.name.text, node.arguments, node, component, sourceFile);
-};
-
-const readBuilderReceiverIdentifier = (node: ts.Expression): string | null => {
-  if (ts.isIdentifier(node)) {
-    return node.text;
-  }
-
-  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-    return readBuilderReceiverIdentifier(node.expression.expression);
-  }
-
-  return null;
-};
-
-const applyBuilderMethod = (
-  method: string,
-  args: ts.NodeArray<ts.Expression>,
-  call: ts.CallExpression,
-  component: MutableComponentMeta,
-  sourceFile: ts.SourceFile
-) => {
-  const firstArg = args[0];
-
-  if (method === "name" && firstArg) {
-    component.name = readStaticString(firstArg) ?? component.name;
-    return;
-  }
-
-  if (method === "props" && firstArg) {
-    const props = readObjectProperties(firstArg, sourceFile);
-
-    appendUnique(
-      component.props,
-      props.map((item) => item.name)
-    );
-    appendPropDetails(component.propDetails, props);
-    appendSymbols(component.symbols, props, "prop");
-
-    return;
-  }
-
-  if (method === "emits" && firstArg) {
-    const arrayEmits = readStringArrayEntries(firstArg, sourceFile);
-    const objectEmits = readObjectProperties(firstArg, sourceFile);
-    const emits = [...arrayEmits, ...objectEmits];
-
-    appendUnique(
-      component.emits,
-      emits.map((item) => item.name)
-    );
-    appendSymbols(component.symbols, emits, "emit");
-
-    return;
-  }
-
-  if (method === "setup" && firstArg) {
-    const setupReturns = readSetupReturnSymbols(firstArg, sourceFile);
-
-    appendUnique(
-      component.setupReturns,
-      setupReturns.map((item) => item.name)
-    );
-    appendSymbols(component.symbols, setupReturns, "setup");
-
-    return;
-  }
-
-  if ((method === "state" || method === "events") && firstArg) {
-    const names = readObjectLikeEntries(firstArg, sourceFile);
-
-    appendUnique(
-      component.setupReturns,
-      names.map((item) => item.name)
-    );
-    appendSymbols(component.symbols, names, "setup");
-
-    return;
-  }
-
-  if (method === "use" && firstArg) {
-    appendUses(component.uses, readUseRegistrations(args, sourceFile));
-    appendSymbols(component.symbols, readUseRegistrationSymbols(args, sourceFile), "component");
-
-    return;
-  }
-
-  if (method === "slot" && firstArg) {
-    const slot = readStaticStringEntry(firstArg, sourceFile);
-
-    appendUnique(component.slots, [slot?.name].filter(isString));
-
-    if (slot) {
-      appendSymbols(component.symbols, [slot], "slot");
-    }
-
-    return;
-  }
-
-  if (method === "slots" && firstArg) {
-    const slots = readObjectProperties(firstArg, sourceFile);
-
-    appendUnique(
-      component.slots,
-      slots.map((item) => item.name)
-    );
-    appendSymbols(component.symbols, slots, "slot");
-
-    return;
-  }
-
-  if (method === "formControl") {
-    component.formControl = true;
-    return;
-  }
-
-  if ((method === "template" || method === "style" || method === "globalStyle") && firstArg) {
-    const region = readEmbeddedRegion(method, firstArg, call, sourceFile);
-
-    if (!region) {
-      return;
-    }
-
-    if (method === "template") {
-      component.templates.push(region);
-    } else {
-      component.styles.push(region);
-    }
-  }
-};
-
-const readEmbeddedRegion = (
-  method: "template" | "style" | "globalStyle",
-  node: ts.Expression,
-  call: ts.CallExpression,
-  sourceFile: ts.SourceFile
-): EmbeddedRegion | null => {
-  const embeddedString = readEmbeddedString(node, sourceFile);
-
-  if (embeddedString === null) {
-    return null;
-  }
-
-  return {
-    content: embeddedString.content,
-    contentEnd: embeddedString.contentEnd,
-    contentStart: embeddedString.contentStart,
-    end: call.getEnd(),
-    kind: method === "template" ? "template" : "style",
-    languageId: method === "template" ? "html" : "css",
-    method,
-    start: call.getStart(sourceFile)
-  };
-};
-
-const readStandaloneEmbeddedRegion = (
-  name: string,
-  node: ts.Expression,
-  sourceFile: ts.SourceFile
-): EmbeddedRegion | null => {
-  const method = inferStandaloneEmbeddedMethod(name);
-
-  if (!method) {
-    return null;
-  }
-
-  const embeddedString = readEmbeddedString(node, sourceFile);
-
-  if (!embeddedString) {
-    return null;
-  }
-
-  return {
-    content: embeddedString.content,
-    contentEnd: embeddedString.contentEnd,
-    contentStart: embeddedString.contentStart,
-    end: node.getEnd(),
-    kind: method === "template" ? "template" : "style",
-    languageId: method === "template" ? "html" : "css",
-    method,
-    start: node.getStart(sourceFile)
-  };
-};
-
-const inferStandaloneEmbeddedMethod = (name: string): "template" | "style" | null => {
-  const normalized = name.toLowerCase();
-
-  if (normalized === "css" || normalized === "style" || normalized.endsWith("style")) {
-    return "style";
-  }
-
-  if (
-    normalized === "str" ||
-    normalized === "html" ||
-    normalized === "template" ||
-    normalized.endsWith("template")
-  ) {
-    return "template";
-  }
-
-  return null;
-};
-
 const collectDefineStyleRegions = (sourceFile: ts.SourceFile): EmbeddedRegion[] => {
   const regions: EmbeddedRegion[] = [];
 
@@ -587,9 +296,8 @@ const collectDefineStyleRegions = (sourceFile: ts.SourceFile): EmbeddedRegion[] 
     if (ts.isCallExpression(node)) {
       const name = callExpressionName(node);
 
-      if (name === "defineStyle" || name === "globalStyle") {
-        const args = name === "defineStyle" ? node.arguments : node.arguments.slice(0, 1);
-        for (const arg of args) {
+      if (name === "defineStyle") {
+        for (const arg of node.arguments) {
           const embeddedString = readEmbeddedString(arg, sourceFile);
           if (!embeddedString) continue;
           regions.push({
@@ -599,7 +307,7 @@ const collectDefineStyleRegions = (sourceFile: ts.SourceFile): EmbeddedRegion[] 
             end: node.getEnd(),
             kind: "style",
             languageId: "css",
-            method: name === "globalStyle" ? "globalStyle" : "defineStyle",
+            method: "defineStyle",
             start: node.getStart(sourceFile)
           });
         }
@@ -950,48 +658,6 @@ const readStaticStringEntry = (node: ts.Node, sourceFile: ts.SourceFile): NamedM
   };
 };
 
-const readObjectLikeEntries = (node: ts.Node, sourceFile: ts.SourceFile): NamedMeta[] => {
-  if (ts.isObjectLiteralExpression(node)) {
-    return readObjectProperties(node, sourceFile);
-  }
-
-  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
-    const expressionBody = ts.isBlock(node.body) ? null : unwrapExpression(node.body);
-
-    if (expressionBody && ts.isObjectLiteralExpression(expressionBody)) {
-      return readObjectProperties(expressionBody, sourceFile);
-    }
-
-    if (ts.isBlock(node.body)) {
-      return node.body.statements.flatMap((statement) =>
-        ts.isReturnStatement(statement) && statement.expression
-          ? readObjectProperties(statement.expression, sourceFile)
-          : []
-      );
-    }
-  }
-
-  return [];
-};
-
-const readObjectPropertyNames = (node: ts.Node): string[] => {
-  if (!ts.isObjectLiteralExpression(node)) {
-    return [];
-  }
-
-  return node.properties.flatMap((property) => {
-    if (ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property)) {
-      return readPropertyName(property.name);
-    }
-
-    if (ts.isShorthandPropertyAssignment(property)) {
-      return property.name.text;
-    }
-
-    return [];
-  });
-};
-
 const readObjectProperties = (node: ts.Node, sourceFile: ts.SourceFile): NamedMeta[] => {
   if (!ts.isObjectLiteralExpression(node)) {
     return [];
@@ -1108,32 +774,6 @@ const readStringArrayEntries = (node: ts.Node, sourceFile: ts.SourceFile): Named
   return node.elements.map((element) => readStaticStringEntry(element, sourceFile)).filter(isNamed);
 };
 
-const readSetupReturnSymbols = (node: ts.Node, sourceFile: ts.SourceFile): NamedMeta[] => {
-  if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) {
-    return [];
-  }
-
-  const expressionBody = ts.isBlock(node.body) ? null : unwrapExpression(node.body);
-
-  if (expressionBody && ts.isObjectLiteralExpression(expressionBody)) {
-    return readObjectProperties(expressionBody, sourceFile);
-  }
-
-  if (ts.isBlock(node.body)) {
-    const names: NamedMeta[] = [];
-
-    node.body.statements.forEach((statement) => {
-      if (ts.isReturnStatement(statement) && statement.expression) {
-        appendNamed(names, readObjectProperties(statement.expression, sourceFile));
-      }
-    });
-
-    return names;
-  }
-
-  return [];
-};
-
 const unwrapExpression = (node: ts.Expression): ts.Expression => {
   if (ts.isParenthesizedExpression(node)) {
     return unwrapExpression(node.expression);
@@ -1141,88 +781,6 @@ const unwrapExpression = (node: ts.Expression): ts.Expression => {
 
   return node;
 };
-
-const readUseRegistrations = (
-  args: ts.NodeArray<ts.Expression>,
-  sourceFile: ts.SourceFile
-): ComponentUseMeta[] => {
-  const firstArg = args[0];
-
-  if (!firstArg) {
-    return [];
-  }
-
-  const alias = args[1] ? readStaticString(args[1]) : null;
-
-  if (alias) {
-    return [
-      {
-        expression: firstArg.getText(sourceFile),
-        localName: alias,
-        source: "alias"
-      }
-    ];
-  }
-
-  if (ts.isObjectLiteralExpression(firstArg)) {
-    return readUseObjectRegistrations(firstArg, sourceFile);
-  }
-
-  if (ts.isArrayLiteralExpression(firstArg)) {
-    return firstArg.elements.flatMap((element) => {
-      if (ts.isIdentifier(element)) {
-        return [
-          {
-            expression: element.text,
-            localName: element.text,
-            source: "array" as const
-          }
-        ];
-      }
-
-      return [];
-    });
-  }
-
-  if (ts.isIdentifier(firstArg)) {
-    return [{ expression: firstArg.text, localName: firstArg.text, source: "array" }];
-  }
-
-  return [];
-};
-
-const readUseObjectRegistrations = (
-  node: ts.ObjectLiteralExpression,
-  sourceFile: ts.SourceFile
-): ComponentUseMeta[] =>
-  node.properties.flatMap((property) => {
-    if (ts.isPropertyAssignment(property)) {
-      return readPropertyName(property.name).map((localName) => ({
-        expression: property.initializer.getText(sourceFile),
-        localName,
-        source: "object" as const
-      }));
-    }
-
-    if (ts.isMethodDeclaration(property)) {
-      return readPropertyName(property.name).map((localName) => ({
-        localName,
-        source: "object" as const
-      }));
-    }
-
-    if (ts.isShorthandPropertyAssignment(property)) {
-      return [
-        {
-          expression: property.name.text,
-          localName: property.name.text,
-          source: "object" as const
-        }
-      ];
-    }
-
-    return [];
-  });
 
 const readUseRegistrationSymbols = (
   args: ts.NodeArray<ts.Expression>,

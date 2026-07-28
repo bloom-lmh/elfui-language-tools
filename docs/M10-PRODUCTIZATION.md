@@ -11,7 +11,7 @@ pnpm verify:m10
 
 The gate scans the real `ui-kit/src/components` tree and checks:
 
-- macro/builder component pressure
+- macro component pressure
 - `${...}` expression binding pressure
 - `v-for` local pressure
 - `v-model` pressure
@@ -23,12 +23,12 @@ The gate scans the real `ui-kit/src/components` tree and checks:
 
 ## Current Baseline
 
-Latest local run on 2026-07-13:
+Latest local run on 2026-07-28:
 
 | Gate | Result |
 | --- | --- |
 | ui-kit source files | 257 TS files |
-| macro/builder component files | 55 files |
+| macro component files | 55 files |
 | expression bindings | 911 |
 | `v-for` declarations | 50 |
 | `v-model` bindings | 16 |

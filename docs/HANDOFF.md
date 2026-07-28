@@ -1,6 +1,6 @@
 # ElfUI Language Tools Maintenance Handoff
 
-Last updated: 2026-07-13
+Last updated: 2026-07-28
 
 This repository, `E:\dev_projects\elfui-official\elfui-language-tools`, is the
 only maintained home for the ElfUI VS Code extension. Do not modify the retired
@@ -8,7 +8,7 @@ only maintained home for the ElfUI VS Code extension. Do not modify the retired
 
 ## Current Capability
 
-- Embedded HTML/CSS grammar and formatting for ElfUI macro and builder template strings,
+- Embedded HTML/CSS grammar and formatting for ElfUI macro template strings,
   including save formatting alongside a separate TS/JS formatter such as Prettier.
 - LSP completion, hover, diagnostics, definitions, references, rename, document symbols,
   inlay hints, code actions, document links, folding, selection, linked editing, and color
@@ -115,7 +115,7 @@ pnpm smoke:vsix
 `smoke:host` and `smoke:vsix` launch a real VS Code Extension Host. The recurring VS Code
 mutex warning in the test environment is harmless when the command exits successfully.
 
-The latest M10 baseline is 257 source files, 55 macro/builder component files, cold indexing
+The latest M10 baseline is 257 source files, 55 macro component files, cold indexing
 under 3 seconds, and warm cached indexing under 750 ms. Use `ElfUI: Diagnose Integration` first
 when a user reports missing completions, colors, or template-local false positives.
 

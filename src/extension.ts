@@ -860,10 +860,8 @@ const readActiveStudioAnalysis = (): StudioAnalysis | null => {
 const analyzeStudioSource = (source: string): StudioComponentMeta[] => {
   const templates = [
     ...collectTemplateLiteralRegions(source, /\bdefineHtml\s*(?:<[^`]*?>\s*)?\(\s*`/g, "template"),
-    ...collectTemplateLiteralRegions(source, /\.template\s*\(\s*`/g, "template"),
   ];
   const styles = [
-    ...collectTemplateLiteralRegions(source, /\.(?:style|globalStyle)\s*\(\s*`/g, "style"),
     ...collectTemplateLiteralRegions(source, /\bdefineStyle\s*\(\s*`/g, "style"),
   ];
 
@@ -968,13 +966,11 @@ const findTemplateLiteralEnd = (source: string, tickStart: number): number | nul
 const readStudioComponentName = (source: string): string | null =>
   /export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*defineHtml\b/.exec(source)?.[1] ??
   /const\s+([A-Za-z_$][\w$]*)\s*=\s*defineHtml\b/.exec(source)?.[1] ??
-  /const\s+([A-Za-z_$][\w$]*)\s*=\s*[\s\S]*?createComponent\s*\(/.exec(source)?.[1] ??
   null;
 
 const readStudioProps = (source: string): string[] =>
   unique([
     ...extractTypeMemberNames(source, /defineProps\s*<([\s\S]*?)>\s*\(/g),
-    ...extractObjectKeys(source, /\.props\s*\(\s*\{([\s\S]*?)\}\s*\)/g),
     ...[...source.matchAll(/defineModel\s*\(\s*(?:(["'])([\w-]+)\1)?/g)].map((match) =>
       match[2] ? normalizeModelPropName(match[2]) : "modelValue",
     ),
@@ -983,29 +979,20 @@ const readStudioProps = (source: string): string[] =>
 const readStudioEmits = (source: string): string[] =>
   unique([
     ...extractTypeMemberNames(source, /defineEmits\s*<([\s\S]*?)>\s*\(/g),
-    ...extractStringValues(source, /\.emits\s*\(\s*\[([\s\S]*?)\]\s*\)/g),
   ]);
 
 const readStudioSlots = (source: string): string[] =>
   unique([
     ...extractTypeMemberNames(source, /defineSlots\s*<([\s\S]*?)>\s*\(/g),
-    ...extractStringValues(source, /\.slot\s*\(\s*(["'])([\w:-]+)\1/g),
   ]);
 
 const readStudioUses = (source: string): string[] =>
   unique([
     ...extractObjectKeys(source, /useComponents\s*\(\s*\{([\s\S]*?)\}\s*\)/g),
-    ...extractObjectKeys(source, /\.use\s*\(\s*\{([\s\S]*?)\}\s*\)/g),
   ]);
 
 const readStudioSetupReturns = (source: string): string[] => {
-  const setupObject =
-    /\.setup\s*\(\s*\(\s*\)\s*=>\s*\(\s*\{([\s\S]*?)\}\s*\)\s*\)/.exec(source)?.[1] ??
-    /\.setup\s*\(\s*\(\s*\)\s*=>\s*\{[\s\S]*?return\s+\{([\s\S]*?)\}/.exec(source)?.[1] ??
-    "";
-
   return unique([
-    ...extractObjectKeysFromBody(setupObject),
     ...[...source.matchAll(/^(?:const|let|var|function)\s+([A-Za-z_$][\w$]*)/gm)].map(
       (match) => match[1] ?? "",
     ),

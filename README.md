@@ -1,6 +1,6 @@
 # ElfUI Language Features
 
-VS Code language features for ElfUI macro and chain components.
+VS Code language features for ElfUI macro components.
 
 ## StackBlitz Codeflow / VS Code for the Web
 
@@ -34,18 +34,18 @@ Marketplace, the same pane can install it by name instead.
 - Macro-aware completion and hover for `defineProps()`, `defineEmits()`, `defineSlots()`, `defineHtml()`, `useComponents()`, lifecycle hooks, and typed `useTemplateRef()` values.
 - Template prop hover for local macro components includes the individual TypeScript type and statically declared default value when available.
 - Hover metadata for indexed workspace and package components, including import source, typed props with static defaults, events, slots, and typed slot scopes.
-- HTML completion, hover, diagnostics, and closing tag support inside `defineHtml(\`...\`)` and builder `.template(\`...\`)` regions.
+- HTML completion, hover, diagnostics, and closing tag support inside `defineHtml(\`...\`)` regions.
 - ElfUI-aware template completion for `props()`, `setup()` returns, `emits()`, `use()` components, slot locals, and `ctx.form`.
 - Full expression completion and diagnostics in `${...}`, quoted binding, and `{{...}}` styles, including typed `v-for` locals from `useRef()` lists.
 - Contextual DOM event typing for `$event` in event bindings, including `MouseEvent`, `KeyboardEvent`, and `InputEvent` member completions.
 - Event and binding-name completions preserve existing expression or quoted values when renaming attributes.
 - Quoted dynamic bindings such as `:key="item.id"`, `v-if="visible"`, and `@click="select(item)"` are highlighted as TypeScript expressions, while ordinary HTML values such as `class="row"` remain strings.
 - A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `defineHtml(\`...\`)` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
-- HTML/CSS syntax highlighting inside `defineHtml(\`...\`)`, `defineStyle(\`...\`)`, and builder template/style regions through embedded TextMate scopes.
-- HTML/CSS document and range formatting inside `defineHtml(\`...\`)`, `defineStyle(\`...\`)`, and builder template/style regions.
+- HTML/CSS syntax highlighting inside `defineHtml(\`...\`)` and `defineStyle(\`...\`)` through embedded TextMate scopes.
+- HTML/CSS document and range formatting inside `defineHtml(\`...\`)` and `defineStyle(\`...\`)`.
 - Document and range formatting providers for ElfUI template and style strings. When another formatter such as Prettier owns the TS/JS document, ElfUI also formats only its embedded regions on save while respecting `editor.formatOnSave`.
 - Interactive completion and formatting use cached embedded documents and incremental TypeScript services; diagnostics and workspace indexing are deferred while typing to keep the request path responsive.
-- CSS completion, hover, diagnostics, and color preview inside `.style(\`...\`)`, including Web Components selectors such as `:host-context()`, `::slotted()`, `::part()`, template-derived `part`/`slot` selector snippets, and declared CSS custom property references.
+- CSS completion, hover, diagnostics, and color preview inside `defineStyle(\`...\`)`, including Web Components selectors such as `:host-context()`, `::slotted()`, `::part()`, template-derived `part`/`slot` selector snippets, and declared CSS custom property references.
 - Diagnostics for unknown template variables, unregistered local components, undeclared emit calls, non-writable `v-model` targets, and component prop/event/slot mismatches from same-file or workspace metadata.
 - Go to Definition, References, and Document Highlight for same-file template symbols and workspace component tags, props, events, and slots.
 - Rename for same-file template symbols, current-file workspace component usages, and matching external declarations when the template name is the real exported name.
@@ -71,6 +71,8 @@ Marketplace, the same pane can install it by name instead.
 - `elfui.languageFeatures.workspace.indexDebounceMs`: debounce delay before rebuilding the workspace component index after file changes.
 - `elfui.languageFeatures.workspace.perfLogging`: log workspace index timing and cache stats to the ElfUI language server output.
 - `elfui.languageFeatures.componentTagColor`: component tag color for ElfUI template strings. Set to `null` to stop managing the color.
+
+Chain builder syntax (`ElfUI.createComponent().template(...)`) is intentionally not included in this extension. Install the companion `ElfUI Chain Language Tools` extension when a project still uses the legacy builder API.
 
 Use `ElfUI: Restart Language Server` after changing local language-server builds during development. `ElfUI: Diagnose Integration` reports the active extension version, language-server state, TypeScript plugin configuration, recognized template-region line ranges, diagnostic counts grouped by source, and whether a native template-local false positive is still present.
 

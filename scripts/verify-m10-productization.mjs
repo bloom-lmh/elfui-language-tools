@@ -48,7 +48,7 @@ const coldScan = scanWithCache(allIndexedFiles, cache);
 const warmScan = scanWithCache(allIndexedFiles, cache);
 
 const macroComponentFiles = sourceTexts.filter((item) =>
-  /\bdefineHtml\s*\(|\.template\s*\(/.test(item.text)
+  /\bdefineHtml\s*\(/.test(item.text)
 );
 const expressionBindings = countMatches(sourceTexts, /\$\{/g);
 const vForDeclarations = countMatches(sourceTexts, /\bv-for\s*=/g);
@@ -60,7 +60,7 @@ const cssTokenReferences = countMatches(styleTexts, /var\(--elf-[\w-]+/g);
 requireGate(sourceFiles.length >= 80, "ui-kit source pressure set", `${sourceFiles.length} TS files`);
 requireGate(
   macroComponentFiles.length >= 50,
-  "ui-kit macro/builder component coverage",
+  "ui-kit macro component coverage",
   `${macroComponentFiles.length} component files`
 );
 requireGate(

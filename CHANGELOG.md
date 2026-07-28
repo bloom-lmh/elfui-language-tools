@@ -1,5 +1,12 @@
 # elfui-language-features
 
+## 0.3.2
+
+### Patch Changes
+
+- 8371cd4: Highlight quoted `v-for` expressions as TypeScript, expose declaration semantic tokens for loop
+  locals, and infer array loop indexes as `number` for completion and hover.
+
 ## 0.3.1
 
 ### Patch Changes

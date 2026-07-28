@@ -1,5 +1,11 @@
 # elfui-language-features
 
+## 0.3.5
+
+### Patch Changes
+
+- b9929ca: Keep inline Fragment list wrappers compact during formatting and preserve existing attributes when completing an adjacent ElfUI directive or event.
+
 ## 0.3.4
 
 ### Patch Changes

@@ -69,10 +69,13 @@ const createWebTemplateCompletions = (
 
   const nameRemainder = /^[\w:-]*/.exec(source.slice(offset))?.[0] ?? "";
   const afterName = source.slice(offset + nameRemainder.length);
-  const hasExistingValue = /^(?:\.[\w-]+)*\s*=/.test(afterName);
+  const preserveFollowingAttribute =
+    eventMatch[1] === "@" && nameRemainder.length > 0 && /^\s*=/.test(afterName);
+  const hasExistingValue =
+    !preserveFollowingAttribute && /^(?:\.[\w-]+)*\s*=/.test(afterName);
   const range = new vscode.Range(
     document.positionAt(offset - eventMatch[1].length),
-    document.positionAt(offset + nameRemainder.length),
+    document.positionAt(preserveFollowingAttribute ? offset : offset + nameRemainder.length),
   );
 
   return templateCompletions.map((item) => {
@@ -86,6 +89,8 @@ const createWebTemplateCompletions = (
     completionItem.detail = item.detail;
     completionItem.insertText = hasExistingValue
       ? new vscode.SnippetString(label)
+      : preserveFollowingAttribute && item.insertText instanceof vscode.SnippetString
+        ? new vscode.SnippetString(`${item.insertText.value} `)
       : item.insertText;
     completionItem.range = range;
     completionItem.sortText = item.sortText;

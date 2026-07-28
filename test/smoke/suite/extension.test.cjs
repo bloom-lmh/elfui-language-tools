@@ -167,6 +167,34 @@ suite("ElfUI Language Features Smoke", function () {
     assert(!completed.includes("k=${handleClick}"), "Did not expect a trailing event-name fragment.");
   });
 
+  test("inserts an event completion before an existing ref attribute", async () => {
+    const { document, position } = await openFixtureWithCursor(
+      [
+        'import { defineHtml } from "@elfui/core";',
+        "",
+        `export const Demo = defineHtml(\`<div @${CURSOR}ref="lineChart"></div>\`);`,
+        ""
+      ].join("\n")
+    );
+    const items = await waitForCompletionLabels(document, position, ["@click"]);
+    const completion = items.find((item) => getCompletionLabel(item.label) === "@click");
+    const completionRange =
+      completion?.range instanceof vscode.Range
+        ? completion.range
+        : completion?.range?.replacing ?? completion?.textEdit?.range;
+    const completionText = getCompletionInsertedText(completion);
+
+    assert(completionRange, "Expected @click to provide an insertion range.");
+    assert(completionText.startsWith("@click="), "Expected an event binding snippet.");
+    assert(completionText.endsWith(" "), "Expected a separator before the existing ref.");
+    const completed = applyTextEdits(document.getText(), document, [
+      { newText: completionText, range: completionRange }
+    ]);
+
+    assert(completed.includes(' ref="lineChart"'), "Expected the existing ref to remain intact.");
+    assert(!completed.includes('@click="lineChart"'), "Did not expect ref value to become a handler.");
+  });
+
   test("provides macro quick fixes for missing state and handlers", async () => {
     const document = await openFixture(
       [
@@ -900,6 +928,59 @@ suite("ElfUI Language Features Smoke", function () {
       formattedOnce,
       /:class="\{\n\s+'is-disabled': item\.disabled,\n\s+'is-selected': isSelected\(item\)\n\s+\}"/
     );
+  });
+
+  test("keeps inline Fragment list wrappers compact across repeated formatting", async () => {
+    const document = await openFixture(
+      [
+        'import { defineHtml, fragment } from "@elfui/core";',
+        "",
+        "const summaryData = [];",
+        "export const Dashboard = defineHtml(`",
+        '  <div class="summary-row">',
+        "    ${summaryData.map(",
+        "            (item) => fragment`",
+        '      <div class="summary-card"><span>${item.label}</span></div>',
+        "    `",
+        "        )}",
+        "  </div>",
+        "`);",
+        ""
+      ].join("\n")
+    );
+    const firstEdits = await waitFor(async () => {
+      const edits = await vscode.commands.executeCommand(
+        "vscode.executeFormatDocumentProvider",
+        document.uri,
+        { insertSpaces: true, tabSize: 2 }
+      );
+
+      return Array.isArray(edits) && edits.length > 0 ? edits : undefined;
+    }, "inline Fragment list formatting");
+    const formattedOnce = applyTextEdits(document.getText(), document, firstEdits);
+
+    assert.match(formattedOnce, /\$\{summaryData\.map\(\(item\) => fragment`/);
+    assert.match(formattedOnce, /\n\s*`\)}\n/);
+    assert(!/summaryData\.map\(\s*\n/.test(formattedOnce));
+
+    const workspaceEdit = new vscode.WorkspaceEdit();
+
+    firstEdits.forEach((edit) => workspaceEdit.replace(document.uri, edit.range, edit.newText));
+    assert.equal(await vscode.workspace.applyEdit(workspaceEdit), true);
+    await waitFor(() => document.getText() === formattedOnce, "inline Fragment edit synchronization");
+
+    const stableEdits = await waitFor(async () => {
+      const edits = await vscode.commands.executeCommand(
+        "vscode.executeFormatDocumentProvider",
+        document.uri,
+        { insertSpaces: true, tabSize: 2 }
+      );
+      const candidate = applyTextEdits(formattedOnce, document, edits ?? []);
+
+      return candidate === formattedOnce ? edits ?? [] : undefined;
+    }, "stable inline Fragment formatting");
+
+    assert.equal(stableEdits.length, 0, "Expected no second inline Fragment formatting edit.");
   });
 
   test("applies the configured component tag color to real ElfUI TextMate scopes", async () => {

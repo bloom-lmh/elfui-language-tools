@@ -252,6 +252,44 @@ describe("ElfUI language service", () => {
     expect(secondEdits).toEqual([]);
   });
 
+  it("keeps inline Fragment list wrappers compact and formatting idempotent", () => {
+    const source = `
+      import { defineHtml, fragment } from "@elfui/core";
+
+      const summaryData = [];
+      export const Dashboard = defineHtml(\`
+        <div class="summary-row">
+          \${summaryData.map(
+                  (item) => fragment\`
+            <div class="summary-card">
+              <span>\${item.label}</span>
+            </div>
+          \`
+              )}
+        </div>
+      \`);
+    `;
+    const document = createDocument(source);
+    const formatted = applyTextEdits(
+      source,
+      createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 })
+    );
+
+    expect(formatted).toContain("${summaryData.map((item) => fragment`");
+    expect(formatted).toMatch(
+      /\n {10}\$\{summaryData\.map\(\(item\) => fragment`\n {12}<div class="summary-card">\n {14}<span>\$\{item\.label}<\/span>\n {12}<\/div>\n {10}`\)}/
+    );
+    expect(formatted).not.toMatch(/summaryData\.map\(\s*\n/);
+
+    const formattedDocument = createDocument(formatted);
+    const secondEdits = createElfFormattingEdits(formattedDocument, {
+      insertSpaces: true,
+      tabSize: 2
+    });
+
+    expect(secondEdits).toEqual([]);
+  });
+
   it("suppresses compiler-generated inline Fragment scope diagnostics", () => {
     const source = `
       import { defineHtml, fragment } from "@elfui/core";
@@ -427,6 +465,45 @@ describe("ElfUI language service", () => {
     if (!edit || !("range" in edit)) throw new Error("Expected a completion text edit.");
     expect(applyTextEdits(source, [edit])).toContain(
       '@mouseover="handleClick"',
+    );
+  });
+
+  it("inserts event and directive completions before an existing ref attribute", () => {
+    const eventSource = `
+      import { defineHtml } from "@elfui/core";
+      export const Demo = defineHtml(\`<div @ref="lineChart"></div>\`);
+    `;
+    const eventDocument = createDocument(eventSource);
+    const eventCompletion = createElfCompletionList(
+      eventDocument,
+      eventDocument.positionAt(eventSource.indexOf("@ref") + 1)
+    ).items.find((item) => item.label === "@click");
+
+    expect(eventCompletion).toBeDefined();
+    expect(readCompletionNewText(eventCompletion!)).toBe("@click=\\${${1:handler}} ");
+    const eventEdit = eventCompletion?.textEdit;
+    expect(eventEdit && "range" in eventEdit).toBe(true);
+    if (!eventEdit || !("range" in eventEdit)) throw new Error("Expected event text edit.");
+    expect(applyTextEdits(eventSource, [eventEdit])).toContain(
+      '@click=\\${${1:handler}} ref="lineChart"'
+    );
+
+    const directiveSource = eventSource.replace("@ref", "v-ref");
+    const directiveDocument = createDocument(directiveSource);
+    const directiveCompletion = createElfCompletionList(
+      directiveDocument,
+      directiveDocument.positionAt(directiveSource.indexOf("v-ref") + 2)
+    ).items.find((item) => item.label === "v-if");
+
+    expect(directiveCompletion).toBeDefined();
+    expect(readCompletionNewText(directiveCompletion!)).toBe("v-if=\\${${1:condition}} ");
+    const directiveEdit = directiveCompletion?.textEdit;
+    expect(directiveEdit && "range" in directiveEdit).toBe(true);
+    if (!directiveEdit || !("range" in directiveEdit)) {
+      throw new Error("Expected directive text edit.");
+    }
+    expect(applyTextEdits(directiveSource, [directiveEdit])).toContain(
+      'v-if=\\${${1:condition}} ref="lineChart"'
     );
   });
 

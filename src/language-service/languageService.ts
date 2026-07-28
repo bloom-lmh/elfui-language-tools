@@ -192,6 +192,7 @@ type TemplateCompletionContext =
       hasExistingValue: boolean;
       kind: "directive";
       prefix: string;
+      preserveFollowingAttribute: boolean;
       replaceEnd: number;
       replaceStart: number;
     }
@@ -199,6 +200,7 @@ type TemplateCompletionContext =
       hasExistingValue: boolean;
       kind: "event";
       prefix: string;
+      preserveFollowingAttribute: boolean;
       replaceEnd: number;
       replaceStart: number;
     }
@@ -222,6 +224,7 @@ type TemplateCompletionContext =
       hasExistingValue: boolean;
       kind: "prop-binding";
       prefix: string;
+      preserveFollowingAttribute: boolean;
       replaceEnd: number;
       replaceStart: number;
     }
@@ -229,6 +232,7 @@ type TemplateCompletionContext =
       hasExistingValue: boolean;
       kind: "slot";
       prefix: string;
+      preserveFollowingAttribute: boolean;
       replaceEnd: number;
       replaceStart: number;
     }
@@ -4521,11 +4525,16 @@ const createTemplateCompletionItem = (
     start: document.positionAt(context.region.contentStart + completionContext.replaceStart)
   };
   const { newText, ...completionItem } = item;
+  const insertedText =
+    "preserveFollowingAttribute" in completionContext &&
+    completionContext.preserveFollowingAttribute
+      ? `${newText} `
+      : newText;
 
   return {
     ...completionItem,
     textEdit: {
-      newText,
+      newText: insertedText,
       range
     }
   };
@@ -6044,52 +6053,56 @@ const resolveTemplateCompletionContext = (
   const eventMatch = /(?:^|\s)(@[\w:-]*)$/.exec(openTag.fragment);
 
   if (eventMatch) {
-    const suffix = readValueAttributeCompletionSuffix(template, offset);
+    const prefix = eventMatch[1] ?? "";
+    const suffix = readValueAttributeCompletionSuffix(template, offset, prefix);
 
     return {
       ...suffix,
       kind: "event",
-      prefix: eventMatch[1] ?? "",
-      replaceStart: offset - (eventMatch[1]?.length ?? 0)
+      prefix,
+      replaceStart: offset - prefix.length
     };
   }
 
   const propMatch = /(?:^|\s)(:[\w:-]*)$/.exec(openTag.fragment);
 
   if (propMatch) {
-    const suffix = readValueAttributeCompletionSuffix(template, offset);
+    const prefix = propMatch[1] ?? "";
+    const suffix = readValueAttributeCompletionSuffix(template, offset, prefix);
 
     return {
       ...suffix,
       kind: "prop-binding",
-      prefix: propMatch[1] ?? "",
-      replaceStart: offset - (propMatch[1]?.length ?? 0)
+      prefix,
+      replaceStart: offset - prefix.length
     };
   }
 
   const slotMatch = /(?:^|\s)(#[\w-]*)$/.exec(openTag.fragment);
 
   if (slotMatch) {
-    const suffix = readValueAttributeCompletionSuffix(template, offset);
+    const prefix = slotMatch[1] ?? "";
+    const suffix = readValueAttributeCompletionSuffix(template, offset, prefix);
 
     return {
       ...suffix,
       kind: "slot",
-      prefix: slotMatch[1] ?? "",
-      replaceStart: offset - (slotMatch[1]?.length ?? 0)
+      prefix,
+      replaceStart: offset - prefix.length
     };
   }
 
   const directiveMatch = /(?:^|\s)(v-[\w:-]*)$/.exec(openTag.fragment);
 
   if (directiveMatch) {
-    const suffix = readValueAttributeCompletionSuffix(template, offset);
+    const prefix = directiveMatch[1] ?? "";
+    const suffix = readValueAttributeCompletionSuffix(template, offset, prefix);
 
     return {
       ...suffix,
       kind: "directive",
-      prefix: directiveMatch[1] ?? "",
-      replaceStart: offset - (directiveMatch[1]?.length ?? 0)
+      prefix,
+      replaceStart: offset - prefix.length
     };
   }
 
@@ -6111,14 +6124,25 @@ const resolveTemplateCompletionContext = (
 const readValueAttributeCompletionSuffix = (
   template: string,
   offset: number,
-): { hasExistingValue: boolean; replaceEnd: number } => {
+  prefix: string,
+): {
+  hasExistingValue: boolean;
+  preserveFollowingAttribute: boolean;
+  replaceEnd: number;
+} => {
   const suffix = template.slice(offset);
   const nameRemainder = /^[\w:-]*/.exec(suffix)?.[0] ?? "";
   const afterName = suffix.slice(nameRemainder.length);
+  const preserveFollowingAttribute =
+    ["@", ":", "#", "v-"].includes(prefix) &&
+    nameRemainder.length > 0 &&
+    /^\s*=/.test(afterName);
 
   return {
-    hasExistingValue: /^(?:\.[\w-]+)*\s*=/.test(afterName),
-    replaceEnd: offset + nameRemainder.length,
+    hasExistingValue:
+      !preserveFollowingAttribute && /^(?:\.[\w-]+)*\s*=/.test(afterName),
+    preserveFollowingAttribute,
+    replaceEnd: preserveFollowingAttribute ? offset : offset + nameRemainder.length,
   };
 };
 
@@ -7266,7 +7290,7 @@ const restoreTemplateExpressions = (
             offset >= 0 ? readLineIndent(result, offset) : "",
             options
           )
-        : formatMultilineObjectExpression(
+        : formatMultilineTemplateExpression(
             replacement.value,
             offset >= 0 ? readLineIndent(result, offset) : "",
             options
@@ -7275,6 +7299,113 @@ const restoreTemplateExpressions = (
 
     return result.replace(target, restoredExpression);
   }, value);
+};
+
+const formatMultilineTemplateExpression = (
+  expression: string,
+  expressionIndent: string,
+  options: ElfFormattingOptions
+) =>
+  formatInlineFragmentListExpression(expression, expressionIndent, options) ??
+  formatMultilineObjectExpression(expression, expressionIndent, options);
+
+const formatInlineFragmentListExpression = (
+  expression: string,
+  expressionIndent: string,
+  options: ElfFormattingOptions
+): string | null => {
+  const trimmed = expression.trim();
+
+  if (!trimmed.startsWith("${") || !trimmed.endsWith("}") || !/\r?\n/.test(trimmed)) {
+    return null;
+  }
+
+  const openingMatch = /\.map\s*\(\s*(\([^()\r\n]*\)|[A-Za-z_$][\w$]*)\s*=>\s*fragment\s*`/g;
+  let opening: RegExpExecArray | null = null;
+
+  for (const match of trimmed.matchAll(openingMatch)) {
+    opening = match;
+  }
+
+  if (!opening || opening.index === undefined) {
+    return null;
+  }
+
+  const templateStart = opening.index + opening[0].lastIndexOf("`");
+  const templateEnd = trimmed.lastIndexOf("`");
+  const closing = trimmed.slice(templateEnd + 1);
+
+  if (templateEnd <= templateStart || !/^\s*\)\s*}$/.test(closing)) {
+    return null;
+  }
+
+  const callback = opening[1] ?? "item";
+  const prefix = `${trimmed.slice(0, opening.index)}.map(${callback} => fragment\``;
+  const template = formatInlineFragmentTemplate(
+    dedentMultilineText(trimmed.slice(templateStart + 1, templateEnd)),
+    options
+  );
+
+  if (!template) {
+    return `${prefix}\`)}`;
+  }
+
+  const newLine = expression.includes("\r\n") ? "\r\n" : "\n";
+  const templateIndent = `${expressionIndent}${createIndentUnit(options)}`;
+
+  return [
+    prefix,
+    indentLines(template, templateIndent),
+    `${expressionIndent}\`)}`
+  ].join(newLine);
+};
+
+const formatInlineFragmentTemplate = (
+  template: string,
+  options: ElfFormattingOptions
+): string => {
+  if (!template) {
+    return "";
+  }
+
+  const protectedTemplate = protectTemplateExpressions(template);
+  const virtualDocument = TextDocument.create(
+    "elfui-inline-fragment.html",
+    "html",
+    0,
+    protectedTemplate.source
+  );
+  const edits = htmlLanguageService.format(virtualDocument, undefined, {
+    insertSpaces: options.insertSpaces,
+    tabSize: options.tabSize,
+    wrapAttributes: "auto",
+    ...(typeof options.wrapLineLength === "number"
+      ? { wrapLineLength: options.wrapLineLength }
+      : {})
+  });
+
+  return restoreTemplateExpressions(
+    applyVirtualTextEdits(virtualDocument.getText(), virtualDocument, edits),
+    protectedTemplate,
+    options
+  ).trim();
+};
+
+const dedentMultilineText = (value: string): string => {
+  const lines = value.trim().split(/\r?\n/);
+  const contentLines = lines.filter((line) => line.trim());
+
+  if (contentLines.length === 0) {
+    return "";
+  }
+
+  const commonIndent = Math.min(
+    ...contentLines.map((line) => line.match(/^[ \t]*/)?.[0].length ?? 0)
+  );
+
+  return lines
+    .map((line) => (line.trim() ? line.slice(commonIndent) : ""))
+    .join("\n");
 };
 
 const formatMultilineQuotedBinding = (

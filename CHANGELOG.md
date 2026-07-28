@@ -1,5 +1,13 @@
 # elfui-language-features
 
+## 0.3.4
+
+### Patch Changes
+
+- 2f63533: Suppress inline Fragment compiler temporaries and scoped callback false positives, settle nested
+  Fragment formatting before applying edits, and insert generated template declarations next to
+  their owning template.
+
 ## 0.3.3
 
 ### Patch Changes

@@ -14,8 +14,11 @@ only maintained home for the ElfUI VS Code extension. Do not modify the retired
   inlay hints, code actions, document links, folding, selection, linked editing, and color
   providers in ElfUI regions.
 - Local macro support for `defineHtml`, `defineProps`, `defineEmits`, `defineSlots`,
-  `defineModel`, and `useComponents`, including typed prop/default hover and typed `$event`
-  completion.
+  `defineModel`, `defineFragment`, `fragment`, and `useComponents`, including named Fragment
+  props/scope completion, source navigation, references, and rename.
+- `@elfui/compiler@0.1.0-beta.13` metadata schema v2 is the source of truth for structured
+  components, Fragment ownership/dependencies/identity/source ranges, compiler protocol, and
+  diagnostic summaries. The language core does not depend on the temporary v1 adapter.
 - Workspace and dependency component indexing with auto import, structured package metadata,
   typed prop/default hover, event payload hover, and typed slot scopes.
 - TypeScript server filtering narrowly scoped to false-positive template locals and
@@ -83,6 +86,10 @@ Each component supports legacy string arrays or structured values:
 `ElfUI: Generate Component Metadata` reuses the cached workspace index, writes only changed
 metadata, and adds the default `elfui.languageTools.components` declaration when a workspace
 `package.json` does not have one.
+
+Dependency metadata readers accept both the existing package metadata shape and compiler schema
+v2 JSON. Named Fragments are intentionally excluded from cross-file indexing because they are
+private compile-time slices.
 
 ## Source Layout
 

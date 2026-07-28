@@ -528,6 +528,40 @@ suite("ElfUI Language Features Smoke", function () {
     assert(hasCompletionLabel(items, "label"), "Expected typed prop completion.");
   });
 
+  test("provides named Fragment props and same-file definition in the real host", async () => {
+    const { document, position } = await openFixtureWithCursor(
+      [
+        'import { defineFragment, defineHtml } from "@elfui/core";',
+        "",
+        "interface CardProps {",
+        "  label: string;",
+        "  selected?: boolean;",
+        "}",
+        "",
+        "const SummaryCard = defineFragment<CardProps>(({ label }) => `",
+        "  <article>${label.toUpperCase()}</article>",
+        "`);",
+        "",
+        "export const Demo = defineHtml(`",
+        `  <SummaryCard ${CURSOR}:label=\${"value"} />`,
+        "`);",
+        ""
+      ].join("\n")
+    );
+    const items = await waitForCompletionLabels(document, position, [":label", ":selected"]);
+    const tagOffset = document.getText().lastIndexOf("<SummaryCard") + 2;
+    const definition = await waitForDefinitionTarget(
+      document,
+      document.positionAt(tagOffset),
+      document.uri.toString(),
+      "named Fragment same-file definition"
+    );
+
+    assert(hasCompletionLabel(items, ":label"), "Expected named Fragment prop completion.");
+    assert(hasCompletionLabel(items, ":selected"), "Expected optional Fragment prop completion.");
+    assert(definition, "Expected named Fragment definition.");
+  });
+
   test("provides DOM event member completions inside template expressions", async () => {
     const { document, position } = await openFixtureWithCursor(
       [

@@ -311,19 +311,41 @@ const injectMissingTemplateDeclaration = async (): Promise<string | null> => {
     return null;
   }
 
-  const actions = await vscode.commands.executeCommand<
-    Array<vscode.CodeAction | vscode.Command> | undefined
-  >(
-    "vscode.executeCodeActionProvider",
-    editor.document.uri,
-    editor.selection.isEmpty
-      ? new vscode.Range(editor.selection.active, editor.selection.active)
-      : editor.selection,
-    vscode.CodeActionKind.QuickFix.value,
+  const range = editor.selection.isEmpty
+    ? new vscode.Range(editor.selection.active, editor.selection.active)
+    : editor.selection;
+  const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
+  const sourcePrefix = editor.document.getText(
+    new vscode.Range(new vscode.Position(0, 0), editor.selection.active),
   );
-  const action = actions?.find((candidate) =>
-    /^Create (?:handler|method|state) "[A-Za-z_$][\w$]*"/.test(candidate.title),
-  );
+  const expectedName =
+    wordRange
+      ? editor.document.getText(wordRange)
+      : /([A-Za-z_$][\w$]*)$/.exec(sourcePrefix)?.[1] ?? null;
+  let action: vscode.CodeAction | vscode.Command | undefined;
+
+  for (let attempt = 0; attempt < 5 && !action; attempt += 1) {
+    const actions = await vscode.commands.executeCommand<
+      Array<vscode.CodeAction | vscode.Command> | undefined
+    >(
+      "vscode.executeCodeActionProvider",
+      editor.document.uri,
+      range,
+      vscode.CodeActionKind.QuickFix.value,
+    );
+
+    action = actions?.find((candidate) => {
+      const match = /^Create (?:handler|method|state) "([A-Za-z_$][\w$]*)"/.exec(
+        candidate.title,
+      );
+
+      return !!match && (!expectedName || match[1] === expectedName);
+    });
+
+    if (!action && attempt < 4) {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+  }
 
   if (!action) {
     vscode.window.setStatusBarMessage(

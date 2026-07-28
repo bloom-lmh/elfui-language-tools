@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@elfui/compiler':
-        specifier: 0.1.0-beta.7
-        version: 0.1.0-beta.7
+        specifier: 0.1.0-beta.13
+        version: 0.1.0-beta.13
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -180,20 +180,20 @@ packages:
   '@changesets/write@0.4.0':
     resolution: {integrity: sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q==}
 
-  '@elfui/compiler-template@0.1.0-beta.7':
-    resolution: {integrity: sha512-lwRiTprllfqruR3xBAT6NsTEcJKZ6MNIQLJ8TYMLTcHodB1edtktb5OBGa9MRgFmR8I04K7zjcyFebqeXcemsg==}
+  '@elfui/compiler-template@0.1.0-beta.13':
+    resolution: {integrity: sha512-GAJxY0/+FkLYuRceIoYEHV+2JK780PJsBqu8e4zbiEVs+MZPV8fjaX6fDhpdTNgOMkBut357NZjtYdRAPN419w==}
 
-  '@elfui/compiler@0.1.0-beta.7':
-    resolution: {integrity: sha512-EuSLrkAkd97actQPwemrCeT2BiZLGONbLJgFgozoecOYUzYPAEsNYR5S2B/P0OFZdPWbJdoaO0NOcMO8ZUobBA==}
+  '@elfui/compiler@0.1.0-beta.13':
+    resolution: {integrity: sha512-q6Pa/kpF+VohsQ8GtyvNL7ggVQWOvDj0BXgVUNavyySjIgOyhBgIshtmzhZPRtMVa3VT3Qvqt1oKKZT+ekZ/Yw==}
 
-  '@elfui/reactivity@0.1.0-beta.7':
-    resolution: {integrity: sha512-z0C21HLELXtqu0egGaZ/ckYjlTbGCnGOY4kyEUNHmLsvrTF/Jj09lhOJjjLajdG3Ii+FyaNMILrTnMpz17awHg==}
+  '@elfui/reactivity@0.1.0-beta.13':
+    resolution: {integrity: sha512-f2koDZ5tLWQexEfKQOikc/MZjNoeXWXNswVX8TzqWj7lnCiSXxpReIQqzNNf2zSeqMpT9n4HAzOgY/swtX7+yQ==}
 
-  '@elfui/runtime@0.1.0-beta.7':
-    resolution: {integrity: sha512-XBNxa4VPXeGx9DiFlvJwX7D7nlveFKrBqUYGKOGtlFWQ3Zu1vefyCTLenp+1aRwfztLgChWwmAHh+ZHngZWvLQ==}
+  '@elfui/runtime@0.1.0-beta.13':
+    resolution: {integrity: sha512-tQp5ksoyi+1Q8+ymeA1c4lq/kiEsUqPQojQEzcYzsA1muOQ/pHBRfB1n/f1JVN1CSr9FG6WjQXNI5Q5rZYAxhg==}
 
-  '@elfui/shared@0.1.0-beta.7':
-    resolution: {integrity: sha512-Iat4r8xC1VkDk0UfOPdM/v54RqXfyNzYNR8Sem67XG7e/Six4RIjpRKwBqmC24ie1zahgTYifITqFQLeL03zLQ==}
+  '@elfui/shared@0.1.0-beta.13':
+    resolution: {integrity: sha512-5sumf2TexxBlXwfM86DWArmv+MqX/hIvrGsu14yBXL1TLlg3onnUsM5ki/OeWloK5qc2e8UqEEtKujo+IFO4zQ==}
 
   '@emnapi/core@1.11.1':
     resolution: {integrity: sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ==}
@@ -2565,28 +2565,28 @@ snapshots:
       human-id: 4.2.0
       prettier: 2.8.8
 
-  '@elfui/compiler-template@0.1.0-beta.7':
+  '@elfui/compiler-template@0.1.0-beta.13':
     dependencies:
-      '@elfui/shared': 0.1.0-beta.7
+      '@elfui/shared': 0.1.0-beta.13
 
-  '@elfui/compiler@0.1.0-beta.7':
+  '@elfui/compiler@0.1.0-beta.13':
     dependencies:
-      '@elfui/compiler-template': 0.1.0-beta.7
-      '@elfui/reactivity': 0.1.0-beta.7
-      '@elfui/runtime': 0.1.0-beta.7
-      '@elfui/shared': 0.1.0-beta.7
+      '@elfui/compiler-template': 0.1.0-beta.13
+      '@elfui/reactivity': 0.1.0-beta.13
+      '@elfui/runtime': 0.1.0-beta.13
+      '@elfui/shared': 0.1.0-beta.13
       typescript: 5.9.3
 
-  '@elfui/reactivity@0.1.0-beta.7':
+  '@elfui/reactivity@0.1.0-beta.13':
     dependencies:
-      '@elfui/shared': 0.1.0-beta.7
+      '@elfui/shared': 0.1.0-beta.13
 
-  '@elfui/runtime@0.1.0-beta.7':
+  '@elfui/runtime@0.1.0-beta.13':
     dependencies:
-      '@elfui/reactivity': 0.1.0-beta.7
-      '@elfui/shared': 0.1.0-beta.7
+      '@elfui/reactivity': 0.1.0-beta.13
+      '@elfui/shared': 0.1.0-beta.13
 
-  '@elfui/shared@0.1.0-beta.7': {}
+  '@elfui/shared@0.1.0-beta.13': {}
 
   '@emnapi/core@1.11.1':
     dependencies:

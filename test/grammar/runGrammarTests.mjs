@@ -131,6 +131,18 @@ const cases = [
     }
   ],
   [
+    "highlights named and inline Fragments",
+    () => {
+      const named = tokenize(
+        "const Card = defineFragment<Props>(\n  ({ label }) => `<article>${label}</article>`,\n);"
+      );
+      const inline = tokenize("const view = fragment`<footer>${label}</footer>`;");
+
+      expectScope(findToken(named, "article"), "entity.name.tag.html", "named Fragment tag");
+      expectScope(findToken(inline, "footer"), "entity.name.tag.html", "inline Fragment tag");
+    }
+  ],
+  [
     "highlights defineStyle CSS",
     () => {
       const tokens = tokenize("defineStyle(`\n  :host {\n    color: red;\n  }\n`);");

@@ -32,6 +32,21 @@
     ],
     "description": "Create an ElfUI macro component with starter state and handler."
   },
+  "ElfUI local Fragment": {
+    "prefix": "elffragment",
+    "body": [
+      "interface ${1:FragmentProps} {",
+      "  ${2:label}: string;",
+      "}",
+      "",
+      "const ${3:LocalFragment} = defineFragment<${1:FragmentProps}>(",
+      "  ({ ${2:label} }) => `",
+      "    <div>\\${${2:label}}</div>",
+      "  `,",
+      ");"
+    ],
+    "description": "Create a typed local compile-time Fragment."
+  },
   "ElfUI lifecycle template ref": {
     "prefix": "elflifecycle",
     "body": [

@@ -224,6 +224,61 @@ describe("ElfUI language service", () => {
     expect(declarationAverage).toBeLessThan(50);
   });
 
+  it("merges nested inline Fragment formatting without overlapping edits", () => {
+    const source = `
+      import { defineHtml, fragment } from "@elfui/core";
+
+      export const Demo = defineHtml(\`<main>\${fragment\`<section><strong>Value</strong></section>\`}</main>\`);
+    `;
+    const document = createDocument(source);
+    const edits = createElfFormattingEdits(document, {
+      insertSpaces: true,
+      tabSize: 2
+    });
+    const formatted = applyTextEdits(source, edits);
+
+    expect(edits).toHaveLength(1);
+    expect(formatted).toContain("fragment`");
+    expect(formatted).toContain("<section>");
+    expect(formatted).toContain("<strong>Value</strong>");
+  });
+
+  it("keeps warm Fragment completion and formatting in the millisecond budget", () => {
+    const source = `
+      import { defineFragment, defineHtml } from "@elfui/core";
+
+      interface CardProps {
+        label: string;
+      }
+
+      const Card = defineFragment<CardProps>(({ label }) => \`
+        <article>\${label.toUpperCase()}</article>
+      \`);
+
+      export const Demo = defineHtml(\`<main><Card :label=\${"value"} /></main>\`);
+    `;
+    const document = TextDocument.create("file:///fragment-performance.ts", "typescript", 1, source);
+    const position = positionAfter(document, source, "${label.");
+
+    createElfCompletionList(document, position);
+    createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 });
+
+    const completionStart = performance.now();
+    for (let index = 0; index < 10; index += 1) {
+      createElfCompletionList(document, position);
+    }
+    const completionAverage = (performance.now() - completionStart) / 10;
+
+    const formattingStart = performance.now();
+    for (let index = 0; index < 10; index += 1) {
+      createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 });
+    }
+    const formattingAverage = (performance.now() - formattingStart) / 10;
+
+    expect(completionAverage).toBeLessThan(50);
+    expect(formattingAverage).toBeLessThan(50);
+  });
+
   it("provides event completions for @elfui/core macro components", () => {
     const source = `
       import { defineHtml } from "@elfui/core";
@@ -972,7 +1027,7 @@ describe("ElfUI language service", () => {
     expect(diagnostics.some((item) => item.includes("disabeld"))).toBe(true);
   });
 
-  it("accepts beta.7 direct defineHtml literals", () => {
+  it("accepts beta.13 direct defineHtml literals", () => {
     const source = `
       /// <!--@elf component-->
       import { defineHtml, defineProps } from "@elfui/core";
@@ -1278,5 +1333,95 @@ describe("ElfUI language service", () => {
     expect(
       readHoverText(createElfHover(document, positionAfter(document, source, "#footer"), options))
     ).toContain("Scope: `{ close(): void }`");
+  });
+
+  it("supports named Fragment completion, props, definition, references and rename", () => {
+    const source = `
+      import { defineFragment, defineHtml } from "@elfui/core";
+
+      interface CardProps {
+        label: string;
+        selected?: boolean;
+      }
+
+      const SummaryCard = defineFragment<CardProps>(
+        ({ label, selected }) => \`
+          <article :class=\${selected ? "selected" : ""}>
+            \${label.toUpperCase()}
+          </article>
+        \`
+      );
+
+      export const Dashboard = defineHtml(\`
+        <main>
+          <SummaryCard :
+        </main>
+      \`);
+    `;
+    const document = TextDocument.create(
+      "file:///E:/项目/组件库/汇总.ts",
+      "typescript",
+      0,
+      source
+    );
+    const tagLabels = createElfCompletionList(
+      document,
+      positionAfter(document, source, "<Summary")
+    ).items.map((item) => item.label);
+    const propLabels = createElfCompletionList(
+      document,
+      positionAfter(document, source, "<SummaryCard :")
+    ).items.map((item) => item.label);
+    const definition = createElfDefinition(
+      document,
+      positionAfter(document, source, "<SummaryCard")
+    );
+    const references = createElfReferences(
+      document,
+      positionAfter(document, source, "const SummaryCard")
+    );
+    const rename = createElfRenameEdit(
+      document,
+      positionAfter(document, source, "const SummaryCard"),
+      "CompactCard"
+    );
+    const renamed = applyTextEdits(source, rename?.changes?.[document.uri] ?? []);
+    const fragmentMemberLabels = createElfCompletionList(
+      document,
+      positionAfter(document, source, "${label.")
+    ).items.map((item) => item.label);
+
+    expect(tagLabels).toContain("SummaryCard");
+    expect(propLabels).toEqual(expect.arrayContaining([":label", ":selected"]));
+    expect(definition).toHaveLength(1);
+    expect(readRange(document, definition[0]!.range)).toBe("SummaryCard");
+    expect(references.map((item) => readRange(document, item.range))).toEqual(
+      expect.arrayContaining(["SummaryCard", "SummaryCard"])
+    );
+    expect(renamed).toContain("const CompactCard");
+    expect(renamed).toContain("<CompactCard :");
+    expect(fragmentMemberLabels).toContain("charAt");
+  });
+
+  it("maps beta.13 Fragment cycle diagnostics from structured ranges", () => {
+    const source = `
+      import { defineFragment, defineHtml } from "@elfui/core";
+
+      const First = defineFragment(() => \`<Second />\`);
+      const Second = defineFragment(() => \`<First />\`);
+
+      export default defineHtml(\`<First />\`);
+    `;
+    const document = createDocument(source);
+    const diagnostic = createElfDiagnostics(document).find(
+      (item) => item.code === "ELF_MACRO_FRAGMENT_CYCLE"
+    );
+
+    expect(diagnostic).toBeDefined();
+    expect(document.offsetAt(diagnostic!.range.start)).toBeGreaterThan(0);
+    expect(diagnostic?.data).toMatchObject({
+      fragment: expect.any(String),
+      sourceId: expect.any(String)
+    });
   });
 });

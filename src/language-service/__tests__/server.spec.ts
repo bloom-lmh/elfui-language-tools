@@ -112,6 +112,58 @@ const writePackageComponentMetadata = (root: string) => {
   return metadataPath;
 };
 
+const writeCompilerV2PackageMetadata = (root: string) => {
+  const packageRoot = path.join(root, "node_modules", "@acme", "compiler-v2-kit");
+  const metadataPath = path.join(packageRoot, "dist", "elfui.metadata.json");
+
+  fs.mkdirSync(path.dirname(metadataPath), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "package.json"),
+    JSON.stringify({
+      dependencies: {
+        "@acme/compiler-v2-kit": "1.0.0"
+      }
+    }),
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(packageRoot, "package.json"),
+    JSON.stringify({
+      elfui: {
+        languageTools: {
+          components: "./dist/elfui.metadata.json"
+        }
+      },
+      name: "@acme/compiler-v2-kit",
+      version: "1.0.0"
+    }),
+    "utf8"
+  );
+  fs.writeFileSync(
+    metadataPath,
+    JSON.stringify({
+      compilerProtocol: 1,
+      components: [
+        {
+          events: [{ name: "select", typeText: "[value: string]" }],
+          exportName: "CompilerButton",
+          localName: "CompilerButton",
+          props: [{ name: "label", runtimeOption: "String", typeText: "string" }],
+          slots: { typeText: "{ default?: () => unknown }" },
+          tagName: "elf-compiler-button"
+        }
+      ],
+      diagnostics: { codes: [], errors: 0, warnings: 0 },
+      fragments: [],
+      schemaVersion: 2,
+      sourceId: "src/CompilerButton.ts"
+    }),
+    "utf8"
+  );
+
+  return metadataPath;
+};
+
 describe("workspace component index", () => {
   it("honors the scan limit and reports truncation", () => {
     const root = createTempRoot();
@@ -307,6 +359,31 @@ describe("workspace component index", () => {
       "emit:confirm",
       "slot:default",
       "slot:footer"
+    ]);
+  });
+
+  it("indexes compiler schema v2 component Metadata JSON", () => {
+    const root = createTempRoot();
+    const metadataPath = writeCompilerV2PackageMetadata(root);
+    const index = createWorkspaceComponentIndex();
+
+    rebuildWorkspaceComponentIndex([root], index, "compiler-v2-metadata");
+
+    const component = [...index.componentsByUri.values()]
+      .flat()
+      .find((item) => item.localName === "CompilerButton");
+
+    expect(component).toMatchObject({
+      emits: ["select"],
+      importPath: "@acme/compiler-v2-kit",
+      props: ["label"],
+      slotsType: "{ default?: () => unknown }",
+      tagName: "elf-compiler-button"
+    });
+    expect(component?.fileName).toBe(metadataPath);
+    expect(component?.propDetails).toEqual([{ name: "label", type: "string" }]);
+    expect(component?.emitDetails).toEqual([
+      { name: "select", payloadType: "[value: string]" }
     ]);
   });
 

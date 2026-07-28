@@ -914,12 +914,21 @@ const isDiagnosticInsideTemplateComment = (
 
 const mapMacroDiagnostic = (document: TextDocument, diagnostic: ElfDiagnostic): Diagnostic => {
   const source = document.getText();
-  const start = clamp(diagnostic.start ?? 0, 0, source.length);
-  const end = clamp(diagnostic.end ?? start, start, source.length);
+  const start = clamp(diagnostic.range?.start ?? diagnostic.start ?? 0, 0, source.length);
+  const end = clamp(
+    diagnostic.range?.end ?? diagnostic.end ?? start,
+    start,
+    source.length
+  );
   const hint = diagnostic.hint ? `\n${diagnostic.hint}` : "";
 
   return {
     code: diagnostic.code,
+    data: {
+      ...(diagnostic.component ? { component: diagnostic.component } : {}),
+      ...(diagnostic.fragment ? { fragment: diagnostic.fragment } : {}),
+      ...(diagnostic.sourceId ? { sourceId: diagnostic.sourceId } : {})
+    },
     message: `${diagnostic.message}${hint}`,
     range: {
       end: document.positionAt(end),
@@ -998,15 +1007,31 @@ export const createElfDefinition = (
     return projectDefinitions;
   }
 
-  return templateContext.component.symbols
-    .filter((symbol) => symbol.name === word)
-    .map((symbol) => ({
-      range: {
-        end: document.positionAt(symbol.end),
-        start: document.positionAt(symbol.start)
-      },
-      uri: document.uri
-    }));
+  const seen = new Set<string>();
+
+  return templateContext.component.symbols.flatMap((symbol) => {
+    if (symbol.name !== word) {
+      return [];
+    }
+
+    const key = `${symbol.start}:${symbol.end}`;
+
+    if (seen.has(key)) {
+      return [];
+    }
+
+    seen.add(key);
+
+    return [
+      {
+        range: {
+          end: document.positionAt(symbol.end),
+          start: document.positionAt(symbol.start)
+        },
+        uri: document.uri
+      }
+    ];
+  });
 };
 
 const createProjectComponentDefinitions = (
@@ -1833,7 +1858,7 @@ const createTemplateExpressionSemanticTokens = (
   component: ComponentMeta,
   region: EmbeddedRegion
 ): ElfSemanticToken[] => {
-  const knownNames = createKnownTemplateNames(component);
+  const knownNames = createKnownTemplateNames(component, region);
 
   return collectTemplateExpressions(region.content).flatMap((expression) => {
     const locals = new Set([...expression.locals, ...knownNames]);
@@ -1872,6 +1897,7 @@ const semanticTokenTypeForComponentSymbol = (
 ): ElfSemanticToken["type"] => {
   switch (kind) {
     case "component":
+    case "fragment":
       return "class";
     case "emit":
       return "event";
@@ -2085,11 +2111,115 @@ export const createElfFormattingEdits = (
   options: ElfFormattingOptions
 ): TextEdit[] => {
   const analysis = analyzeDocument(document);
+  const regions = collectUniqueEmbeddedRegions(analysis.components);
+  const roots = regions.filter(
+    (region) =>
+      !regions.some(
+        (candidate) =>
+          candidate !== region &&
+          candidate.kind === region.kind &&
+          strictlyContainsRegion(candidate, region)
+      )
+  );
 
-  return analysis.components.flatMap((component) => [
-    ...component.templates.flatMap((region) => formatEmbeddedRegion(document, region, options)),
-    ...component.styles.flatMap((region) => formatEmbeddedRegion(document, region, options))
-  ]);
+  return roots.flatMap((region) =>
+    formatEmbeddedRegionTree(document, region, regions, options)
+  );
+};
+
+const collectUniqueEmbeddedRegions = (components: ComponentMeta[]): EmbeddedRegion[] => {
+  const seen = new Set<string>();
+
+  return components
+    .flatMap((component) => [...component.templates, ...component.styles])
+    .filter((region) => {
+      const key = `${region.kind}:${region.contentStart}:${region.contentEnd}`;
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+};
+
+const strictlyContainsRegion = (
+  container: EmbeddedRegion,
+  candidate: EmbeddedRegion
+): boolean =>
+  container.contentStart < candidate.contentStart &&
+  container.contentEnd > candidate.contentEnd;
+
+const formatEmbeddedRegionTree = (
+  document: TextDocument,
+  region: EmbeddedRegion,
+  regions: EmbeddedRegion[],
+  options: ElfFormattingOptions
+): TextEdit[] => {
+  const nested = regions.filter(
+    (candidate) =>
+      candidate.kind === region.kind &&
+      strictlyContainsRegion(region, candidate)
+  );
+  const children = nested.filter(
+    (candidate) =>
+      !nested.some(
+        (other) =>
+          other !== candidate &&
+          strictlyContainsRegion(other, candidate)
+      )
+  );
+
+  if (children.length === 0) {
+    return formatEmbeddedRegion(document, region, options);
+  }
+
+  let source = document.getText();
+  let delta = 0;
+
+  children
+    .sort((left, right) => right.contentStart - left.contentStart)
+    .forEach((child) => {
+      const childEdit = formatEmbeddedRegionTree(document, child, regions, options)[0];
+
+      if (!childEdit) {
+        return;
+      }
+
+      source =
+        source.slice(0, child.contentStart) +
+        childEdit.newText +
+        source.slice(child.contentEnd);
+      delta += childEdit.newText.length - (child.contentEnd - child.contentStart);
+    });
+
+  const temporaryDocument = TextDocument.create(
+    document.uri,
+    document.languageId,
+    document.version,
+    source
+  );
+  const temporaryEnd = region.contentEnd + delta;
+  const temporaryRegion: EmbeddedRegion = {
+    ...region,
+    content: source.slice(region.contentStart, temporaryEnd),
+    contentEnd: temporaryEnd,
+    end: region.end + delta
+  };
+  const formatted = formatEmbeddedRegion(temporaryDocument, temporaryRegion, options)[0];
+
+  return formatted
+    ? [
+        {
+          newText: formatted.newText,
+          range: {
+            end: document.positionAt(region.contentEnd),
+            start: document.positionAt(region.contentStart)
+          }
+        }
+      ]
+    : [];
 };
 
 export const createElfRangeFormattingEdits = (
@@ -2130,6 +2260,7 @@ const symbolKindForComponentSymbol = (
 ): SymbolKind => {
   switch (kind) {
     case "component":
+    case "fragment":
       return SymbolKind.Class;
     case "emit":
       return SymbolKind.Event;
@@ -2267,7 +2398,13 @@ const collectElfReferenceItems = (
       })
     );
 
-  target.component.templates.forEach((region) => {
+  const templates = target.component.uses.some(
+    (item) => item.source === "fragment" && item.localName === target.name
+  )
+    ? target.component.referenceTemplates
+    : target.component.templates;
+
+  templates.forEach((region) => {
     collectTemplateReferenceItems(document, region, aliases).forEach((item) => add(result, item));
   });
 
@@ -2904,6 +3041,14 @@ const createElfScopeExpressionCompletions = (
   ...context.component.setupReturns.map((label) =>
     createTemplateCompletionItem(document, context, completionContext, {
       detail: "ElfUI setup return",
+      kind: CompletionItemKind.Variable,
+      label,
+      newText: label
+    })
+  ),
+  ...(context.region.scopeNames ?? []).map((label) =>
+    createTemplateCompletionItem(document, context, completionContext, {
+      detail: "ElfUI Fragment scope",
       kind: CompletionItemKind.Variable,
       label,
       newText: label
@@ -3591,9 +3736,27 @@ declare module "@elfui/core" {
     peek(): T;
     set(value: T): void;
   }
+  export interface MacroFragment<Props extends object = Record<string, unknown>> {
+    readonly __elfFragmentProps?: Readonly<Props>;
+  }
+  export interface ElfUIApp {
+    unmount(): void;
+  }
+  export type ElfUIAppPluginCleanup = () => void;
+  export type ElfUIAppPluginFn<T = unknown> =
+    (app: ElfUIApp, options?: T) => void | ElfUIAppPluginCleanup;
+  export interface ElfUIAppPluginObject<T = unknown> {
+    install: ElfUIAppPluginFn<T>;
+  }
+  export type ElfUIAppPlugin<T = unknown> =
+    ElfUIAppPluginFn<T> | ElfUIAppPluginObject<T>;
   export function defineProps<T extends object = { [key: string]: unknown }>(options?: unknown): T;
   export function defineEmits<T = { [key: string]: unknown }>(options?: unknown): T;
   export function defineSlots<T = { [key: string]: unknown }>(): T;
+  export function defineFragment<Props extends object = Record<string, unknown>>(
+    render: (props: Readonly<Props>) => string
+  ): MacroFragment<Props>;
+  export function fragment(strings: TemplateStringsArray, ...values: unknown[]): string;
   export function defineHtml<T = unknown>(template: T): unknown;
   export function defineStyle(...styles: Array<string | null | undefined>): void;
   export function useComponents(components: unknown): void;
@@ -3604,6 +3767,7 @@ declare module "@elfui/core" {
     value: T | null;
     peek(): T | null;
   };
+  export function useId(prefix?: string): string;
   export function onMounted(callback: () => void): void;
   export function onUnmounted(callback: () => void): void;
 }
@@ -3615,7 +3779,7 @@ const createTemplateForLocalDeclarations = (
   context: EmbeddedDocumentContext,
   projectComponents: ElfProjectComponent[]
 ): string[] => {
-  const declarations: string[] = [];
+  const declarations: string[] = createFragmentScopeLocalDeclarations(context);
   const visibleTemplate = maskEmbeddedComments(template);
   const vForPattern = /\sv-for\s*=\s*(["'])([\s\S]*?)\1/g;
 
@@ -3643,6 +3807,33 @@ const createTemplateForLocalDeclarations = (
   declarations.push(...createEventLocalDeclarations(visibleTemplate, offset));
 
   return declarations;
+};
+
+const createFragmentScopeLocalDeclarations = (
+  context: EmbeddedDocumentContext
+): string[] => {
+  const scopeNames = context.region.scopeNames ?? [];
+
+  if (scopeNames.length === 0) {
+    return [];
+  }
+
+  const fragment = context.component.fragments.find(
+    (candidate) =>
+      candidate.source.start === context.region.contentStart &&
+      candidate.source.end === context.region.contentEnd
+  );
+
+  return scopeNames.map((name) => {
+    const propType = fragment?.propDetails.find((prop) => prop.name === name)?.type;
+    const type =
+      propType ??
+      (scopeNames.length === 1 && fragment?.propsType
+        ? `Readonly<${fragment.propsType}>`
+        : "unknown");
+
+    return `const ${name} = null as unknown as ${type};`;
+  });
 };
 
 const createEventLocalDeclarations = (template: string, offset: number): string[] => {
@@ -4274,7 +4465,7 @@ const createTemplateDeclarationActionAtRange = (
     templateGlobals.has(word.value) ||
     templateReservedWords.has(word.value) ||
     expression.locals.has(word.value) ||
-    createKnownTemplateNames(context.component).has(word.value) ||
+    createKnownTemplateNames(context.component, context.region).has(word.value) ||
     isPropertyAccess(expression.value, word.start) ||
     isObjectPropertyKey(expression.value, word.end)
   ) {
@@ -6318,7 +6509,12 @@ const createProjectReferenceHover = (target: ElfProjectReferenceTarget): string 
 const formatHoverNames = (names: string[]) => names.map((name) => `\`${name}\``).join(", ");
 
 const createLocalComponentHover = (component: ComponentUseMeta): string => {
-  const lines = [`**<${component.localName}>**`, "ElfUI local component."];
+  const lines = [
+    `**<${component.localName}>**`,
+    component.source === "fragment"
+      ? "ElfUI local compile-time Fragment."
+      : "ElfUI local component."
+  ];
 
   if (component.expression) {
     lines.push(`Source: \`${component.expression}\``);
@@ -6386,30 +6582,37 @@ const findEmbeddedDocumentContext = (
   }
 
   const analysis = analyzeDocument(document);
-
-  for (const component of analysis.components) {
+  const candidates = analysis.components.flatMap((component) => {
     const regions = kind === "template" ? component.templates : component.styles;
-    const region = regions.find((item) => isInsideEmbeddedRegion(item, offset));
 
-    if (region) {
-      const virtualDocument = createVirtualDocument(document.uri, region);
-      const virtualOffset = clamp(offset - region.contentStart, 0, region.content.length);
+    return regions
+      .filter((region) => isInsideEmbeddedRegion(region, offset))
+      .map((region) => ({ component, region }));
+  });
+  const match = candidates.sort(
+    (left, right) =>
+      left.region.contentEnd - left.region.contentStart -
+      (right.region.contentEnd - right.region.contentStart)
+  )[0];
 
-      if (isOffsetInsideEmbeddedComment(document.uri, region, virtualOffset)) {
-        return null;
-      }
-
-      return {
-        component,
-        components: analysis.components,
-        region,
-        virtualDocument,
-        virtualPosition: virtualDocument.positionAt(virtualOffset)
-      };
-    }
+  if (!match) {
+    return null;
   }
 
-  return null;
+  const virtualDocument = createVirtualDocument(document.uri, match.region);
+  const virtualOffset = clamp(offset - match.region.contentStart, 0, match.region.content.length);
+
+  if (isOffsetInsideEmbeddedComment(document.uri, match.region, virtualOffset)) {
+    return null;
+  }
+
+  return {
+    component: match.component,
+    components: analysis.components,
+    region: match.region,
+    virtualDocument,
+    virtualPosition: virtualDocument.positionAt(virtualOffset)
+  };
 };
 
 const mayBeInsideEmbeddedRegion = (
@@ -6419,7 +6622,7 @@ const mayBeInsideEmbeddedRegion = (
 ): boolean => {
   const pattern =
     kind === "template"
-      ? /\bdefineHtml\b\s*(?:<[^`]*?>\s*)?\(\s*`/g
+      ? /\b(?:defineHtml\b\s*(?:<[^`]*?>\s*)?\(\s*`|fragment\s*`)/g
       : /\bdefineStyle\b\s*(?:<[^`]*?>\s*)?\(\s*`/g;
   let lastOpen = -1;
 
@@ -7207,12 +7410,16 @@ const readForSourceExpression = (
   };
 };
 
-const createKnownTemplateNames = (component: ComponentMeta): Set<string> =>
+const createKnownTemplateNames = (
+  component: ComponentMeta,
+  region?: EmbeddedRegion
+): Set<string> =>
   new Set([
     ...component.props,
     ...component.setupReturns,
     ...component.uses.map((item) => item.localName),
     ...component.slots,
+    ...(region?.scopeNames ?? []),
     ...(component.formControl ? ["ctx", "form"] : [])
   ]);
 
@@ -7324,6 +7531,15 @@ const findTemplateComponentDefinitionForTag = (
   }
 
   const registration = findComponentRegistrationForTag(owner, tag);
+
+  if (registration?.source === "fragment") {
+    return {
+      emits: [],
+      localName: registration.localName,
+      props: registration.props ?? [],
+      slots: []
+    };
+  }
 
   return registration?.slotsType
     ? {

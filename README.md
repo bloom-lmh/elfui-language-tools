@@ -31,7 +31,9 @@ Marketplace, the same pane can install it by name instead.
 
 - Macro component support for ordinary `.ts` / `.tsx` files that export `defineHtml()` components.
 - Realtime macro diagnostics from the ElfUI macro compiler, including template TypeScript errors, slot checks, and structured source ranges.
-- Macro-aware completion and hover for `defineProps()`, `defineEmits()`, `defineSlots()`, `defineHtml()`, `useComponents()`, lifecycle hooks, and typed `useTemplateRef()` values.
+- Macro-aware completion and hover for `defineProps()`, `defineEmits()`, `defineSlots()`, `defineHtml()`, `defineFragment()`, `fragment`, `useComponents()`, lifecycle hooks, `useId()`, and typed `useTemplateRef()` values.
+- Compiler metadata schema v2 support, including compiler protocol, structured component contracts, Fragment ownership/dependencies/identity/source ranges, and structured diagnostics.
+- Named Fragment tag and Props completion, source definition, references, rename, typed render scope completion, and nested Fragment formatting without overlapping edits.
 - Template prop hover for local macro components includes the individual TypeScript type and statically declared default value when available.
 - Hover metadata for indexed workspace and package components, including import source, typed props with static defaults, events, slots, and typed slot scopes.
 - HTML completion, hover, diagnostics, and closing tag support inside `defineHtml(\`...\`)` regions.
@@ -124,6 +126,11 @@ The metadata JSON can list exported components:
 ```
 
 `importPath` is optional and defaults to the package name. `props` and `emits` also accept the legacy string form such as `["label", "open"]` or `["confirm"]`; use the structured form to show prop type/default value and event payload type in template hover.
+
+The package index also accepts `MacroComponentMetadata` schema v2 JSON emitted by
+`@elfui/compiler@0.1.0-beta.13`. Structured `props`, `events`, `slots.typeText`, and `tagName`
+are consumed directly. Named Fragments remain file-local and are never exposed as package
+components or auto-import candidates.
 
 Run `ElfUI: Generate Component Metadata` in a component-library workspace to write `elfui.components.json` (or the existing declared metadata path). When `package.json` exists without an ElfUI metadata declaration, the command adds `elfui.languageTools.components` automatically. It uses the language server's cached workspace index and skips unchanged writes.
 

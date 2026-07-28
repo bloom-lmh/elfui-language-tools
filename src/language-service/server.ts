@@ -1434,9 +1434,9 @@ const readIndexedPackageMetadataComponent = (
   const importPath = readString(entry.importPath) ?? packageName;
   const propMetadata = readPackageComponentProps(entry.props);
   const props = propMetadata.names;
-  const emitMetadata = readPackageComponentEmits(entry.emits);
+  const emitMetadata = readPackageComponentEmits(entry.emits ?? entry.events);
   const emits = emitMetadata.names;
-  const slots = readNameArray(entry.slots);
+  const slots = readPackageComponentSlots(entry.slots);
   const slotScopes = readPackageComponentSlotScopes(entry.slotScopes);
   const symbols = createPackageComponentSymbols(props, emits, slots);
   const definition = createZeroRange();
@@ -1455,7 +1455,7 @@ const readIndexedPackageMetadataComponent = (
       props,
       slotScopes,
       slots,
-      slotsType: readString(entry.slotsType),
+      slotsType: readString(entry.slotsType) ?? readStructuredSlotsType(entry.slots),
       symbols,
       tagName: readString(entry.tagName) ?? null,
       uri
@@ -1499,7 +1499,10 @@ const readPackageComponentProps = (
     }
 
     const existing = details.get(name) ?? { name };
-    const type = readString(item.type);
+    const type =
+      readString(item.type) ??
+      readString(item.typeText) ??
+      readString(item.runtimeOption);
     const defaultValue = readPackagePropDefaultValue(
       Object.hasOwn(item, "default") ? item.default : item.defaultValue
     );
@@ -1545,7 +1548,10 @@ const readPackageComponentEmits = (
     }
 
     const existing = details.get(name) ?? { name };
-    const payloadType = readString(item.payloadType) ?? readString(item.type);
+    const payloadType =
+      readString(item.payloadType) ??
+      readString(item.type) ??
+      readString(item.typeText);
 
     details.set(name, {
       ...existing,
@@ -1585,6 +1591,21 @@ const readPackageComponentSlotScopes = (value: unknown): ElfProjectComponentSlot
         return name && scopeType ? [{ name, scopeType }] : [];
       })
     : [];
+
+const readPackageComponentSlots = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return readNameArray(value);
+  }
+
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  return readNameArray(value.names);
+};
+
+const readStructuredSlotsType = (value: unknown): string | undefined =>
+  isRecord(value) ? readString(value.typeText) : undefined;
 
 const createPackageComponentSymbols = (
   props: string[],

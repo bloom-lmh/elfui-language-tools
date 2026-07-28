@@ -5,9 +5,16 @@ const supportedLanguages = ["typescript", "typescriptreact", "javascript", "java
 const macroCompletions = [
   completion("defineHtml", "defineHtml(`…`)", "defineHtml(`${1:<main>$0</main>}`)"),
   completion("defineStyle", "defineStyle(`…`)", "defineStyle(`${1::host { display: block; }}$0`)"),
+  completion(
+    "defineFragment",
+    "Create a typed local Fragment",
+    "defineFragment<${1:Props}>((props) => `${2:<div>$0</div>}`)"
+  ),
+  completion("fragment", "Create an inline Fragment", "fragment`${1:<div>$0</div>}`"),
   completion("useRef", "Create reactive state", "useRef(${1:initialValue})"),
   completion("useTemplateRef", "Create a typed template ref", "useTemplateRef<${1:HTMLElement}>(\"${2:element}\")"),
   completion("useComputed", "Create derived state", "useComputed(() => ${1:value})"),
+  completion("useId", "Create a stable component ID", "useId(\"${1:elf}\")"),
   completion("onMounted", "Run after the component template mounts", "onMounted(() => {\n  $0\n})"),
   completion("onUnmounted", "Run before the component unmounts", "onUnmounted(() => {\n  $0\n})"),
   completion("createApp", "Mount an ElfUI application", "createApp(${1:App}).mount(\"#app\")")
@@ -37,7 +44,7 @@ const hasElfTemplate = (document: vscode.TextDocument, position?: vscode.Positio
     position ? new vscode.Range(new vscode.Position(0, 0), position) : undefined
   );
   const matches = [
-    ...source.matchAll(/\bdefineHtml\s*(?:<[^`]*?>\s*)?\(\s*`/g)
+    ...source.matchAll(/\b(?:defineHtml\s*(?:<[^`]*?>\s*)?\(\s*|fragment\s*)`/g)
   ];
   const match = matches.at(-1);
   const openingBacktick = match ? match.index + match[0].lastIndexOf("`") : -1;
@@ -104,7 +111,7 @@ export const activate = (context: vscode.ExtensionContext) => {
     supportedLanguages,
     {
       provideCompletionItems(document, position) {
-        if (!hasElfTemplate(document) && !/\b(?:defineHtml|defineStyle|useRef|useTemplateRef|useComputed|onMounted|onUnmounted|createApp)\w*$/.test(
+        if (!hasElfTemplate(document) && !/\b(?:defineFragment|defineHtml|defineStyle|fragment|useRef|useTemplateRef|useComputed|useId|onMounted|onUnmounted|createApp)\w*$/.test(
           document.lineAt(position.line).text.slice(0, position.character)
         )) {
           return undefined;

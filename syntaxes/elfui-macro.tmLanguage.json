@@ -10,6 +10,12 @@
       "include": "#defineHtmlCallMultiLine"
     },
     {
+      "include": "#defineFragmentCall"
+    },
+    {
+      "include": "#fragmentTaggedTemplate"
+    },
+    {
       "include": "#styleCall"
     },
     {
@@ -23,6 +29,71 @@
     }
   ],
   "repository": {
+    "defineFragmentCall": {
+      "begin": "\\b(defineFragment)\\s*(?:<[^>]*>)?\\s*(\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "support.function.elfui.template entity.name.function.elfui"
+        },
+        "2": {
+          "name": "punctuation.section.parens.begin.elfui meta.brace.round.ts"
+        }
+      },
+      "end": "\\)\\s*;?\\s*$",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.parens.end.elfui meta.brace.round.ts"
+        }
+      },
+      "patterns": [
+        {
+          "begin": "`",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
+            }
+          },
+          "end": "`",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.template.end.elfui string.template.ts"
+            }
+          },
+          "contentName": "meta.embedded.block.html text.html.derivative",
+          "patterns": [
+            {
+              "include": "#templateContent"
+            }
+          ]
+        },
+        {
+          "include": "source.ts"
+        }
+      ]
+    },
+    "fragmentTaggedTemplate": {
+      "begin": "\\b(fragment)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "name": "support.function.elfui.template entity.name.function.elfui"
+        },
+        "2": {
+          "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
+        }
+      },
+      "end": "`",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.end.elfui string.template.ts"
+        }
+      },
+      "contentName": "meta.embedded.block.html text.html.derivative",
+      "patterns": [
+        {
+          "include": "#templateContent"
+        }
+      ]
+    },
     "defineHtmlCall": {
       "begin": "\\b(defineHtml)\\s*(?:<[^`]*?>\\s*)?(\\()\\s*(`)",
       "beginCaptures": {

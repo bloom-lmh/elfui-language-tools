@@ -1,5 +1,12 @@
 # elfui-language-features
 
+## 0.3.3
+
+### Patch Changes
+
+- 11ec2c0: Exclude ElfUI `v-*` directives from component prop contract diagnostics while preserving
+  `v-model` and `v-bind` prop validation.
+
 ## 0.3.2
 
 ### Patch Changes

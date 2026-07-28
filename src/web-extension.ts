@@ -155,7 +155,8 @@ export const activate = (context: vscode.ExtensionContext) => {
     "elfui.showWorkspaceIndexReport",
     "elfui.exportWorkspacePerformanceReport",
     "elfui.clearWorkspacePerformanceHistory",
-    "elfui.generateWorkspaceComponentMetadata"
+    "elfui.generateWorkspaceComponentMetadata",
+    "elfui.injectMissingTemplateDeclaration"
   ].map((command) => vscode.commands.registerCommand(command, () =>
     vscode.window.showInformationMessage("This ElfUI command requires the desktop VS Code language server.")
   ));

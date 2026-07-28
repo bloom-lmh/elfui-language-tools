@@ -73,6 +73,7 @@ const init = (modules: TypeScriptServerPluginModules) => {
 
         return diagnostics.filter(
           (diagnostic) =>
+            !isElfTemplateCommentDiagnostic(tsModule, sourceFile, diagnostic) &&
             !(
               configuration.suppressNativeTemplateLocals &&
               isElfTemplateLocalDiagnostic(tsModule, sourceFile, templatePropNames, diagnostic)
@@ -95,6 +96,28 @@ const init = (modules: TypeScriptServerPluginModules) => {
       configuration = readPluginConfiguration(nextConfiguration);
     },
   };
+};
+
+const isElfTemplateCommentDiagnostic = (
+  tsModule: typeof ts,
+  sourceFile: ts.SourceFile,
+  diagnostic: ts.Diagnostic
+): boolean => {
+  if (diagnostic.start === undefined) {
+    return false;
+  }
+
+  const context = findHtmlTemplateExpressionContext(tsModule, sourceFile, diagnostic.start);
+
+  if (!context) {
+    return false;
+  }
+
+  const content = sourceFile.text.slice(context.contentStart, context.contentEnd);
+  const offset = diagnostic.start - context.contentStart;
+  const open = content.lastIndexOf("<!--", offset);
+
+  return open >= 0 && content.lastIndexOf("-->", offset) < open;
 };
 
 const createLanguageServiceProxy = (languageService: ts.LanguageService): ts.LanguageService => {

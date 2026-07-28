@@ -189,14 +189,17 @@ describe("ElfUI language service", () => {
       import { defineHtml, defineStyle } from "@elfui/core";
 
       const save = () => {};
-      export const Demo = defineHtml(\`<section><button @click=\\\${save}></button></section>\`);
+      export const Demo = defineHtml(\`<section v-if="condition"><button @click=\\\${save}></button></section>\`);
       defineStyle(\`:host{color:red;display:block;}\`);
     `;
     const document = TextDocument.create("file:///macro-performance.ts", "typescript", 1, source);
     const position = positionAfter(document, source, "@click");
+    const declarationPosition = positionAfter(document, source, "condition");
+    const declarationRange = { end: declarationPosition, start: declarationPosition };
 
     createElfCompletionList(document, position);
     createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 });
+    createElfCodeActions(document, declarationRange, { diagnostics: [] });
 
     const completionStart = performance.now();
     for (let index = 0; index < 10; index += 1) {
@@ -210,8 +213,15 @@ describe("ElfUI language service", () => {
     }
     const formattingAverage = (performance.now() - formattingStart) / 10;
 
+    const declarationStart = performance.now();
+    for (let index = 0; index < 10; index += 1) {
+      createElfCodeActions(document, declarationRange, { diagnostics: [] });
+    }
+    const declarationAverage = (performance.now() - declarationStart) / 10;
+
     expect(completionAverage).toBeLessThan(50);
     expect(formattingAverage).toBeLessThan(50);
+    expect(declarationAverage).toBeLessThan(50);
   });
 
   it("provides event completions for @elfui/core macro components", () => {
@@ -424,6 +434,89 @@ describe("ElfUI language service", () => {
 
     expect(action).toBeDefined();
     expect(editTexts).toContain("const handler = (e: Event) => {\n};\n");
+  });
+
+  it("infers missing state and handler actions at the cursor before diagnostics arrive", () => {
+    const stateSource = `
+      import { defineHtml } from "@elfui/core";
+
+      export default defineHtml(\`<main v-if="condition"></main>\`);
+    `;
+    const stateDocument = createDocument(stateSource);
+    const statePosition = positionAfter(stateDocument, stateSource, "condition");
+    const stateAction = createElfCodeActions(
+      stateDocument,
+      { end: statePosition, start: statePosition },
+      { diagnostics: [] }
+    ).find((item) => item.title === 'Create state "condition" with useRef()');
+    const stateResult = applyTextEdits(
+      stateSource,
+      stateAction?.edit?.changes?.[stateDocument.uri] ?? []
+    );
+
+    expect(stateResult).toContain("const condition = useRef();");
+
+    const handlerSource = `
+      import { defineHtml } from "@elfui/core";
+
+      export default defineHtml(\`<button @click=\${handleClick}></button>\`);
+    `;
+    const handlerDocument = createDocument(handlerSource);
+    const handlerPosition = positionAfter(handlerDocument, handlerSource, "handleClick");
+    const handlerAction = createElfCodeActions(
+      handlerDocument,
+      { end: handlerPosition, start: handlerPosition },
+      { diagnostics: [] }
+    ).find((item) => item.title === 'Create handler "handleClick"');
+    const handlerResult = applyTextEdits(
+      handlerSource,
+      handlerAction?.edit?.changes?.[handlerDocument.uri] ?? []
+    );
+
+    expect(handlerResult).toContain("const handleClick = (e: Event) => {");
+
+    const methodSource = `
+      import { defineHtml } from "@elfui/core";
+
+      export default defineHtml(\`<main v-if="canOpen()"></main>\`);
+    `;
+    const methodDocument = createDocument(methodSource);
+    const methodPosition = positionAfter(methodDocument, methodSource, "canOpen");
+    const methodDiagnostic = createElfDiagnostics(methodDocument).find((item) =>
+      readDiagnosticMessages([item]).some((message) => message.includes("canOpen"))
+    );
+    const methodAction = createElfCodeActions(
+      methodDocument,
+      { end: methodPosition, start: methodPosition },
+      { diagnostics: methodDiagnostic ? [methodDiagnostic] : [] }
+    ).find((item) => item.title === 'Create method "canOpen"');
+    const methodResult = applyTextEdits(
+      methodSource,
+      methodAction?.edit?.changes?.[methodDocument.uri] ?? []
+    );
+
+    expect(methodResult).toContain("const canOpen = () => {");
+    expect(methodResult).not.toContain("const canOpen = useRef();");
+  });
+
+  it("keeps HTML comments silent for diagnostics and completions", () => {
+    const source = `
+      import { defineHtml } from "@elfui/core";
+
+      export default defineHtml(\`
+        <!-- <button @click=\${commentedHandler}>{{ commentedState }}</button> -->
+        <button @click=\${liveHandler}></button>
+      \`);
+    `;
+    const document = createDocument(source);
+    const messages = readDiagnosticMessages(createElfDiagnostics(document));
+    const commentPosition = positionAfter(document, source, "commentedHandler");
+    const completions = createElfCompletionList(document, commentPosition);
+
+    expect(messages.some((message) => message.includes("commentedHandler"))).toBe(false);
+    expect(messages.some((message) => message.includes("commentedState"))).toBe(false);
+    expect(messages.some((message) => message.includes("liveHandler"))).toBe(true);
+    expect(completions.items).toHaveLength(0);
   });
 
   it("adds useRef to the existing @elfui/core import", () => {

@@ -2,7 +2,7 @@
   "name": "elfui-language-features",
   "displayName": "ElfUI Language Tools",
   "description": "VS Code language features for ElfUI macro components. Chain builder support is provided by the optional ElfUI Chain Language Tools extension.",
-  "version": "0.2.33",
+  "version": "0.2.34",
   "license": "MIT",
   "type": "commonjs",
   "publisher": "SWUST-WEBLAB-LMH",
@@ -86,6 +86,17 @@
       {
         "command": "elfui.generateWorkspaceComponentMetadata",
         "title": "ElfUI: Generate Component Metadata"
+      },
+      {
+        "command": "elfui.injectMissingTemplateDeclaration",
+        "title": "ElfUI: Inject Missing Template Declaration"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "elfui.injectMissingTemplateDeclaration",
+        "key": "alt+\\",
+        "when": "editorTextFocus && (editorLangId == typescript || editorLangId == typescriptreact || editorLangId == javascript || editorLangId == javascriptreact)"
       }
     ],
     "views": {

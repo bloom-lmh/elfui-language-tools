@@ -57,7 +57,8 @@ suite("ElfUI Language Features Smoke", function () {
       "elfui.showWorkspaceIndexReport",
       "elfui.exportWorkspacePerformanceReport",
       "elfui.clearWorkspacePerformanceHistory",
-      "elfui.generateWorkspaceComponentMetadata"
+      "elfui.generateWorkspaceComponentMetadata",
+      "elfui.injectMissingTemplateDeclaration"
     ].forEach((command) => {
       assert(commands.includes(command), `Expected ${command} command to be registered.`);
     });
@@ -185,6 +186,62 @@ suite("ElfUI Language Features Smoke", function () {
     );
 
     assert(batchAction, "Expected batch template declaration quick fix.");
+  });
+
+  test("injects the missing declaration at the cursor with Alt+backslash command", async () => {
+    const { document: stateDocument } = await openFixtureWithCursor(
+      [
+        'import { defineHtml } from "@elfui/core";',
+        "",
+        `export default defineHtml(\`<main v-if="condition${CURSOR}"></main>\`);`,
+        ""
+      ].join("\n")
+    );
+    const stateResult = await vscode.commands.executeCommand(
+      "elfui.injectMissingTemplateDeclaration"
+    );
+
+    assert.equal(stateResult, 'Create state "condition" with useRef()');
+    await waitFor(
+      () => stateDocument.getText().includes("const condition = useRef();"),
+      "Alt+backslash state declaration"
+    );
+
+    const { document: handlerDocument } = await openFixtureWithCursor(
+      [
+        'import { defineHtml } from "@elfui/core";',
+        "",
+        `export default defineHtml(\`<button @click=\${handleClick${CURSOR}}></button>\`);`,
+        ""
+      ].join("\n")
+    );
+    const handlerResult = await vscode.commands.executeCommand(
+      "elfui.injectMissingTemplateDeclaration"
+    );
+
+    assert.equal(handlerResult, 'Create handler "handleClick"');
+    await waitFor(
+      () => handlerDocument.getText().includes("const handleClick = (e: Event) => {"),
+      "Alt+backslash handler declaration"
+    );
+
+    const { document: methodDocument } = await openFixtureWithCursor(
+      [
+        'import { defineHtml } from "@elfui/core";',
+        "",
+        `export default defineHtml(\`<main v-if="canOpen${CURSOR}()"></main>\`);`,
+        ""
+      ].join("\n")
+    );
+    const methodResult = await vscode.commands.executeCommand(
+      "elfui.injectMissingTemplateDeclaration"
+    );
+
+    assert.equal(methodResult, 'Create method "canOpen"');
+    await waitFor(
+      () => methodDocument.getText().includes("const canOpen = () => {"),
+      "Alt+backslash method declaration"
+    );
   });
 
   test("supports quoted v-for completions and repairs untyped list states", async () => {
@@ -744,13 +801,24 @@ async function openFixture(content) {
     (document) => document.uri.toString() === fixtureUri.toString()
   );
 
-  if (existing?.isDirty) {
+  let document;
+
+  if (existing) {
+    const edit = new vscode.WorkspaceEdit();
+    const fullRange = new vscode.Range(
+      existing.positionAt(0),
+      existing.positionAt(existing.getText().length)
+    );
+
+    edit.replace(existing.uri, fullRange, content);
+    assert(await vscode.workspace.applyEdit(edit), "Expected fixture WorkspaceEdit to apply.");
     await existing.save();
+    document = existing;
+  } else {
+    fs.writeFileSync(FIXTURE_PATH, content, "utf8");
+    document = await vscode.workspace.openTextDocument(fixtureUri);
   }
 
-  fs.writeFileSync(FIXTURE_PATH, content, "utf8");
-
-  const document = await vscode.workspace.openTextDocument(fixtureUri);
   await vscode.window.showTextDocument(document, { preview: false });
 
   await waitFor(

@@ -1,7 +1,7 @@
 {
   "name": "ElfUI Macro Embedded Languages",
   "scopeName": "elfui.macro.injection",
-  "injectionSelector": "L:source.ts -comment -string, L:source.js -comment -string, L:text.html.basic, L:text.html.derivative",
+  "injectionSelector": "L:source.ts -comment -string, L:source.js -comment -string, L:text.html.basic -comment, L:text.html.derivative -comment",
   "patterns": [
     {
       "include": "#defineHtmlCall"
@@ -119,6 +119,9 @@
       "contentName": "meta.embedded.block.css source.css",
       "patterns": [
         {
+          "include": "#cssComment"
+        },
+        {
           "include": "#interpolation"
         },
         {
@@ -158,6 +161,9 @@
           },
           "contentName": "meta.embedded.block.css source.css",
           "patterns": [
+            {
+              "include": "#cssComment"
+            },
             {
               "include": "#interpolation"
             },
@@ -202,6 +208,9 @@
     "templateContent": {
       "patterns": [
         {
+          "include": "#htmlComment"
+        },
+        {
           "include": "#interpolation"
         },
         {
@@ -211,6 +220,36 @@
           "include": "text.html.basic"
         }
       ]
+    },
+    "htmlComment": {
+      "name": "comment.block.html",
+      "begin": "<!--",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.begin.html"
+        }
+      },
+      "end": "-->",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.end.html"
+        }
+      }
+    },
+    "cssComment": {
+      "name": "comment.block.css",
+      "begin": "/\\*",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.begin.css"
+        }
+      },
+      "end": "\\*/",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.end.css"
+        }
+      }
     },
     "quotedDirectiveExpression": {
       "begin": "((?:[:@][\\w:-]+(?:\\.[\\w-]+)*|v-(?:bind(?::[\\w-]+)?|if|else-if|show|model|text|html|memo)))(\\s*=\\s*)([\\\"'])",

@@ -44,6 +44,21 @@ if (!packageJson.browser || !Array.isArray(packageJson.extensionKind)) {
   process.exit(1);
 }
 
+const injectionCommand = packageJson.contributes?.commands?.find(
+  (item) => item.command === "elfui.injectMissingTemplateDeclaration"
+);
+const injectionKeybinding = packageJson.contributes?.keybindings?.find(
+  (item) =>
+    item.command === "elfui.injectMissingTemplateDeclaration" &&
+    item.key === "alt+\\"
+);
+
+if (!injectionCommand || !injectionKeybinding) {
+  console.error("ElfUI VS Code extension smoke check failed.");
+  console.error("Missing Alt+\\ template declaration injection contribution.");
+  process.exit(1);
+}
+
 const serverPath = resolve(root, "dist/lsp-server.js");
 
 await assertServerStartsWithStdio(serverPath);

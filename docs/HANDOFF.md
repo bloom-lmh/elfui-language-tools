@@ -36,6 +36,7 @@ only maintained home for the ElfUI VS Code extension. Do not modify the retired
 - `ElfUI: Export Workspace Performance Report`
 - `ElfUI: Clear Workspace Performance History`
 - `ElfUI: Generate Component Metadata`
+- `ElfUI: Inject Missing Template Declaration` (`Alt+\`)
 
 `Show Workspace Index Report` retains the latest 20 explicit samples per workspace. Export
 writes `.elfui/performance-report.json`; neither feature writes during normal completion.

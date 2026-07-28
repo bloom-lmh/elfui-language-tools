@@ -110,6 +110,22 @@ describe("ElfUI TypeScript server plugin", () => {
     );
   });
 
+  it("filters native TS diagnostics inside ElfUI HTML comments only", () => {
+    const source = `
+      declare const defineHtml: (value: unknown) => unknown;
+
+      export const Home = defineHtml(\`
+        <!-- <button>\${commentedMissing}</button> -->
+        <button>\${liveMissing}</button>
+      \`);
+    `;
+
+    const messages = readDiagnosticMessages(readPluginDiagnostics(source));
+
+    expect(messages).not.toContain("Cannot find name 'commentedMissing'.");
+    expect(messages).toContain("Cannot find name 'liveMissing'.");
+  });
+
   it("does not filter v-for locals after the owner tag is closed", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;

@@ -102,6 +102,11 @@ const expectScope = (token, scope, message) => {
     throw new Error(`${message}: expected ${scope}, got ${token?.scopes?.join(", ") ?? "none"}`);
   }
 };
+const expectNoScope = (token, scope, message) => {
+  if (token?.scopes.some((item) => item.includes(scope))) {
+    throw new Error(`${message}: did not expect ${scope}, got ${token.scopes.join(", ")}`);
+  }
+};
 const expectNoMacroScope = (tokens, message) => {
   if (tokens.some((token) => token.scopes.some((scope) => scope.includes("elfui")))) {
     throw new Error(`${message}: unexpected ElfUI grammar scope`);
@@ -139,6 +144,31 @@ const cases = [
       expectScope(findToken(tokens, "v-if"), "entity.other.attribute-name.directive.elfui", "quoted directive");
       expectScope(findToken(tokens, "visible"), "meta.embedded.expression.elfui", "directive value");
       expectScope(findToken(tokens, "${"), "punctuation.definition.template-expression.begin", "interpolation");
+    }
+  ],
+  [
+    "keeps HTML comments out of template expression highlighting",
+    () => {
+      const tokens = tokenize(
+        "defineHtml(`<!-- <CommentedButton v-if=\"hidden\">${hidden}</CommentedButton> -->`);"
+      );
+      const tag = findToken(tokens, "CommentedButton");
+      const expression = findToken(tokens, "hidden");
+
+      expectScope(tag, "comment.block.html", "commented tag");
+      expectScope(expression, "comment.block.html", "commented expression");
+      expectNoScope(tag, "entity.name.tag.component.elfui", "commented component");
+      expectNoScope(expression, "meta.embedded.expression.elfui", "commented expression");
+    }
+  ],
+  [
+    "keeps CSS comments out of interpolation highlighting",
+    () => {
+      const tokens = tokenize("defineStyle(`/* .hidden { color: ${commentedColor}; } */`);");
+      const expression = findToken(tokens, "commentedColor");
+
+      expectScope(expression, "comment.block.css", "commented CSS expression");
+      expectNoScope(expression, "meta.template.expression.ts", "commented CSS expression");
     }
   ],
   [

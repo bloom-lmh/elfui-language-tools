@@ -230,6 +230,9 @@ export const activate = async (context: vscode.ExtensionContext) => {
       vscode.commands.registerCommand("elfui.generateWorkspaceComponentMetadata", () =>
         generateWorkspaceComponentMetadata(context),
       ),
+      vscode.commands.registerCommand("elfui.injectMissingTemplateDeclaration", () =>
+        injectMissingTemplateDeclaration(),
+      ),
       vscode.commands.registerCommand(
         "elfui.revealRange",
         async (uri: vscode.Uri, start: number, end: number) => {
@@ -299,6 +302,51 @@ export const deactivate = async () => {
     outputChannel ?? vscode.window.createOutputChannel("ElfUI"),
   );
   languageClient = undefined;
+};
+
+const injectMissingTemplateDeclaration = async (): Promise<string | null> => {
+  const editor = vscode.window.activeTextEditor;
+
+  if (!editor) {
+    return null;
+  }
+
+  const actions = await vscode.commands.executeCommand<
+    Array<vscode.CodeAction | vscode.Command> | undefined
+  >(
+    "vscode.executeCodeActionProvider",
+    editor.document.uri,
+    editor.selection.isEmpty
+      ? new vscode.Range(editor.selection.active, editor.selection.active)
+      : editor.selection,
+    vscode.CodeActionKind.QuickFix.value,
+  );
+  const action = actions?.find((candidate) =>
+    /^Create (?:handler|method|state) "[A-Za-z_$][\w$]*"/.test(candidate.title),
+  );
+
+  if (!action) {
+    vscode.window.setStatusBarMessage(
+      "ElfUI: No missing template declaration at the cursor.",
+      2500,
+    );
+    return null;
+  }
+
+  const codeAction = action as vscode.CodeAction;
+
+  if (codeAction.edit && !(await vscode.workspace.applyEdit(codeAction.edit))) {
+    vscode.window.setStatusBarMessage("ElfUI: Failed to apply declaration edit.", 2500);
+    return null;
+  }
+
+  const command = codeAction.command ?? (action as vscode.Command);
+
+  if (command?.command) {
+    await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
+  }
+
+  return action.title;
 };
 
 const restartLanguageClient = async (context: vscode.ExtensionContext) => {

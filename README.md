@@ -40,6 +40,7 @@ Marketplace, the same pane can install it by name instead.
 - Contextual DOM event typing for `$event` in event bindings, including `MouseEvent`, `KeyboardEvent`, and `InputEvent` member completions.
 - Event and binding-name completions preserve existing expression or quoted values when renaming attributes.
 - Quoted dynamic bindings such as `:key="item.id"`, `v-if="visible"`, and `@click="select(item)"` are highlighted as TypeScript expressions, while ordinary HTML values such as `class="row"` remain strings.
+- HTML `<!-- ... -->` and CSS `/* ... */` comments are silent regions: embedded expressions are not highlighted, completed, or diagnosed inside them.
 - A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `defineHtml(\`...\`)` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
 - HTML/CSS syntax highlighting inside `defineHtml(\`...\`)` and `defineStyle(\`...\`)` through embedded TextMate scopes.
 - HTML/CSS document and range formatting inside `defineHtml(\`...\`)` and `defineStyle(\`...\`)`.
@@ -56,6 +57,7 @@ Marketplace, the same pane can install it by name instead.
 - Folding Range, Selection Range, and Linked Editing Range support inside embedded template and style strings.
 - Optional Semantic Tokens for ElfUI component declarations, template component tags, props, events, slots, setup values, template locals, and directives.
 - Quick Fixes for declaring unknown template variables, initializing untyped `v-for` list states, undeclared emits, and same-file component prop/event/slot mismatches.
+- Press `Alt+\` on a missing event handler, method call, or state expression to inject that declaration directly without opening the Quick Fix menu.
 - ElfUI Studio tools: an `ElfUI Components` explorer view, dynamic point/effect reports, a static component preview, a template binding migration command, and a persistent workspace performance report with language-server index and completion latency metrics.
 - Snippets for macro components: `elfc` creates a minimal `defineHtml()` component skeleton, `elfinit` creates a ready-to-run component template, and `elflifecycle` creates lifecycle hooks with a typed template ref.
 

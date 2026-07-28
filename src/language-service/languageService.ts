@@ -243,12 +243,18 @@ const htmlLanguageService = getHtmlLanguageService();
 const cssLanguageService = getCSSLanguageService();
 
 interface CachedEmbeddedRegionDocuments {
+  commentRanges: EmbeddedCommentRange[];
   content: string;
   htmlDocument?: HTMLDocument;
   htmlParsingDocument?: TextDocument;
   htmlParsingHtmlDocument?: HTMLDocument;
   stylesheet?: ReturnType<typeof cssLanguageService.parseStylesheet>;
   virtualDocument: TextDocument;
+}
+
+interface EmbeddedCommentRange {
+  end: number;
+  start: number;
 }
 
 const embeddedRegionDocumentCache = new Map<string, CachedEmbeddedRegionDocuments>();
@@ -269,6 +275,7 @@ const getCachedEmbeddedRegionDocuments = (
   }
 
   const entry: CachedEmbeddedRegionDocuments = {
+    commentRanges: collectEmbeddedCommentRanges(region.content, region.kind),
     content: region.content,
     virtualDocument: TextDocument.create(
       `${sourceUri}.${region.kind}-${region.contentStart}.${region.languageId}`,
@@ -289,6 +296,71 @@ const getCachedEmbeddedRegionDocuments = (
   }
 
   return entry;
+};
+
+const collectEmbeddedCommentRanges = (
+  source: string,
+  kind: EmbeddedRegion["kind"]
+): EmbeddedCommentRange[] =>
+  collectDelimitedCommentRanges(
+    source,
+    kind === "template" ? "<!--" : "/*",
+    kind === "template" ? "-->" : "*/"
+  );
+
+const collectDelimitedCommentRanges = (
+  source: string,
+  open: string,
+  close: string
+): EmbeddedCommentRange[] => {
+  const ranges: EmbeddedCommentRange[] = [];
+  let cursor = 0;
+
+  while (cursor < source.length) {
+    const start = source.indexOf(open, cursor);
+
+    if (start < 0) {
+      break;
+    }
+
+    const closeStart = source.indexOf(close, start + open.length);
+    const end = closeStart < 0 ? source.length : closeStart + close.length;
+
+    ranges.push({ end, start });
+    cursor = end;
+  }
+
+  return ranges;
+};
+
+const isOffsetInsideEmbeddedComment = (
+  sourceUri: string,
+  region: EmbeddedRegion,
+  offset: number
+): boolean =>
+  getCachedEmbeddedRegionDocuments(sourceUri, region).commentRanges.some(
+    (range) => offset >= range.start && offset < range.end
+  );
+
+const maskEmbeddedComments = (
+  source: string,
+  kind: EmbeddedRegion["kind"] = "template"
+): string => {
+  const ranges = collectEmbeddedCommentRanges(source, kind);
+
+  if (ranges.length === 0) {
+    return source;
+  }
+
+  const characters = source.split("");
+
+  ranges.forEach((range) => {
+    for (let index = range.start; index < range.end; index += 1) {
+      characters[index] = preserveLineBreakPlaceholder(characters[index]);
+    }
+  });
+
+  return characters.join("");
 };
 
 interface CachedSourceAnalysis {
@@ -803,6 +875,7 @@ const createMacroDiagnostics = (
       .diagnostics.map((diagnostic) => mapMacroDiagnostic(document, diagnostic))
       .filter(
         (diagnostic) =>
+          !isDiagnosticInsideTemplateComment(document, components, diagnostic) &&
           !isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic) &&
           !isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic) &&
           !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic)
@@ -822,6 +895,21 @@ const createMacroDiagnostics = (
       }
     ];
   }
+};
+
+const isDiagnosticInsideTemplateComment = (
+  document: TextDocument,
+  components: ComponentMeta[],
+  diagnostic: Diagnostic
+): boolean => {
+  const offset = document.offsetAt(diagnostic.range.start);
+  const region = components
+    .flatMap((component) => component.templates)
+    .find((candidate) => isInsideEmbeddedRegion(candidate, offset));
+
+  return region
+    ? isOffsetInsideEmbeddedComment(document.uri, region, offset - region.contentStart)
+    : false;
 };
 
 const mapMacroDiagnostic = (document: TextDocument, diagnostic: ElfDiagnostic): Diagnostic => {
@@ -1923,6 +2011,10 @@ export const createElfCodeActions = (
 ): CodeAction[] => {
   const diagnostics = context.diagnostics.filter(isElfCodeActionDiagnostic);
   const resolvedOptions = resolveLanguageServiceOptions(options);
+  const inferredDeclarationAction =
+    diagnostics.length === 0
+      ? createTemplateDeclarationActionAtRange(document, range)
+      : null;
   const actions = [
     ...createTemplateBindingStyleActions(document, range),
     ...createTemplateComponentAutoImportActions(
@@ -1931,7 +2023,8 @@ export const createElfCodeActions = (
       diagnostics,
       resolvedOptions.projectComponents
     ),
-    ...createTemplateDeclarationCodeActions(document, range, diagnostics)
+    ...createTemplateDeclarationCodeActions(document, range, diagnostics),
+    ...(inferredDeclarationAction ? [inferredDeclarationAction] : [])
   ];
 
   if (diagnostics.length === 0) {
@@ -3308,9 +3401,10 @@ const findVForSourceForLocal = (
   localName: string
 ): string | null => {
   const vForPattern = /\sv-for\s*=\s*(["'])([\s\S]*?)\1/g;
+  const visibleTemplate = maskEmbeddedComments(template);
   let result: string | null = null;
 
-  for (const match of template.matchAll(vForPattern)) {
+  for (const match of visibleTemplate.matchAll(vForPattern)) {
     if (match.index === undefined || match.index > offset || !match[2]) {
       continue;
     }
@@ -3522,9 +3616,10 @@ const createTemplateForLocalDeclarations = (
   projectComponents: ElfProjectComponent[]
 ): string[] => {
   const declarations: string[] = [];
+  const visibleTemplate = maskEmbeddedComments(template);
   const vForPattern = /\sv-for\s*=\s*(["'])([\s\S]*?)\1/g;
 
-  for (const match of template.matchAll(vForPattern)) {
+  for (const match of visibleTemplate.matchAll(vForPattern)) {
     if (match.index === undefined || match.index > offset || !match[2]) {
       continue;
     }
@@ -3543,9 +3638,9 @@ const createTemplateForLocalDeclarations = (
   }
 
   declarations.push(
-    ...createSlotScopeLocalDeclarations(template, offset, context, projectComponents)
+    ...createSlotScopeLocalDeclarations(visibleTemplate, offset, context, projectComponents)
   );
-  declarations.push(...createEventLocalDeclarations(template, offset));
+  declarations.push(...createEventLocalDeclarations(visibleTemplate, offset));
 
   return declarations;
 };
@@ -3597,9 +3692,10 @@ const createVForLocalExpressionMappings = (
   offset: number
 ): Map<string, string> => {
   const mappings = new Map<string, string>();
+  const visibleTemplate = maskEmbeddedComments(template);
   const vForPattern = /\sv-for\s*=\s*(["'])([\s\S]*?)\1/g;
 
-  for (const match of template.matchAll(vForPattern)) {
+  for (const match of visibleTemplate.matchAll(vForPattern)) {
     if (match.index === undefined || match.index > offset || !match[2]) {
       continue;
     }
@@ -4148,6 +4244,112 @@ const readUnregisteredComponentName = (diagnostic: Diagnostic): string | null =>
   return match?.[1] ?? null;
 };
 
+const createTemplateDeclarationActionAtRange = (
+  document: TextDocument,
+  range: Range
+): CodeAction | null => {
+  const context = findEmbeddedDocumentContext(document, range.start, "template");
+
+  if (!context) {
+    return null;
+  }
+
+  const template = context.virtualDocument.getText();
+  const offset = context.virtualDocument.offsetAt(context.virtualPosition);
+  const expression = collectTemplateExpressions(template).find(
+    (candidate) =>
+      offset >= candidate.start && offset <= candidate.start + candidate.value.length
+  );
+
+  if (!expression) {
+    return null;
+  }
+
+  const expressionOffset = clamp(offset - expression.start, 0, expression.value.length);
+  const word = readWordRangeAtOffset(expression.value, expressionOffset);
+
+  if (
+    !word ||
+    !isValidIdentifier(word.value) ||
+    templateGlobals.has(word.value) ||
+    templateReservedWords.has(word.value) ||
+    expression.locals.has(word.value) ||
+    createKnownTemplateNames(context.component).has(word.value) ||
+    isPropertyAccess(expression.value, word.start) ||
+    isObjectPropertyKey(expression.value, word.end)
+  ) {
+    return null;
+  }
+
+  const eventBinding = isTemplateEventExpression(template, expression.start);
+  const methodCall = isIdentifierCallExpression(expression.value, word.end);
+  const edits = eventBinding
+    ? createTemplateHandlerDeclarationEdits(document, context.component, word.value)
+    : methodCall
+      ? createTemplateMethodDeclarationEdits(document, context.component, word.value)
+      : createTemplateStateDeclarationEdits(document, context.component, word.value);
+
+  if (edits.length === 0) {
+    return null;
+  }
+
+  return {
+    edit: {
+      changes: {
+        [document.uri]: edits
+      }
+    },
+    kind: CodeActionKind.QuickFix,
+    title: eventBinding
+      ? `Create handler "${word.value}"`
+      : methodCall
+        ? `Create method "${word.value}"`
+        : `Create state "${word.value}" with useRef()`
+  };
+};
+
+const isIdentifierCallExpression = (expression: string, identifierEnd: number): boolean => {
+  let cursor = identifierEnd;
+
+  while (cursor < expression.length && /\s/.test(expression[cursor] ?? "")) {
+    cursor += 1;
+  }
+
+  return expression[cursor] === "(";
+};
+
+const isTemplateEventExpression = (template: string, expressionStart: number): boolean => {
+  const openerStart =
+    template.slice(Math.max(0, expressionStart - 2), expressionStart) === "${"
+      ? expressionStart - 2
+      : expressionStart - 1;
+  let cursor = openerStart - 1;
+
+  while (cursor >= 0 && /[ \t\r\n]/.test(template[cursor] ?? "")) {
+    cursor -= 1;
+  }
+
+  if (template[cursor] !== "=") {
+    return false;
+  }
+
+  cursor -= 1;
+
+  while (cursor >= 0 && /[ \t\r\n]/.test(template[cursor] ?? "")) {
+    cursor -= 1;
+  }
+
+  const attributeEnd = cursor + 1;
+
+  while (cursor >= 0 && /[^\s<>=]/.test(template[cursor] ?? "")) {
+    cursor -= 1;
+  }
+
+  const attribute = template.slice(cursor + 1, attributeEnd);
+
+  return attribute.startsWith("@") || attribute.startsWith("v-on:");
+};
+
 const createTemplateDeclarationCodeActions = (
   document: TextDocument,
   range: Range,
@@ -4216,6 +4418,17 @@ const createTemplateDeclarationCodeActions = (
           diagnostic,
           `Create handler "${parsed.name}"`,
           createTemplateHandlerDeclarationEdits(document, owner, parsed.name)
+        );
+        return;
+      }
+
+      if (isTemplateMethodCallDiagnostic(document, diagnostic, parsed.name)) {
+        pushDeclarationAction(
+          actions,
+          document,
+          diagnostic,
+          `Create method "${parsed.name}"`,
+          createTemplateMethodDeclarationEdits(document, owner, parsed.name)
         );
         return;
       }
@@ -4484,6 +4697,32 @@ const isDirectTemplateEventHandlerDiagnostic = (
   return attribute.startsWith("@") || attribute.startsWith("v-on:");
 };
 
+const isTemplateMethodCallDiagnostic = (
+  document: TextDocument,
+  diagnostic: Diagnostic,
+  name: string
+): boolean => {
+  const message = readDiagnosticMessage(diagnostic);
+  const macroExpression =
+    /^Template .+? expression "([\s\S]*?)" at line \d+, column \d+:/.exec(message)?.[1];
+
+  if (
+    macroExpression &&
+    new RegExp(`(?:^|[^\\w$])${escapeRegExp(name)}\\s*\\(`).test(macroExpression)
+  ) {
+    return true;
+  }
+
+  const source = document.getText();
+  let cursor = document.offsetAt(diagnostic.range.end);
+
+  while (cursor < source.length && /\s/.test(source[cursor] ?? "")) {
+    cursor += 1;
+  }
+
+  return source[cursor] === "(";
+};
+
 type TemplateDeclarationDiagnostic =
   | { kind: "component-event"; name: string; tagName: string }
   | { kind: "component-prop"; name: string; tagName: string }
@@ -4693,6 +4932,18 @@ const createTemplateHandlerDeclarationEdits = (
   return createMacroHandlerDeclarationEdits(document, name);
 };
 
+const createTemplateMethodDeclarationEdits = (
+  document: TextDocument,
+  component: ComponentMeta,
+  name: string
+): TextEdit[] => {
+  if (!isValidIdentifier(name) || component.setupReturns.includes(name)) {
+    return [];
+  }
+
+  return createMacroMethodDeclarationEdits(document, name);
+};
+
 const createPropDeclarationEdits = (
   document: TextDocument,
   component: ComponentMeta,
@@ -4758,6 +5009,17 @@ const createMacroHandlerDeclarationEdits = (document: TextDocument, name: string
   return [
     {
       newText: `const ${name} = (e: Event) => {\n};\n`,
+      range: createRangeFromOffsets(document, insertOffset, insertOffset)
+    }
+  ];
+};
+
+const createMacroMethodDeclarationEdits = (document: TextDocument, name: string): TextEdit[] => {
+  const insertOffset = findImportInsertionOffset(document.getText());
+
+  return [
+    {
+      newText: `const ${name} = () => {\n};\n`,
       range: createRangeFromOffsets(document, insertOffset, insertOffset)
     }
   ];
@@ -6133,6 +6395,10 @@ const findEmbeddedDocumentContext = (
       const virtualDocument = createVirtualDocument(document.uri, region);
       const virtualOffset = clamp(offset - region.contentStart, 0, region.content.length);
 
+      if (isOffsetInsideEmbeddedComment(document.uri, region, virtualOffset)) {
+        return null;
+      }
+
       return {
         component,
         components: analysis.components,
@@ -6153,7 +6419,7 @@ const mayBeInsideEmbeddedRegion = (
 ): boolean => {
   const pattern =
     kind === "template"
-      ? /(?:\bdefineHtml\b|\.template\b)\s*(?:<[^`]*?>\s*)?\(\s*`/g
+      ? /\bdefineHtml\b\s*(?:<[^`]*?>\s*)?\(\s*`/g
       : /\bdefineStyle\b\s*(?:<[^`]*?>\s*)?\(\s*`/g;
   let lastOpen = -1;
 
@@ -6729,7 +6995,7 @@ const collectVModelWritableDiagnostics = (
   virtualDocument: TextDocument,
   diagnostics: Diagnostic[]
 ) => {
-  const template = virtualDocument.getText();
+  const template = maskEmbeddedComments(virtualDocument.getText());
   const vModelPattern =
     /(?:^|\s)(v-model(?::[\w-]+)?(?:\.[\w-]+)*)\s*=\s*(?:\$\{([\s\S]*?)\}|(["'])([\s\S]*?)\3)/g;
 
@@ -6762,14 +7028,15 @@ const collectVModelWritableDiagnostics = (
 };
 
 const collectTemplateExpressions = (template: string): TemplateExpression[] => {
-  const locals = collectTemplateLocalNames(template);
+  const visibleTemplate = maskEmbeddedComments(template);
+  const locals = collectVisibleTemplateLocalNames(visibleTemplate);
   const expressions: TemplateExpression[] = [];
   const interpolationPattern = /\{\{([\s\S]*?)\}\}/g;
   const templateInterpolationPattern = /\$\{([\s\S]*?)\}/g;
   const bindingPattern =
     /\s(?:[:@][\w:-]+(?:\.[\w-]+)*|v-(?:bind(?::[\w-]+)?|if|else-if|show|model|text|html|for|memo))\s*=\s*(["'])([\s\S]*?)\1/g;
 
-  for (const match of template.matchAll(interpolationPattern)) {
+  for (const match of visibleTemplate.matchAll(interpolationPattern)) {
     if (match.index === undefined || match[1] === undefined) {
       continue;
     }
@@ -6781,7 +7048,7 @@ const collectTemplateExpressions = (template: string): TemplateExpression[] => {
     });
   }
 
-  for (const match of template.matchAll(templateInterpolationPattern)) {
+  for (const match of visibleTemplate.matchAll(templateInterpolationPattern)) {
     if (match.index === undefined || match[1] === undefined) {
       continue;
     }
@@ -6793,7 +7060,7 @@ const collectTemplateExpressions = (template: string): TemplateExpression[] => {
     });
   }
 
-  for (const match of template.matchAll(bindingPattern)) {
+  for (const match of visibleTemplate.matchAll(bindingPattern)) {
     if (match.index === undefined || match[2] === undefined) {
       continue;
     }
@@ -6818,12 +7085,15 @@ const collectTemplateExpressions = (template: string): TemplateExpression[] => {
   return expressions;
 };
 
-const collectTemplateLocalNames = (template: string): Set<string> => {
+const collectTemplateLocalNames = (template: string): Set<string> =>
+  collectVisibleTemplateLocalNames(maskEmbeddedComments(template));
+
+const collectVisibleTemplateLocalNames = (visibleTemplate: string): Set<string> => {
   const locals = new Set<string>();
   const vForPattern = /\sv-for\s*=\s*(["'])([\s\S]*?)\1/g;
   const slotScopePattern = /<template\b[^>]*#[\w-]+(?:\s*=\s*(["'])([\s\S]*?)\1)[^>]*>/g;
 
-  for (const match of template.matchAll(vForPattern)) {
+  for (const match of visibleTemplate.matchAll(vForPattern)) {
     const declaration = match[2];
 
     if (!declaration) {
@@ -6836,7 +7106,7 @@ const collectTemplateLocalNames = (template: string): Set<string> => {
     readTemplateLocalDeclarations(localPart).forEach((name) => locals.add(name));
   }
 
-  for (const match of template.matchAll(slotScopePattern)) {
+  for (const match of visibleTemplate.matchAll(slotScopePattern)) {
     if (!match[2]) {
       continue;
     }

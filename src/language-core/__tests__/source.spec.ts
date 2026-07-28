@@ -267,4 +267,33 @@ describe("analyzeElfSource", () => {
       expect.arrayContaining(["defineHtml", "defineFragment", "fragment"])
     );
   });
+
+  it("collects a named Fragment returned from a block body", () => {
+    const source = `
+      import { defineFragment, defineHtml } from "@elfui/core";
+
+      interface CardProps {
+        item: { label: string };
+      }
+
+      const IndexCard = defineFragment<CardProps>(({ item }) => {
+        return \`
+          <div class="summary-card">\${item.label}</div>
+        \`;
+      });
+
+      export const Dashboard = defineHtml(\`<IndexCard :item=\${item} />\`);
+    `;
+    const result = analyzeElfSource(source, { fileName: "Dashboard.ts" });
+    const component = result.components[0];
+    const fragment = component?.fragments.find((item) => item.name === "IndexCard");
+    const region = component?.templates.find((item) => item.method === "defineFragment");
+
+    expect(fragment).toMatchObject({
+      kind: "named",
+      props: ["item"],
+      scopeNames: ["item"]
+    });
+    expect(region?.content).toContain('<div class="summary-card">');
+  });
 });

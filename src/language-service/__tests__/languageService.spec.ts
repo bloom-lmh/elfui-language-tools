@@ -290,6 +290,42 @@ describe("ElfUI language service", () => {
     expect(secondEdits).toEqual([]);
   });
 
+  it("preserves inline Fragment wrappers when an external formatter owns the file", () => {
+    const source = `
+      import { defineHtml, fragment } from "@elfui/core";
+
+      const summaryData = [];
+      export const Dashboard = defineHtml(\`
+        <div class="summary-row">
+          \${summaryData.map(
+            (item) => fragment\`
+              <div class="summary-card">
+                <span>\${item.label}</span>
+              </div>
+            \`
+          )}
+        </div>
+      \`);
+    `;
+    const document = createDocument(source);
+    const edits = createElfFormattingEdits(document, {
+      elfuiExternalFormatter: true,
+      insertSpaces: true,
+      tabSize: 2
+    });
+    const formatted = applyTextEdits(source, edits);
+
+    expect(formatted).toMatch(/summaryData\.map\(\s*\n/);
+    expect(formatted).not.toContain("summaryData.map((item) => fragment`");
+    expect(
+      createElfFormattingEdits(createDocument(formatted), {
+        elfuiExternalFormatter: true,
+        insertSpaces: true,
+        tabSize: 2
+      })
+    ).toEqual([]);
+  });
+
   it("suppresses compiler-generated inline Fragment scope diagnostics", () => {
     const source = `
       import { defineHtml, fragment } from "@elfui/core";

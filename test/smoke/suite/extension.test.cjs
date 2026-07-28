@@ -812,9 +812,17 @@ suite("ElfUI Language Features Smoke", function () {
   test("formats embedded regions on save while another formatter owns TypeScript", async () => {
     const document = await openFixture(
       [
-        'import { defineHtml, defineStyle } from "@elfui/core";',
+        'import { defineHtml, defineStyle, fragment } from "@elfui/core";',
         "",
-        "const view = defineHtml(`<section><button>{{ count }}</button></section>`);",
+        "const items = [];",
+        "const view = defineHtml(`",
+        "  <section>",
+        "    <button>{{ count }}</button>",
+        "    ${items.map(",
+        "      (item) => fragment`<span>${item}</span>`",
+        "    )}",
+        "  </section>",
+        "`);",
         "const styles = defineStyle(`:host{color:red;display:block;}`);",
         "export { view };",
         ""
@@ -837,6 +845,12 @@ suite("ElfUI Language Features Smoke", function () {
     const editorConfiguration = vscode.workspace.getConfiguration("editor", document);
     const previousFormatOnSave = editorConfiguration.inspect("formatOnSave")?.workspaceValue;
     const previousDefaultFormatter = editorConfiguration.inspect("defaultFormatter")?.workspaceValue;
+    const saveSnapshots = [];
+    const changeSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.document.uri.toString() === document.uri.toString()) {
+        saveSnapshots.push(event.document.getText());
+      }
+    });
 
     try {
       await editorConfiguration.update(
@@ -858,7 +872,7 @@ suite("ElfUI Language Features Smoke", function () {
 
       await waitFor(
         () =>
-          /defineHtml\(`\n\s*<section><button>{{ count }}<\/button><\/section>/.test(
+          /defineHtml\(`\n\s*<section>\n\s*<button>{{ count }}<\/button>/.test(
             document.getText()
           ) &&
           /defineStyle\(`\n\s*:host \{\n\s*color: red;\n\s*display: block;\n\s*\}/.test(
@@ -866,7 +880,12 @@ suite("ElfUI Language Features Smoke", function () {
           ),
         "embedded save formatting"
       );
+      assert(
+        !saveSnapshots.some((source) => source.includes("items.map((item) => fragment`")),
+        "Did not expect ElfUI save formatting to compact an external formatter's Fragment wrapper."
+      );
     } finally {
+      changeSubscription.dispose();
       await editorConfiguration.update(
         "formatOnSave",
         previousFormatOnSave,

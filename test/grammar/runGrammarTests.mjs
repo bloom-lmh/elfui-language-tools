@@ -148,6 +148,15 @@ const cases = [
         ].join("\n")
       );
       const inline = tokenize("const view = fragment`<footer>${label}</footer>`;");
+      const returned = tokenize(
+        [
+          "const IndexCard = defineFragment(({ item }) => {",
+          "  return `",
+          '    <div class="summary-card">${item.label}</div>',
+          "  `;",
+          "});"
+        ].join("\n")
+      );
 
       expectScope(findToken(named, "article"), "entity.name.tag.html", "named Fragment tag");
       expectScope(
@@ -166,6 +175,16 @@ const cases = [
         "multiline named Fragment binding expression"
       );
       expectScope(findToken(inline, "footer"), "entity.name.tag.html", "inline Fragment tag");
+      expectScope(
+        findToken(returned, "summary-card"),
+        "string.quoted.html",
+        "returned named Fragment attribute"
+      );
+      expectScope(
+        returned.find((token) => token.line === 2 && token.text.includes("item")),
+        "meta.template.expression.ts",
+        "returned named Fragment expression"
+      );
     }
   ],
   [

@@ -741,7 +741,11 @@ const createEmbeddedSaveFormattingEdits = async (
     const edits = await languageClient.sendRequest<ProtocolFormattingEdit[] | null>(
       "textDocument/formatting",
       {
-        options: { insertSpaces, tabSize },
+        options: {
+          elfuiExternalFormatter: true,
+          insertSpaces,
+          tabSize,
+        },
         textDocument: { uri: document.uri.toString() },
       },
     );

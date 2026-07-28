@@ -53,6 +53,7 @@ import {
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 interface ElfFormattingOptions extends LspFormattingOptions {
+  elfuiExternalFormatter?: boolean;
   wrapLineLength?: number;
 }
 
@@ -7306,13 +7307,19 @@ const formatMultilineTemplateExpression = (
   expressionIndent: string,
   options: ElfFormattingOptions
 ) =>
-  formatInlineFragmentListExpression(expression, expressionIndent, options) ??
+  formatInlineFragmentListExpression(
+    expression,
+    expressionIndent,
+    options,
+    !options.elfuiExternalFormatter
+  ) ??
   formatMultilineObjectExpression(expression, expressionIndent, options);
 
 const formatInlineFragmentListExpression = (
   expression: string,
   expressionIndent: string,
-  options: ElfFormattingOptions
+  options: ElfFormattingOptions,
+  compact: boolean
 ): string | null => {
   const trimmed = expression.trim();
 
@@ -7340,7 +7347,8 @@ const formatInlineFragmentListExpression = (
   }
 
   const callback = opening[1] ?? "item";
-  const prefix = `${trimmed.slice(0, opening.index)}.map(${callback} => fragment\``;
+  const receiver = trimmed.slice(0, opening.index);
+  const prefix = `${receiver}.map(${callback} => fragment\``;
   const template = formatInlineFragmentTemplate(
     dedentMultilineText(trimmed.slice(templateStart + 1, templateEnd)),
     options
@@ -7351,7 +7359,22 @@ const formatInlineFragmentListExpression = (
   }
 
   const newLine = expression.includes("\r\n") ? "\r\n" : "\n";
-  const templateIndent = `${expressionIndent}${createIndentUnit(options)}`;
+  const indentUnit = createIndentUnit(options);
+
+  if (!compact) {
+    const callbackIndent = `${expressionIndent}${indentUnit}`;
+    const templateIndent = `${callbackIndent}${indentUnit}`;
+
+    return [
+      `${receiver}.map(`,
+      `${callbackIndent}${callback} => fragment\``,
+      indentLines(template, templateIndent),
+      `${callbackIndent}\``,
+      `${expressionIndent})}`
+    ].join(newLine);
+  }
+
+  const templateIndent = `${expressionIndent}${indentUnit}`;
 
   return [
     prefix,

@@ -47,6 +47,12 @@
       },
       "patterns": [
         {
+          "include": "#defineFragmentArrowBlock"
+        },
+        {
+          "include": "#defineFragmentReturnTemplate"
+        },
+        {
           "begin": "`",
           "beginCaptures": {
             "0": {
@@ -68,6 +74,54 @@
         },
         {
           "include": "source.ts"
+        }
+      ]
+    },
+    "defineFragmentArrowBlock": {
+      "begin": "(=>)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.function.arrow.ts"
+        },
+        "2": {
+          "name": "punctuation.definition.block.ts"
+        }
+      },
+      "end": "(\\})(?=\\s*\\)\\s*;?)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.block.ts"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#defineFragmentReturnTemplate"
+        },
+        {
+          "include": "source.ts"
+        }
+      ]
+    },
+    "defineFragmentReturnTemplate": {
+      "begin": "\\b(return)\\b(\\s*)(`)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.flow.return.ts"
+        },
+        "3": {
+          "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
+        }
+      },
+      "end": "`",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.end.elfui string.template.ts"
+        }
+      },
+      "contentName": "meta.embedded.block.html text.html.derivative",
+      "patterns": [
+        {
+          "include": "#templateContent"
         }
       ]
     },

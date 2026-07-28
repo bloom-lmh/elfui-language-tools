@@ -252,6 +252,35 @@ describe("ElfUI language service", () => {
     expect(secondEdits).toEqual([]);
   });
 
+  it("keeps the defineFragment arrow and template opener on one line", () => {
+    const source = `
+      import { defineFragment, defineHtml } from "@elfui/core";
+
+      const DirectCard = defineFragment(
+        ({ item }) =>
+          \`
+            <div>\${item.label}</div>
+          \`
+      );
+
+      export const Demo = defineHtml(\`<DirectCard :item=\${item} />\`);
+    `;
+    const document = createDocument(source);
+    const formatted = applyTextEdits(
+      source,
+      createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 })
+    );
+
+    expect(formatted).toContain("({ item }) => `");
+    expect(formatted).not.toMatch(/=>\s*\n\s*`/);
+    expect(
+      createElfFormattingEdits(createDocument(formatted), {
+        insertSpaces: true,
+        tabSize: 2
+      })
+    ).toEqual([]);
+  });
+
   it("keeps inline Fragment list wrappers compact and formatting idempotent", () => {
     const source = `
       import { defineHtml, fragment } from "@elfui/core";

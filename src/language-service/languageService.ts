@@ -2181,9 +2181,51 @@ export const createElfFormattingEdits = (
       )
   );
 
-  return roots.flatMap((region) =>
-    formatEmbeddedRegionTree(document, region, regions, options)
-  );
+  return [
+    ...createDefineFragmentTemplateOpenerEdits(document, regions),
+    ...roots.flatMap((region) =>
+      formatEmbeddedRegionTree(document, region, regions, options)
+    )
+  ];
+};
+
+const createDefineFragmentTemplateOpenerEdits = (
+  document: TextDocument,
+  regions: EmbeddedRegion[]
+): TextEdit[] => {
+  const source = document.getText();
+
+  return regions.flatMap((region) => {
+    if (region.kind !== "template" || region.method !== "defineFragment") {
+      return [];
+    }
+
+    const backtick = source.lastIndexOf("`", region.contentStart);
+
+    if (backtick < 0) {
+      return [];
+    }
+
+    const prefixStart = Math.max(0, backtick - 512);
+    const prefix = source.slice(prefixStart, backtick);
+    const match = /=>([ \t]*\r?\n[ \t]*)$/.exec(prefix);
+
+    if (!match?.[1]) {
+      return [];
+    }
+
+    const start = prefixStart + match.index + match[0].length - match[1].length;
+
+    return [
+      {
+        newText: " ",
+        range: {
+          end: document.positionAt(backtick),
+          start: document.positionAt(start)
+        }
+      }
+    ];
+  });
 };
 
 const collectUniqueEmbeddedRegions = (components: ComponentMeta[]): EmbeddedRegion[] => {

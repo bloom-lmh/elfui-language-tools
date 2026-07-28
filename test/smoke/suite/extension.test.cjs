@@ -812,9 +812,13 @@ suite("ElfUI Language Features Smoke", function () {
   test("formats embedded regions on save while another formatter owns TypeScript", async () => {
     const document = await openFixture(
       [
-        'import { defineHtml, defineStyle, fragment } from "@elfui/core";',
+        'import { defineFragment, defineHtml, defineStyle, fragment } from "@elfui/core";',
         "",
         "const items = [];",
+        "const IndexCard = defineFragment(",
+        "  ({ item }) =>",
+        "    `<div>${item}</div>`,",
+        ");",
         "const view = defineHtml(`",
         "  <section>",
         "    <button>{{ count }}</button>",
@@ -883,6 +887,11 @@ suite("ElfUI Language Features Smoke", function () {
       assert(
         !saveSnapshots.some((source) => source.includes("items.map((item) => fragment`")),
         "Did not expect ElfUI save formatting to compact an external formatter's Fragment wrapper."
+      );
+      assert.match(
+        document.getText(),
+        /=> `\r?\n\s*<div>/,
+        "Expected the defineFragment arrow and template opener on one line."
       );
     } finally {
       changeSubscription.dispose();

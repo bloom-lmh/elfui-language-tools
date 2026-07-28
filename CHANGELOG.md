@@ -1,5 +1,13 @@
 # elfui-language-features
 
+## 0.3.1
+
+### Patch Changes
+
+- 2133fee: Fix named Fragment directive highlighting, keep multiline quoted binding formatting idempotent,
+  and suppress native TypeScript unused diagnostics only for `defineFragment` values consumed by an
+  ElfUI template tag.
+
 ## 0.3.0
 
 ### Minor Changes

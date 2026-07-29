@@ -37,8 +37,8 @@ Current maintained baseline: `0.4.1` released.
 
 Current maintenance cycle: Host latency observability and cold-start optimization are implemented
 and fully verified. The completed implementation plan and measured baseline are recorded in
-`docs/plans/2026-07-29-host-latency-optimization-plan.md`. Commit and push are the only remaining
-handoff actions for this cycle.
+`docs/plans/2026-07-29-host-latency-optimization-plan.md`. Implementation commit `1f71570` is
+pushed to Gitee and GitHub `main`.
 
 ## 2. 已经做的工作
 
@@ -137,8 +137,9 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
 ## Release State
 
 - Released version: `0.4.1`.
-- Unreleased maintenance: Host latency instrumentation, active-document prewarm, active-editor
-  diagnostics scheduling, and Host percentile budgets are verified and pending commit/push.
+- Unreleased maintenance commit: `1f71570`; Host latency instrumentation, active-document prewarm,
+  active-editor diagnostics scheduling, and Host percentile budgets are verified and pushed to
+  Gitee and GitHub `main`.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.

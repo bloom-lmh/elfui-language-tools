@@ -21,7 +21,7 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 ## Current Work
 
-Status: `0.4.1` release candidate.
+Status: `0.4.1` published; GitHub Release completion in progress.
 
 The current cycle aligns Language Tools with `@elfui/compiler@0.1.0-beta.17`, removes the retired
 Fragment authoring protocol, improves workspace indexing and cross-file navigation, reduces VSIX
@@ -32,7 +32,9 @@ Version `0.4.0` is published to the VS Code Marketplace, and commit `1e2809a` pl
 are on Gitee and GitHub. GitHub Release workflow run `30419657827` passed build, unit, smoke,
 development Host, and packaging gates but failed before packaged Host startup because Ubuntu GNU
 tar cannot extract the ZIP-based VSIX. Version `0.4.1` changes packaged smoke extraction to use
-`unzip` on Linux/macOS while retaining the working Windows tar path.
+`unzip` on Linux/macOS while retaining the working Windows tar path. Workflow run `30420440673`
+then passed the Linux packaged Host gate but stopped because the repository does not configure
+`VSCE_PAT`; the already-successful local Marketplace publication remains authoritative.
 
 No changes are required in `elfui`, `elfui-docs`, or `elfui-kit` for this release. Those repositories
 were used as read-only compatibility and pressure-test inputs.
@@ -59,6 +61,8 @@ were used as read-only compatibility and pressure-test inputs.
   preventing VS Code listener timeouts when the language server is temporarily busy.
 - Made packaged VSIX extraction cross-platform: Windows uses its ZIP-capable tar, while Linux and
   macOS use `unzip`.
+- Made remote Marketplace publication optional when `VSCE_PAT` is not configured, so a locally
+  published release can still complete its GitHub Release asset upload.
 - Expanded CI and release gates to include M10 pressure checks, development Host smoke, packaging,
   packaged VSIX Host smoke, token-length failures, ElfUI will-save listener failures, and deferred
   formatting failures.
@@ -79,6 +83,8 @@ were used as read-only compatibility and pressure-test inputs.
   therefore part of CI reliability.
 - The `v0.4.0` GitHub Release was not created because workflow run `30419657827` failed at Linux
   VSIX extraction. The Marketplace release is valid; `0.4.1` is the non-destructive follow-up.
+- GitHub does not currently expose a `VSCE_PAT` repository secret. Local `vsce publish` works; the
+  release workflow now skips that optional duplicate publication instead of blocking GitHub Release.
 
 ## Next Work
 
@@ -106,15 +112,19 @@ Latest confirmed locally on 2026-07-29 for `0.4.1`:
 - `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs.
 - `pnpm package:vsix`: 115 files, 2.91 MiB, below the 4 MiB budget.
 - `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed on Windows with clean Host logs.
+- GitHub workflow `30420440673`: build, 91 tests, smoke, development Host, package, and Linux
+  packaged Host all passed; only the now-optional missing-`VSCE_PAT` publication step failed.
 
 ## Release State
 
-- Target version: `0.4.1`.
+- Released version: `0.4.1`.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
-- Current work: cross-platform extraction implemented and all local gates passed; commit, push,
-  Marketplace publication, `v0.4.1` tag, and GitHub Release are pending.
-- Artifact target: `.local-vsix/elfui-language-features-0.4.1.vsix`.
+- Release commit: `036ce90`; pushed to Gitee and GitHub `main`.
+- Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.1`.
+- Git tag: `v0.4.1`; pushed to Gitee and GitHub.
+- GitHub Release: creation and VSIX upload are pending after the missing-secret workflow stop.
+- Local artifact: `.local-vsix/elfui-language-features-0.4.1.vsix`.
 
 ## Current Capability
 

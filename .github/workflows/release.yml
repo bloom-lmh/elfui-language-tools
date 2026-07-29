@@ -41,12 +41,16 @@ jobs:
         run: pnpm package:vsix:fast
       - name: Verify packaged VSIX
         run: xvfb-run -a pnpm smoke:vsix
-      - name: Publish to VS Code Marketplace
+      - name: Publish to VS Code Marketplace when configured
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         shell: bash
         run: |
-          test -n "$VSCE_PAT" || { echo "VSCE_PAT is required to publish to VS Code Marketplace." >&2; exit 1; }
+          if [[ -z "$VSCE_PAT" ]]; then
+            echo "VSCE_PAT is not configured; skipping Marketplace publish."
+            exit 0
+          fi
+
           vsix=$(find .local-vsix -maxdepth 1 -name '*.vsix' -print -quit)
           test -n "$vsix"
           pnpm exec vsce publish --packagePath "$vsix" --pat "$VSCE_PAT" --skip-duplicate

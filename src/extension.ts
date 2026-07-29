@@ -3,10 +3,19 @@ import { State, type LanguageClient } from "vscode-languageclient/node";
 
 import path from "node:path";
 import { performance } from "node:perf_hooks";
-import { startElfLanguageClient, stopElfLanguageClient } from "./lsp/client";
+import {
+  readLanguageClientPerformanceSummary,
+  resetLanguageClientPerformance,
+  startElfLanguageClient,
+  stopElfLanguageClient,
+  type LanguageClientPerformanceSummary,
+} from "./lsp/client";
+import type { LatencyDistribution } from "./shared/performance";
 
 let languageClient: LanguageClient | undefined;
 let languageServerStartupMs: number | undefined;
+let activeDocumentPrewarmPerformance: ActiveDocumentPrewarmPerformance | undefined;
+let activationPerformance: ActivationPerformance = {};
 let outputChannel: vscode.OutputChannel | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
 let componentStructureProvider: ElfComponentStructureProvider | undefined;
@@ -24,21 +33,9 @@ const workspacePerformanceHistoryLimit = 20;
 const embeddedSaveFormattingWillSaveBudgetMs = 1000;
 
 interface LanguageServerPerformanceSummary {
-  completion: {
-    averageDurationMs: number;
-    count: number;
-    maxDurationMs: number;
-  };
-  diagnostics: {
-    averageDurationMs: number;
-    count: number;
-    maxDurationMs: number;
-  };
-  formatting: {
-    averageDurationMs: number;
-    count: number;
-    maxDurationMs: number;
-  };
+  completion: LatencyDistribution;
+  diagnostics: LatencyDistribution;
+  formatting: LatencyDistribution;
   index: Array<{
     durationMs: number;
     filesIndexed: number;
@@ -48,9 +45,30 @@ interface LanguageServerPerformanceSummary {
     recordedAt: number;
     truncated: boolean;
   }>;
+  prewarm: LatencyDistribution;
+}
+
+interface ActiveDocumentPrewarmPerformance {
+  cached: boolean;
+  components: number;
+  roundTripDurationMs: number;
+  serverDurationMs: number;
+  styles: number;
+  templates: number;
+}
+
+interface ActivationPerformance {
+  activeDocumentPrewarm?: ActiveDocumentPrewarmPerformance;
+  componentSetupMs?: number;
+  languageServerStartupMs?: number;
+  totalMs?: number;
+  typeScriptPluginConfigurationMs?: number;
 }
 
 interface WorkspaceIndexReportSnapshot {
+  activeDocumentPrewarm?: ActiveDocumentPrewarmPerformance;
+  activation?: ActivationPerformance;
+  client?: LanguageClientPerformanceSummary;
   components: number;
   durationMs: number;
   filesScanned: number;
@@ -158,6 +176,8 @@ const componentTagColorRule = {
 };
 
 export const activate = async (context: vscode.ExtensionContext) => {
+  const activationStarted = performance.now();
+
   outputChannel = vscode.window.createOutputChannel("ElfUI");
   context.subscriptions.push(outputChannel);
 
@@ -173,6 +193,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   outputChannel.appendLine("Activating ElfUI language features...");
 
   try {
+    const componentSetupStarted = performance.now();
     await applyComponentTagColor();
     componentStructureProvider = new ElfComponentStructureProvider();
     context.subscriptions.push(
@@ -181,10 +202,19 @@ export const activate = async (context: vscode.ExtensionContext) => {
         treeDataProvider: componentStructureProvider,
       }),
     );
+    activationPerformance.componentSetupMs = performance.now() - componentSetupStarted;
+    resetLanguageClientPerformance();
     const languageServerStarted = performance.now();
     languageClient = await startElfLanguageClient(context, outputChannel);
     languageServerStartupMs = languageClient ? performance.now() - languageServerStarted : undefined;
+    activationPerformance.languageServerStartupMs = languageServerStartupMs;
+    await notifyLanguageServerActiveDocument(vscode.window.activeTextEditor);
+    activeDocumentPrewarmPerformance = await prewarmActiveElfDocument();
+    activationPerformance.activeDocumentPrewarm = activeDocumentPrewarmPerformance;
+    const typeScriptPluginStarted = performance.now();
     await configureTypeScriptPlugin();
+    activationPerformance.typeScriptPluginConfigurationMs =
+      performance.now() - typeScriptPluginStarted;
     setStatusBar(
       languageClient && languageClient.state === State.Running
         ? "ready"
@@ -281,6 +311,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
       vscode.window.onDidChangeActiveTextEditor((editor) => {
         updateStatusBarVisibility(editor);
         componentStructureProvider?.refresh();
+        void notifyLanguageServerActiveDocument(editor);
       }),
       vscode.workspace.onDidChangeTextDocument((event) => {
         if (
@@ -296,6 +327,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
     );
 
     updateStatusBarVisibility(vscode.window.activeTextEditor);
+    activationPerformance.totalMs = performance.now() - activationStarted;
     outputChannel.appendLine("ElfUI language features activated.");
   } catch (error) {
     const message =
@@ -395,14 +427,82 @@ const restartLanguageClient = async (context: vscode.ExtensionContext) => {
   setStatusBar("starting");
   await stopElfLanguageClient(languageClient, outputChannel);
   languageClient = undefined;
+  resetLanguageClientPerformance();
   const languageServerStarted = performance.now();
   languageClient = await startElfLanguageClient(context, outputChannel);
   languageServerStartupMs = languageClient ? performance.now() - languageServerStarted : undefined;
+  activeDocumentPrewarmPerformance = undefined;
+  await notifyLanguageServerActiveDocument(vscode.window.activeTextEditor);
+  activeDocumentPrewarmPerformance = await prewarmActiveElfDocument();
   setStatusBar(
     languageClient && languageClient.state === State.Running
       ? "ready"
       : "disabled",
   );
+};
+
+const notifyLanguageServerActiveDocument = async (
+  editor: vscode.TextEditor | undefined,
+): Promise<void> => {
+  if (!languageClient || languageClient.state !== State.Running) {
+    return;
+  }
+
+  await languageClient.sendNotification("elfui/setActiveDocument", {
+    uri: editor?.document.uri.toString(),
+  });
+};
+
+const prewarmActiveElfDocument = async (): Promise<
+  ActiveDocumentPrewarmPerformance | undefined
+> => {
+  const document = vscode.window.activeTextEditor?.document;
+
+  if (
+    !languageClient ||
+    languageClient.state !== State.Running ||
+    !document ||
+    !["typescript", "typescriptreact", "javascript", "javascriptreact"].includes(
+      document.languageId,
+    ) ||
+    !/\bdefine(?:Html|Style)\b/.test(document.getText())
+  ) {
+    return undefined;
+  }
+
+  const started = performance.now();
+
+  try {
+    const result = await languageClient.sendRequest<{
+      cached: boolean;
+      components: number;
+      durationMs: number;
+      styles: number;
+      templates: number;
+    }>("elfui/prewarmDocument", {
+      languageId: document.languageId,
+      text: document.getText(),
+      uri: document.uri.toString(),
+      version: document.version,
+    });
+
+    return {
+      cached: result.cached,
+      components: result.components,
+      roundTripDurationMs: performance.now() - started,
+      serverDurationMs: result.durationMs,
+      styles: result.styles,
+      templates: result.templates,
+    };
+  } catch (error) {
+    outputChannel?.appendLine(
+      `ElfUI active-document prewarm failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+
+    return undefined;
+  }
 };
 
 const configureTypeScriptPlugin = async (): Promise<void> => {
@@ -1560,6 +1660,9 @@ const exportWorkspacePerformanceReport = async (
   const history = readWorkspacePerformanceHistory(context);
   const uri = vscode.Uri.joinPath(folder.uri, ".elfui", "performance-report.json");
   const report = {
+    activeDocumentPrewarm: activeDocumentPrewarmPerformance,
+    activation: activationPerformance,
+    client: readLanguageClientPerformanceSummary(),
     exportedAt: new Date().toISOString(),
     languageServer: await requestLanguageServerPerformanceSummary(),
     languageServerStartupMs,
@@ -1613,6 +1716,11 @@ const showWorkspaceIndexReport = async (context: vscode.ExtensionContext) => {
   });
   const components = analyses.flat();
   const snapshot: WorkspaceIndexReportSnapshot = {
+    ...(activeDocumentPrewarmPerformance
+      ? { activeDocumentPrewarm: activeDocumentPrewarmPerformance }
+      : {}),
+    activation: activationPerformance,
+    client: readLanguageClientPerformanceSummary(),
     components: components.length,
     durationMs: performance.now() - started,
     filesScanned: files.length,
@@ -2024,10 +2132,16 @@ const createWorkspaceIndexReportHtml = (report: WorkspaceIndexReport): string =>
           <tr><th>Report scan</th><td>${report.durationMs.toFixed(1)}ms</td></tr>
           <tr><th>Truncated</th><td>${report.truncated ? "yes" : "no"}</td></tr>
           <tr><th>Language server startup</th><td>${formatDuration(report.languageServerStartupMs)}</td></tr>
+          <tr><th>Total extension activation</th><td>${formatDuration(report.activation?.totalMs)}</td></tr>
+          <tr><th>Active-document prewarm</th><td>${formatPrewarm(report.activeDocumentPrewarm)}</td></tr>
           <tr><th>Latest language-server index</th><td>${formatIndexDuration(latestIndex)}</td></tr>
-          <tr><th>Completion latency</th><td>${formatCompletionLatency(completion)}</td></tr>
-          <tr><th>Formatting latency</th><td>${formatCompletionLatency(report.languageServer?.formatting)}</td></tr>
-          <tr><th>Diagnostics latency</th><td>${formatCompletionLatency(report.languageServer?.diagnostics)}</td></tr>
+          <tr><th>Host completion round trip</th><td>${formatLatency(report.client?.completion)}</td></tr>
+          <tr><th>Host formatting round trip</th><td>${formatLatency(report.client?.formatting)}</td></tr>
+          <tr><th>Host code-action round trip</th><td>${formatLatency(report.client?.codeAction)}</td></tr>
+          <tr><th>Server completion execution</th><td>${formatLatency(completion)}</td></tr>
+          <tr><th>Server formatting execution</th><td>${formatLatency(report.languageServer?.formatting)}</td></tr>
+          <tr><th>Server diagnostics execution</th><td>${formatLatency(report.languageServer?.diagnostics)}</td></tr>
+          <tr><th>Server document prewarm</th><td>${formatLatency(report.languageServer?.prewarm)}</td></tr>
         </tbody>
       </table>
       <h2>Recent report scans</h2>
@@ -2049,12 +2163,19 @@ const formatIndexDuration = (
     ? `${sample.durationMs.toFixed(1)}ms (${sample.reason}, ${sample.filesScanned} files)`
     : "unavailable";
 
-const formatCompletionLatency = (
-  completion: LanguageServerPerformanceSummary["completion"] | undefined,
+const formatLatency = (
+  latency: LatencyDistribution | undefined,
 ): string =>
-  completion && completion.count > 0
-    ? `${completion.averageDurationMs.toFixed(1)}ms avg, ${completion.maxDurationMs.toFixed(1)}ms max (${completion.count} requests)`
+  latency && latency.count > 0
+    ? `${latency.firstDurationMs?.toFixed(1) ?? "-"}ms first, ${latency.warmP50DurationMs.toFixed(1)}ms p50, ${latency.warmP95DurationMs.toFixed(1)}ms p95, ${latency.warmP99DurationMs.toFixed(1)}ms p99 (${latency.count} requests)`
     : "unavailable";
+
+const formatPrewarm = (
+  prewarm: ActiveDocumentPrewarmPerformance | undefined,
+): string =>
+  prewarm
+    ? `${prewarm.roundTripDurationMs.toFixed(1)}ms round trip, ${prewarm.serverDurationMs.toFixed(1)}ms server (${prewarm.templates} template, ${prewarm.styles} style)`
+    : "not applicable";
 
 const createStaticPreviewHtml = (template: string): string => {
   const withoutScripts = template.replace(/<script\b[\s\S]*?<\/script>/gi, "");

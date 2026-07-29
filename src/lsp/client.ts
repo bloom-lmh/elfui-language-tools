@@ -1,4 +1,5 @@
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import * as vscode from "vscode";
 import {
   LanguageClient,
@@ -9,7 +10,30 @@ import {
   type ServerOptions
 } from "vscode-languageclient/node";
 
+import { BoundedLatencyRecorder, type LatencyDistribution } from "../shared/performance";
+
 const supportedLanguages = ["typescript", "typescriptreact", "javascript", "javascriptreact"];
+const clientFeaturePerformance = {
+  codeAction: new BoundedLatencyRecorder(),
+  completion: new BoundedLatencyRecorder(),
+  formatting: new BoundedLatencyRecorder()
+};
+
+export interface LanguageClientPerformanceSummary {
+  codeAction: LatencyDistribution;
+  completion: LatencyDistribution;
+  formatting: LatencyDistribution;
+}
+
+export const readLanguageClientPerformanceSummary = (): LanguageClientPerformanceSummary => ({
+  codeAction: clientFeaturePerformance.codeAction.summary(),
+  completion: clientFeaturePerformance.completion.summary(),
+  formatting: clientFeaturePerformance.formatting.summary()
+});
+
+export const resetLanguageClientPerformance = (): void => {
+  Object.values(clientFeaturePerformance).forEach((recorder) => recorder.reset());
+};
 
 export const startElfLanguageClient = async (
   context: vscode.ExtensionContext,
@@ -43,6 +67,8 @@ export const startElfLanguageClient = async (
       { language, scheme: "untitled" }
     ]),
     initializationOptions: {
+      activeDocumentUri: vscode.window.activeTextEditor?.document.uri.toString(),
+      activeDocumentTracking: true,
       elfui: {
         languageFeatures: {
           completion: {
@@ -59,6 +85,30 @@ export const startElfLanguageClient = async (
           }
         }
       }
+    },
+    middleware: {
+      provideCodeActions: (document, range, actionContext, token, next) =>
+        measureClientFeature("codeAction", () =>
+          next(document, range, actionContext, token)
+        ),
+      provideCompletionItem: (document, position, completionContext, token, next) =>
+        measureClientFeature("completion", () =>
+          next(document, position, completionContext, token)
+        ),
+      provideDocumentFormattingEdits: (document, options, token, next) =>
+        measureClientFeature("formatting", () => next(document, options, token)),
+      provideDocumentRangeFormattingEdits: (document, range, options, token, next) =>
+        measureClientFeature("formatting", () =>
+          next(document, range, options, token)
+        ),
+      provideDocumentRangesFormattingEdits: (document, ranges, options, token, next) =>
+        measureClientFeature("formatting", () =>
+          next(document, ranges, options, token)
+        ),
+      provideOnTypeFormattingEdits: (document, position, character, options, token, next) =>
+        measureClientFeature("formatting", () =>
+          next(document, position, character, options, token)
+        )
     },
     outputChannel,
     revealOutputChannelOn: RevealOutputChannelOn.Never,
@@ -79,6 +129,19 @@ export const startElfLanguageClient = async (
   outputChannel.appendLine("ElfUI language server is ready.");
 
   return client;
+};
+
+const measureClientFeature = async <Result>(
+  feature: keyof typeof clientFeaturePerformance,
+  callback: () => vscode.ProviderResult<Result>
+): Promise<Result | null | undefined> => {
+  const started = performance.now();
+
+  try {
+    return await callback();
+  } finally {
+    clientFeaturePerformance[feature].record(performance.now() - started);
+  }
 };
 
 export const stopElfLanguageClient = async (

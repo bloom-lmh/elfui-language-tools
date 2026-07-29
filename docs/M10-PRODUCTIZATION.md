@@ -23,6 +23,8 @@ The gate scans the maintained `elfui-kit/src/components` tree and checks:
 - asynchronous scan limits/cache reuse and cached cross-file component contract rename
 - real Host logs, including hard failures on TextMate token-length mismatches, ElfUI will-save
   listener errors, and deferred save-formatting failures
+- real Host first-request, active-document prewarm, warm completion p95, and warm formatting p95
+  budgets with exported percentile evidence
 
 ## Current Baseline
 
@@ -32,14 +34,17 @@ Latest local baseline on 2026-07-29:
 | --- | --- |
 | elfui-kit source files | 360 TS files |
 | macro component files | 27 files |
-| expression bindings | 2380 |
+| expression bindings | 2386 |
 | `v-for` declarations | 68 |
 | `v-model` bindings | 16 |
 | `:host` selectors | 766 |
-| `::part` / `::slotted` selectors | 83 |
-| `--elf-*` token references | 2049 |
-| cold scan budget | 45.8 ms observed, budget <= 3000 ms |
-| warm cache budget | 3.0 ms observed, budget <= 750 ms |
+| `::part` / `::slotted` selectors | 89 |
+| `--elf-*` token references | 2053 |
+| cold scan budget | 101.7 ms observed, budget <= 3000 ms |
+| warm cache budget | 4.0 ms observed, budget <= 750 ms |
+| packaged Host first completion | 58.5 ms, budget <= 1500 ms |
+| packaged Host warm completion p95 | 8.68 ms, budget <= 250 ms |
+| packaged Host warm formatting p95 | 1.66 ms, budget <= 1000 ms |
 
 ## Studio Features
 

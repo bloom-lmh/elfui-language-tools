@@ -1,5 +1,17 @@
 # elfui-language-features
 
+## Unreleased
+
+### Changes
+
+- Add first-request and warm p50/p95/p99 latency distributions for language-server execution and
+  real Extension Host provider round trips, including exported development and packaged Host
+  performance artifacts.
+- Prewarm only the active ElfUI document, track active-editor changes across Language Client
+  restarts, and avoid immediate diagnostics work for stale documents retained by VS Code.
+- Yield between queued diagnostics and enforce CI-safe Host budgets for first completion, active
+  document prewarm, warm completion p95, and warm formatting p95.
+
 ## 0.4.1 - 2026-07-29
 
 ### Patch Changes

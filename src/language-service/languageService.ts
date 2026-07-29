@@ -409,6 +409,36 @@ const analyzeDocument = (document: TextDocument) => {
   return analysis;
 };
 
+export interface ElfDocumentPreparationResult {
+  components: number;
+  styles: number;
+  templates: number;
+}
+
+export const prepareElfDocument = (
+  document: TextDocument
+): ElfDocumentPreparationResult => {
+  const analysis = analyzeDocument(document);
+  const templates = new Map<number, EmbeddedRegion>();
+  const styles = new Map<number, EmbeddedRegion>();
+
+  analysis.components.forEach((component) => {
+    component.templates.forEach((region) => templates.set(region.contentStart, region));
+    component.styles.forEach((region) => styles.set(region.contentStart, region));
+  });
+  templates.forEach((region) => {
+    parseHTMLForRegion(document.uri, region);
+    parseHTMLParsingDocument(document.uri, region);
+  });
+  styles.forEach((region) => parseStylesheetForRegion(document.uri, region));
+
+  return {
+    components: analysis.components.length,
+    styles: styles.size,
+    templates: templates.size,
+  };
+};
+
 export const elfSemanticTokenTypes = [
   "class",
   "property",

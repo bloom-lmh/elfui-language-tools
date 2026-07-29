@@ -12,35 +12,35 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 - Read it before changing code.
 - Update it when a maintenance cycle starts and again before handoff, commit, or release.
-- Keep `Current Work`, `Completed This Cycle`, `Known Issues`, `Next Work`, `Verification
+- Keep `目标`, `已经做的工作`, `未作的工作（将要做的）`, `当前问题`, `Verification
   Snapshot`, and `Release State` aligned with the working tree.
 - Record only confirmed results. If a gate has not run, mark it pending instead of carrying
   forward an older result.
 - Keep long-form release history in `CHANGELOG.md` and Git; keep this document focused on the
   latest actionable state.
 
-## Current Work
+## 1. 目标
 
-Status: `0.4.1` released.
+- Maintain `elfui-language-tools` as the only supported home of the ElfUI VS Code extension.
+- Remove obsolete protocols and duplicate code while preserving compatibility with the maintained
+  ElfUI compiler, Kit source, and documentation examples.
+- Keep interactive language features responsive, workspace indexing incremental and cached, and
+  the packaged VSIX below the enforced size budget.
+- Continue splitting oversized modules along provider, index, configuration, and host boundaries
+  without weakening behavior or compatibility.
+- Keep unit, grammar, M10 pressure, development Host, packaged Host, CI, and release gates reliable
+  on Windows and Linux.
+- Treat `elfui`, `elfui-docs`, and `elfui-kit` as read-only compatibility inputs unless a future
+  task explicitly authorizes changes in those repositories.
 
-The current cycle aligns Language Tools with `@elfui/compiler@0.1.0-beta.17`, removes the retired
-Fragment authoring protocol, improves workspace indexing and cross-file navigation, reduces VSIX
-size, separates configuration/index state from server orchestration, and strengthens CI plus real
-Extension Host coverage.
+Current maintained baseline: `0.4.1` released.
 
-Version `0.4.0` is published to the VS Code Marketplace, and commit `1e2809a` plus tag `v0.4.0`
-are on Gitee and GitHub. GitHub Release workflow run `30419657827` passed build, unit, smoke,
-development Host, and packaging gates but failed before packaged Host startup because Ubuntu GNU
-tar cannot extract the ZIP-based VSIX. Version `0.4.1` changes packaged smoke extraction to use
-`unzip` on Linux/macOS while retaining the working Windows tar path. Workflow run `30420440673`
-then passed the Linux packaged Host gate but stopped because the repository does not configure
-`VSCE_PAT`; the already-successful local Marketplace publication remains authoritative. GitHub
-Release `v0.4.1` was created through the GitHub API and includes the verified VSIX asset.
+Current maintenance cycle: Host latency observability and cold-start optimization are implemented
+and fully verified. The completed implementation plan and measured baseline are recorded in
+`docs/plans/2026-07-29-host-latency-optimization-plan.md`. Commit and push are the only remaining
+handoff actions for this cycle.
 
-No changes are required in `elfui`, `elfui-docs`, or `elfui-kit` for this release. Those repositories
-were used as read-only compatibility and pressure-test inputs.
-
-## Completed This Cycle
+## 2. 已经做的工作
 
 - Removed language-core, language-service, TypeScript plugin, grammar, snippet, formatting,
   metadata, navigation, and smoke coverage for `fragment` / `defineFragment`.
@@ -67,23 +67,20 @@ were used as read-only compatibility and pressure-test inputs.
 - Expanded CI and release gates to include M10 pressure checks, development Host smoke, packaging,
   packaged VSIX Host smoke, token-length failures, ElfUI will-save listener failures, and deferred
   formatting failures.
+- Published Marketplace `0.4.1`, pushed release tag `v0.4.1` to Gitee and GitHub, and created the
+  GitHub Release with the verified 3,052,235-byte VSIX asset.
+- Fixed the release workflow so missing optional `VSCE_PAT` credentials no longer block a GitHub
+  Release after an authoritative local Marketplace publication.
+- Added bounded first/warm p50/p95/p99 latency distributions for language-server execution and
+  Extension Host completion, formatting, and code-action round trips.
+- Split extension activation timing, prewarmed only the active ElfUI document, and exported real
+  development/packaged Host performance artifacts with CI-safe latency budgets.
+- Added active-editor tracking and yielded between queued diagnostics. Language Client restarts no
+  longer immediately diagnose every stale document retained by VS Code; the instrumented restart
+  diagnostics count dropped from 40 to 8 and the development Host suite dropped from roughly two
+  minutes to 54 seconds on the same machine class.
 
-## Known Issues
-
-- `src/language-service/languageService.ts` is still 8,587 lines and mixes embedded document
-  caching, completion, diagnostics, navigation, formatting, and semantic token providers.
-- `src/language-service/server.ts` is still 2,863 lines. Configuration and index state are split,
-  but package metadata parsing, source scanning, reference indexing, and LSP orchestration still
-  share one module.
-- `src/extension.ts` is about 2,000 lines and contains Studio-oriented source analysis that
-  partially duplicates `language-core`.
-- Real first-use Host workflows can take seconds while TypeScript and the workspace index warm up;
-  internal warm completion/formatting and index budgets pass, but end-to-end latency should keep
-  being measured on larger workspaces.
-- The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
-  therefore part of CI reliability.
-
-## Next Work
+## 3. 未作的工作（将要做的）
 
 1. Split `languageService.ts` by provider family around a shared embedded-document/cache context,
    starting with completion/hover and diagnostics/code actions.
@@ -95,26 +92,53 @@ were used as read-only compatibility and pressure-test inputs.
    behavior.
 5. Re-run both development and packaged Host smoke whenever grammar, semantic classifications,
    document edits, or packaging change.
+6. Profile the remaining compiler diagnostics path. Packaged Host diagnostics p95 ranged from
+   about 654 ms to 1.74 seconds under repeated machine contention even though completion and
+   formatting round trips stayed in single-digit milliseconds.
+
+## 4. 当前问题
+
+- `src/language-service/languageService.ts` is still 8,617 lines and mixes embedded document
+  caching, completion, diagnostics, navigation, formatting, and semantic token providers.
+- `src/language-service/server.ts` is still 2,963 lines. Configuration and index state are split,
+  but package metadata parsing, source scanning, reference indexing, and LSP orchestration still
+  share one module.
+- `src/extension.ts` is 2,237 lines and contains Studio-oriented source analysis that partially
+  duplicates `language-core`.
+- TypeScript-heavy first-use workflows can still take seconds because VS Code's TypeScript Server
+  and compiler diagnostics have independent cold paths. Direct packaged Host completion is 58.5 ms
+  first / 8.68 ms warm p95, while active-document diagnostics ranged from about 654 ms to 1.74
+  seconds p95 under repeated machine contention.
+- The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
+  therefore part of CI reliability.
 
 ## Verification Snapshot
 
-Latest confirmed locally on 2026-07-29 for `0.4.1`:
+Latest confirmed locally on 2026-07-29 for the unreleased performance maintenance after `0.4.1`:
 
 - `pnpm typecheck`: passed with unused-code checks enabled.
-- `pnpm test`: 6 files, 91 tests passed when run serially as in CI.
+- `pnpm test`: 7 files, 95 tests passed.
 - `pnpm smoke`: extension startup, Windows/Linux/macOS extraction selection, and 7/7 grammar
   cases passed.
-- `pnpm verify:m10`: 360 Kit source files, 27 macro components, cold index 131.1 ms, warm
-  472/472 cache reuse in 4.5 ms.
-- `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs.
+- `pnpm verify:m10`: 360 Kit source files, 27 macro components, cold index 101.7 ms, warm
+  472/472 cache reuse in 4.0 ms.
+- `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs. The final
+  repeated run took about one minute; a clean run took 54 seconds. Final isolated first completion
+  was 24.9 ms, warm completion p95 5.89 ms, and warm formatting p95 25.35 ms.
 - `pnpm package:vsix`: 115 files, 2.91 MiB, below the 4 MiB budget.
-- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed on Windows with clean Host logs.
+- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed on Windows with clean Host logs. A
+  clean run took 56 seconds and the final repeated run took about two minutes under contention.
+  Final activation was 459.2 ms, latest Language Client restart 948.9 ms, active-document prewarm
+  163.4 ms round trip / 2.39 ms server, first completion 58.5 ms, warm completion p95 8.68 ms, and
+  warm formatting p95 1.66 ms.
 - GitHub workflow `30420440673`: build, 91 tests, smoke, development Host, package, and Linux
   packaged Host all passed; only the now-optional missing-`VSCE_PAT` publication step failed.
 
 ## Release State
 
 - Released version: `0.4.1`.
+- Unreleased maintenance: Host latency instrumentation, active-document prewarm, active-editor
+  diagnostics scheduling, and Host percentile budgets are verified and pending commit/push.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.
@@ -248,11 +272,13 @@ pnpm smoke:vsix
 
 `smoke:host` and `smoke:vsix` launch a real VS Code Extension Host and fail on TextMate
 token-length mismatches, ElfUI will-save listener failures, or deferred save-formatting failures.
+They also enforce first-completion, active-prewarm, warm-completion-p95, and
+warm-formatting-p95 budgets and write ignored JSON evidence under `output/`.
 The recurring VS Code mutex warning in the test environment is harmless when the command exits
 successfully.
 
 `package:vsix` strips source maps from its isolated staging tree and fails if the final VSIX is
-larger than 4 MiB. The maintained 0.4.0 release-candidate baseline is 2.91 MiB.
+larger than 4 MiB. The maintained 0.4.1 release baseline is 2.91 MiB.
 
 The latest maintained Kit baseline is 360 source files, 27 direct macro component entries,
 cold indexing under 3 seconds, and warm cached indexing under 750 ms. Use

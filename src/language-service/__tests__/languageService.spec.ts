@@ -27,7 +27,8 @@ import {
   createElfSelectionRanges,
   createElfSemanticTokens,
   createElfTagComplete,
-  elfSemanticTokensLegend
+  elfSemanticTokensLegend,
+  prepareElfDocument
 } from "../languageService";
 import { elfuiDemoFixture } from "../../language-core/__fixtures__/elfuiDemo";
 
@@ -222,6 +223,34 @@ describe("ElfUI language service", () => {
     expect(completionAverage).toBeLessThan(50);
     expect(formattingAverage).toBeLessThan(50);
     expect(declarationAverage).toBeLessThan(50);
+  });
+
+  it("prepares each embedded region once and keeps subsequent requests warm", () => {
+    const source = `
+      import { defineHtml, defineStyle } from "@elfui/core";
+
+      export const Demo = defineHtml(\`<main><button>Save</button></main>\`);
+      defineStyle(\`:host { display: block; }\`);
+    `;
+    const document = TextDocument.create("file:///prepare.ts", "typescript", 1, source);
+
+    expect(prepareElfDocument(document)).toEqual({
+      components: 1,
+      styles: 1,
+      templates: 1
+    });
+    expect(prepareElfDocument(document)).toEqual({
+      components: 1,
+      styles: 1,
+      templates: 1
+    });
+
+    const completion = createElfCompletionList(
+      document,
+      positionAfter(document, source, "<main")
+    );
+
+    expect(completion.items.length).toBeGreaterThan(0);
   });
 
   it("provides event completions for @elfui/core macro components", () => {

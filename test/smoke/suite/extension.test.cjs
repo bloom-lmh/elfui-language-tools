@@ -712,9 +712,53 @@ suite("ElfUI Language Features Smoke", function () {
     const originalReport = readFileIfPresent(performancePath);
 
     try {
+      const { document, position } = await openFixtureWithCursor(
+        [
+          'import { defineHtml, defineStyle } from "@elfui/core";',
+          "",
+          "export const PerformanceDemo = defineHtml(`",
+          `  <button @${CURSOR}></button>`,
+          "`);",
+          'defineStyle(`:host { display: block; }`);',
+          ""
+        ].join("\n")
+      );
+
+      await vscode.commands.executeCommand("elfui.restartLanguageServer");
+      await waitForCompletionLabels(document, position, ["@click"]);
+      for (let index = 0; index < 7; index += 1) {
+        await vscode.commands.executeCommand(
+          "vscode.executeCompletionItemProvider",
+          document.uri,
+          position
+        );
+      }
+      for (let index = 0; index < 5; index += 1) {
+        await vscode.commands.executeCommand(
+          "vscode.executeFormatDocumentProvider",
+          document.uri,
+          { insertSpaces: true, tabSize: 2 }
+        );
+      }
+
       const indexReport = await vscode.commands.executeCommand("elfui.showWorkspaceIndexReport");
       const exported = await vscode.commands.executeCommand("elfui.exportWorkspacePerformanceReport");
       const exportedReport = JSON.parse(fs.readFileSync(performancePath, "utf8"));
+      const budgets = {
+        firstCompletionMs: readPositiveEnvironmentNumber(
+          "ELFUI_HOST_FIRST_COMPLETION_BUDGET_MS",
+          1500
+        ),
+        prewarmMs: readPositiveEnvironmentNumber("ELFUI_HOST_PREWARM_BUDGET_MS", 1500),
+        warmCompletionP95Ms: readPositiveEnvironmentNumber(
+          "ELFUI_HOST_WARM_COMPLETION_P95_BUDGET_MS",
+          250
+        ),
+        warmFormattingP95Ms: readPositiveEnvironmentNumber(
+          "ELFUI_HOST_WARM_FORMATTING_P95_BUDGET_MS",
+          1000
+        )
+      };
 
       assert.equal(exported?.history >= 1, true, "Expected exported performance history.");
       assert.equal(exported?.wrote, true, "Expected performance export write.");
@@ -722,6 +766,27 @@ suite("ElfUI Language Features Smoke", function () {
         exportedReport.reports.some((item) => item.recordedAt === indexReport.recordedAt),
         "Expected exported report history to include the latest scan."
       );
+
+      assert.equal(indexReport.client?.completion?.count >= 8, true);
+      assert.equal(indexReport.client?.formatting?.count >= 5, true);
+      assert(
+        indexReport.client.completion.firstDurationMs <= budgets.firstCompletionMs,
+        `Expected first Host completion <= ${budgets.firstCompletionMs}ms, received ${indexReport.client.completion.firstDurationMs.toFixed(1)}ms.`
+      );
+      assert(
+        indexReport.client.completion.warmP95DurationMs <= budgets.warmCompletionP95Ms,
+        `Expected warm Host completion p95 <= ${budgets.warmCompletionP95Ms}ms, received ${indexReport.client.completion.warmP95DurationMs.toFixed(1)}ms.`
+      );
+      assert(
+        indexReport.client.formatting.warmP95DurationMs <= budgets.warmFormattingP95Ms,
+        `Expected warm Host formatting p95 <= ${budgets.warmFormattingP95Ms}ms, received ${indexReport.client.formatting.warmP95DurationMs.toFixed(1)}ms.`
+      );
+      assert(
+        indexReport.activeDocumentPrewarm?.roundTripDurationMs <= budgets.prewarmMs,
+        `Expected active-document prewarm <= ${budgets.prewarmMs}ms, received ${indexReport.activeDocumentPrewarm?.roundTripDurationMs?.toFixed(1) ?? "unavailable"}ms.`
+      );
+
+      writeHostPerformanceArtifact({ budgets, report: exportedReport });
 
       const cleared = await vscode.commands.executeCommand("elfui.clearWorkspacePerformanceHistory");
 
@@ -958,6 +1023,31 @@ function removeDirectoryIfEmpty(directory) {
   } catch {
     // Keep non-empty or missing directories untouched.
   }
+}
+
+function readPositiveEnvironmentNumber(name, fallback) {
+  const value = Number(process.env[name]);
+
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function writeHostPerformanceArtifact(value) {
+  const extension = vscode.extensions.getExtension(EXTENSION_ID);
+  const mode = extension?.extensionPath.includes(".vscode-test-packaged")
+    ? "packaged"
+    : "development";
+  const outputPath = path.resolve(
+    __dirname,
+    "..",
+    "..",
+    "..",
+    "output",
+    `host-performance-${mode}.json`
+  );
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  console.log(`ElfUI Host performance report: ${outputPath}`);
 }
 
 async function openFixture(content) {

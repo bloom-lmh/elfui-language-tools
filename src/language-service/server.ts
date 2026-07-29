@@ -22,6 +22,7 @@ import {
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 import { analyzeElfSource, type ComponentMeta } from "../language-core";
+import { BoundedLatencyRecorder, type LatencyDistribution } from "../shared/performance";
 import {
   areWorkspaceIndexOptionsEqual,
   defaultWorkspaceIndexOptions,
@@ -52,6 +53,7 @@ import {
   createElfSelectionRanges,
   createElfSemanticTokens,
   elfSemanticTokensLegend,
+  prepareElfDocument,
   type ElfLanguageServiceOptions,
   type ElfProjectComponent,
   type ElfProjectComponentEmit,
@@ -89,11 +91,7 @@ export type {
   WorkspaceIndexStats
 };
 
-export interface FeaturePerformanceStats {
-  averageDurationMs: number;
-  count: number;
-  maxDurationMs: number;
-}
+export type FeaturePerformanceStats = LatencyDistribution;
 
 export type CompletionPerformanceStats = FeaturePerformanceStats;
 
@@ -106,6 +104,22 @@ export interface LanguageServerPerformanceSummary {
   diagnostics: FeaturePerformanceStats;
   formatting: FeaturePerformanceStats;
   index: WorkspaceIndexPerformanceSample[];
+  prewarm: FeaturePerformanceStats;
+}
+
+interface PrewarmDocumentParams {
+  languageId: string;
+  text: string;
+  uri: string;
+  version: number;
+}
+
+interface PrewarmDocumentResult {
+  cached: boolean;
+  components: number;
+  durationMs: number;
+  styles: number;
+  templates: number;
 }
 
 const performanceSampleLimit = 20;
@@ -124,14 +138,19 @@ export const startElfLanguageServer = (connection: Connection) => {
   let queuedWorkspaceIndexReason: string | undefined;
   const pendingDiagnostics = new Map<string, TextDocument>();
   let pendingDiagnosticsTimer: ReturnType<typeof setTimeout> | undefined;
+  let diagnosticsFlushInProgress = false;
+  let activeDocumentUri: string | undefined;
+  let activeDocumentTracking = false;
   const pendingWatchedFileChanges = new Map<string, FileEvent>();
   let pendingWatchedFileChangesTimer: ReturnType<typeof setTimeout> | undefined;
   const indexPerformanceHistory: WorkspaceIndexPerformanceSample[] = [];
   const featurePerformance = {
-    completion: createFeaturePerformanceStats(),
-    diagnostics: createFeaturePerformanceStats(),
-    formatting: createFeaturePerformanceStats()
+    completion: new BoundedLatencyRecorder(),
+    diagnostics: new BoundedLatencyRecorder(),
+    formatting: new BoundedLatencyRecorder(),
+    prewarm: new BoundedLatencyRecorder()
   };
+  const preparedDocumentVersions = new Map<string, number>();
 
   const logWorkspaceIndexStats = (stats: WorkspaceIndexStats) => {
     if (!workspaceIndex.options.perfLogging) {
@@ -168,14 +187,41 @@ export const startElfLanguageServer = (connection: Connection) => {
     feature: keyof typeof featurePerformance,
     durationMs: number
   ) => {
-    const stats = featurePerformance[feature];
-    stats.count += 1;
-    stats.totalDurationMs += durationMs;
-    stats.maxDurationMs = Math.max(stats.maxDurationMs, durationMs);
+    featurePerformance[feature].record(durationMs);
+  };
+
+  const prewarmDocument = (document: TextDocument): PrewarmDocumentResult => {
+    if (preparedDocumentVersions.get(document.uri) === document.version) {
+      return {
+        cached: true,
+        components: 0,
+        durationMs: 0,
+        styles: 0,
+        templates: 0
+      };
+    }
+
+    const started = performance.now();
+    const prepared = prepareElfDocument(document);
+    const durationMs = performance.now() - started;
+
+    preparedDocumentVersions.set(document.uri, document.version);
+    recordFeatureDuration("prewarm", durationMs);
+
+    return { cached: false, durationMs, ...prepared };
   };
 
   const refreshOpenDocumentDiagnostics = () => {
-    documents.all().forEach((document) => scheduleDiagnostics(document));
+    const activeDocument = activeDocumentUri ? documents.get(activeDocumentUri) : undefined;
+
+    if (activeDocument) {
+      scheduleDiagnostics(activeDocument);
+      return;
+    }
+
+    if (!activeDocumentTracking) {
+      documents.all().forEach((document) => scheduleDiagnostics(document));
+    }
   };
 
   const syncOpenDocumentsToIndex = () => {
@@ -226,16 +272,40 @@ export const startElfLanguageServer = (connection: Connection) => {
 
   const flushDiagnostics = () => {
     pendingDiagnosticsTimer = undefined;
-    const documentsToCheck = [...pendingDiagnostics.values()];
+    if (diagnosticsFlushInProgress) {
+      return;
+    }
+
+    diagnosticsFlushInProgress = true;
+    const documentsToCheck = [...pendingDiagnostics.values()].sort((left, right) =>
+      left.uri === activeDocumentUri ? -1 : right.uri === activeDocumentUri ? 1 : 0
+    );
     pendingDiagnostics.clear();
 
-    documentsToCheck.forEach((document) => {
+    const processNext = () => {
+      const document = documentsToCheck.shift();
+
+      if (!document) {
+        diagnosticsFlushInProgress = false;
+        if (pendingDiagnostics.size > 0) {
+          if (pendingDiagnosticsTimer) {
+            clearTimeout(pendingDiagnosticsTimer);
+          }
+          pendingDiagnosticsTimer = setTimeout(flushDiagnostics, 0);
+        }
+        return;
+      }
+
       if (documents.get(document.uri)?.version !== document.version) {
+        setImmediate(processNext);
         return;
       }
 
       publishDiagnostics(document);
-    });
+      setImmediate(processNext);
+    };
+
+    setImmediate(processNext);
   };
 
   const scheduleDiagnostics = (document: TextDocument, delayMs = 120) => {
@@ -301,6 +371,8 @@ export const startElfLanguageServer = (connection: Connection) => {
   };
 
   connection.onInitialize((params): InitializeResult => {
+    activeDocumentUri = readActiveDocumentUri(params.initializationOptions);
+    activeDocumentTracking = readActiveDocumentTracking(params.initializationOptions);
     languageServiceOptions = readLanguageServiceOptions(params.initializationOptions);
     workspaceIndex.options = readWorkspaceIndexOptions(params.initializationOptions);
     workspaceRoots = readWorkspaceRoots(params.workspaceFolders, params.rootUri ?? undefined);
@@ -399,14 +471,39 @@ export const startElfLanguageServer = (connection: Connection) => {
     }
   );
 
+  connection.onNotification(
+    "elfui/setActiveDocument",
+    (params: { uri?: string }) => {
+      activeDocumentTracking = true;
+      activeDocumentUri = params.uri;
+      const document = activeDocumentUri ? documents.get(activeDocumentUri) : undefined;
+
+      if (document) {
+        scheduleDiagnostics(document, 40);
+      }
+    }
+  );
+
   connection.onRequest("elfui/getPerformanceSummary", (): LanguageServerPerformanceSummary => ({
-    completion: {
-      ...readFeaturePerformanceStats(featurePerformance.completion)
-    },
-    diagnostics: readFeaturePerformanceStats(featurePerformance.diagnostics),
-    formatting: readFeaturePerformanceStats(featurePerformance.formatting),
-    index: [...indexPerformanceHistory]
+    completion: featurePerformance.completion.summary(),
+    diagnostics: featurePerformance.diagnostics.summary(),
+    formatting: featurePerformance.formatting.summary(),
+    index: [...indexPerformanceHistory],
+    prewarm: featurePerformance.prewarm.summary()
   }));
+
+  connection.onRequest(
+    "elfui/prewarmDocument",
+    (params: PrewarmDocumentParams): PrewarmDocumentResult =>
+      prewarmDocument(
+        TextDocument.create(
+          params.uri,
+          params.languageId,
+          params.version,
+          params.text
+        )
+      )
+  );
 
   connection.onRequest("elfui/getWorkspaceComponentMetadata", (): GeneratedComponentMetadata[] =>
     createWorkspaceComponentMetadata(workspaceRoots, indexedComponentsByUri)
@@ -753,7 +850,9 @@ export const startElfLanguageServer = (connection: Connection) => {
 
   documents.onDidOpen((change) => {
     updateIndexedDocument(change.document, workspaceIndex);
-    scheduleDiagnostics(change.document, 80);
+    if (!activeDocumentTracking || change.document.uri === activeDocumentUri) {
+      scheduleDiagnostics(change.document, 80);
+    }
   });
 
   documents.onDidChangeContent((change) => {
@@ -761,9 +860,11 @@ export const startElfLanguageServer = (connection: Connection) => {
     // off the request path while the user is typing.
     scheduleDiagnostics(change.document);
     scheduleDocumentIndexUpdate(change.document);
+    preparedDocumentVersions.delete(change.document.uri);
   });
 
   documents.onDidClose((change) => {
+    preparedDocumentVersions.delete(change.document.uri);
     connection.sendDiagnostics({
       diagnostics: [],
       uri: change.document.uri
@@ -789,20 +890,6 @@ export const startElfLanguageServer = (connection: Connection) => {
     recordFeatureDuration("diagnostics", performance.now() - started);
   }
 };
-
-const createFeaturePerformanceStats = () => ({
-  count: 0,
-  maxDurationMs: 0,
-  totalDurationMs: 0
-});
-
-const readFeaturePerformanceStats = (
-  stats: ReturnType<typeof createFeaturePerformanceStats>
-): FeaturePerformanceStats => ({
-  averageDurationMs: stats.count > 0 ? stats.totalDurationMs / stats.count : 0,
-  count: stats.count,
-  maxDurationMs: stats.maxDurationMs
-});
 
 const createWorkspaceSymbols = (
   query: string,
@@ -1101,6 +1188,19 @@ const createZeroRange = () => ({
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const readActiveDocumentUri = (initializationOptions: unknown): string | undefined => {
+  if (!isRecord(initializationOptions)) {
+    return undefined;
+  }
+
+  return typeof initializationOptions.activeDocumentUri === "string"
+    ? initializationOptions.activeDocumentUri
+    : undefined;
+};
+
+const readActiveDocumentTracking = (initializationOptions: unknown): boolean =>
+  isRecord(initializationOptions) && initializationOptions.activeDocumentTracking === true;
 
 const readWorkspaceRoots = (
   workspaceFolders: Array<{ uri: string }> | null | undefined,

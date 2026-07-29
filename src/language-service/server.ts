@@ -123,6 +123,7 @@ interface PrewarmDocumentResult {
 }
 
 const performanceSampleLimit = 20;
+const interactiveDiagnosticsIdleMs = 300;
 const workspaceHtmlLanguageService = getHtmlLanguageService();
 
 export const startElfLanguageServer = (connection: Connection) => {
@@ -308,7 +309,10 @@ export const startElfLanguageServer = (connection: Connection) => {
     setImmediate(processNext);
   };
 
-  const scheduleDiagnostics = (document: TextDocument, delayMs = 120) => {
+  const scheduleDiagnostics = (
+    document: TextDocument,
+    delayMs = interactiveDiagnosticsIdleMs
+  ) => {
     pendingDiagnostics.set(document.uri, document);
 
     if (pendingDiagnosticsTimer) {
@@ -316,6 +320,21 @@ export const startElfLanguageServer = (connection: Connection) => {
     }
 
     pendingDiagnosticsTimer = setTimeout(flushDiagnostics, delayMs);
+  };
+
+  const deferDiagnosticsForInteractiveRequest = () => {
+    if (diagnosticsFlushInProgress || pendingDiagnostics.size === 0) {
+      return;
+    }
+
+    if (pendingDiagnosticsTimer) {
+      clearTimeout(pendingDiagnosticsTimer);
+    }
+
+    pendingDiagnosticsTimer = setTimeout(
+      flushDiagnostics,
+      interactiveDiagnosticsIdleMs
+    );
   };
 
   const scheduleDocumentIndexUpdate = (document: TextDocument) => {
@@ -331,7 +350,7 @@ export const startElfLanguageServer = (connection: Connection) => {
       pendingDocumentIndexUpdates.clear();
       documentsToUpdate.forEach((pendingDocument) => {
         updateIndexedDocument(pendingDocument, workspaceIndex);
-        scheduleDiagnostics(pendingDocument, 0);
+        scheduleDiagnostics(pendingDocument);
       });
     }, workspaceIndex.options.indexDebounceMs);
   };
@@ -479,7 +498,7 @@ export const startElfLanguageServer = (connection: Connection) => {
       const document = activeDocumentUri ? documents.get(activeDocumentUri) : undefined;
 
       if (document) {
-        scheduleDiagnostics(document, 40);
+        scheduleDiagnostics(document);
       }
     }
   );
@@ -514,6 +533,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   );
 
   connection.onCompletion((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const started = performance.now();
     const document = documents.get(params.textDocument.uri);
     const result = document
@@ -537,6 +557,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onHover((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -555,6 +576,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDefinition((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -573,6 +595,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onReferences((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -596,6 +619,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDocumentHighlight((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -614,6 +638,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDocumentSymbol((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -624,6 +649,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDocumentLinks((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -634,6 +660,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onFoldingRanges((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -644,6 +671,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onSelectionRanges((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -654,6 +682,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.languages.onLinkedEditingRange((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -664,6 +693,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.languages.semanticTokens.on((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -684,6 +714,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.languages.semanticTokens.onRange((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -704,6 +735,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onPrepareRename((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -722,6 +754,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onRenameRequest((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -755,6 +788,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.languages.inlayHint.on((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -765,6 +799,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onCodeAction((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -784,6 +819,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDocumentColor((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -794,6 +830,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onColorPresentation((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -804,6 +841,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDocumentFormatting((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -819,6 +857,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDocumentRangeFormatting((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -834,6 +873,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   });
 
   connection.onDocumentOnTypeFormatting((params) => {
+    deferDiagnosticsForInteractiveRequest();
     const document = documents.get(params.textDocument.uri);
 
     if (!document) {
@@ -851,7 +891,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   documents.onDidOpen((change) => {
     updateIndexedDocument(change.document, workspaceIndex);
     if (!activeDocumentTracking || change.document.uri === activeDocumentUri) {
-      scheduleDiagnostics(change.document, 80);
+      scheduleDiagnostics(change.document);
     }
   });
 

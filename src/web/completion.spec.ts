@@ -7,7 +7,7 @@ import {
 } from "./completion";
 
 describe("web completion catalog", () => {
-  it("covers beta.17 macro, host, form, observer, and lifecycle APIs", () => {
+  it("covers beta.20 macro, host, form, observer, and lifecycle APIs", () => {
     const labels = elfApiCompletions.map((item) => item.label);
 
     expect(labels).toEqual(

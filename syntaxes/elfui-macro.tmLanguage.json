@@ -36,7 +36,7 @@
           "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
         }
       },
-      "end": "(`)\\s*(\\))?",
+      "end": "(?<!\\\\)(`)\\s*(\\))?",
       "endCaptures": {
         "1": {
           "name": "punctuation.definition.string.template.end.elfui string.template.ts"
@@ -76,7 +76,7 @@
               "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
             }
           },
-          "end": "`",
+          "end": "(?<!\\\\)`",
           "endCaptures": {
             "0": {
               "name": "punctuation.definition.string.template.end.elfui string.template.ts"
@@ -107,7 +107,7 @@
           "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
         }
       },
-      "end": "(`)\\s*(\\))?",
+      "end": "(?<!\\\\)(`)\\s*(\\))?",
       "endCaptures": {
         "1": {
           "name": "punctuation.definition.string.template.end.elfui string.template.ts"
@@ -153,7 +153,7 @@
               "name": "punctuation.definition.string.template.begin.elfui string.template.ts"
             }
           },
-          "end": "`",
+          "end": "(?<!\\\\)`",
           "endCaptures": {
             "0": {
               "name": "punctuation.definition.string.template.end.elfui string.template.ts"
@@ -294,7 +294,13 @@
         "0": {
           "name": "punctuation.definition.comment.end.html"
         }
-      }
+      },
+      "patterns": [
+        {
+          "match": "[()\\[\\]{}]",
+          "name": "comment.block.html"
+        }
+      ]
     },
     "cssComment": {
       "name": "comment.block.css",
@@ -331,6 +337,49 @@
         }
       },
       "contentName": "meta.embedded.expression.elfui source.ts",
+      "patterns": [
+        {
+          "include": "#escapedTemplateLiteral"
+        },
+        {
+          "include": "source.ts"
+        }
+      ]
+    },
+    "escapedTemplateLiteral": {
+      "begin": "\\\\`",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.begin.ts string.template.ts"
+        }
+      },
+      "end": "\\\\`",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.end.ts string.template.ts"
+        }
+      },
+      "contentName": "string.template.ts",
+      "patterns": [
+        {
+          "include": "#escapedTemplateInterpolation"
+        }
+      ]
+    },
+    "escapedTemplateInterpolation": {
+      "begin": "\\\\(\\$\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.template-expression.begin.ts"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.ts"
+        }
+      },
+      "contentName": "meta.template.expression.ts",
       "patterns": [
         {
           "include": "source.ts"

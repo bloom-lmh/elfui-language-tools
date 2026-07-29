@@ -25,6 +25,33 @@ export interface LanguageClientPerformanceSummary {
   formatting: LatencyDistribution;
 }
 
+export const resolveDocumentFormattingOptions = (
+  document: vscode.TextDocument,
+  options: vscode.FormattingOptions
+): vscode.FormattingOptions => {
+  const elfuiPrintWidth = vscode.workspace
+    .getConfiguration("elfui.languageFeatures.formatting", document.uri)
+    .get<number | null>("printWidth");
+  const prettierPrintWidth = vscode.workspace
+    .getConfiguration("prettier", document.uri)
+    .get<number>("printWidth");
+  const editorWordWrapColumn = vscode.workspace
+    .getConfiguration("editor", document.uri)
+    .get<number>("wordWrapColumn");
+  const wrapLineLength = [
+    elfuiPrintWidth,
+    prettierPrintWidth,
+    editorWordWrapColumn
+  ].find(isValidPrintWidth);
+
+  return wrapLineLength === undefined
+    ? options
+    : {
+        ...options,
+        wrapLineLength: Math.round(wrapLineLength)
+      };
+};
+
 export const readLanguageClientPerformanceSummary = (): LanguageClientPerformanceSummary => ({
   codeAction: clientFeaturePerformance.codeAction.summary(),
   completion: clientFeaturePerformance.completion.summary(),
@@ -96,18 +123,26 @@ export const startElfLanguageClient = async (
           next(document, position, completionContext, token)
         ),
       provideDocumentFormattingEdits: (document, options, token, next) =>
-        measureClientFeature("formatting", () => next(document, options, token)),
+        measureClientFeature("formatting", () =>
+          next(document, resolveDocumentFormattingOptions(document, options), token)
+        ),
       provideDocumentRangeFormattingEdits: (document, range, options, token, next) =>
         measureClientFeature("formatting", () =>
-          next(document, range, options, token)
+          next(document, range, resolveDocumentFormattingOptions(document, options), token)
         ),
       provideDocumentRangesFormattingEdits: (document, ranges, options, token, next) =>
         measureClientFeature("formatting", () =>
-          next(document, ranges, options, token)
+          next(document, ranges, resolveDocumentFormattingOptions(document, options), token)
         ),
       provideOnTypeFormattingEdits: (document, position, character, options, token, next) =>
         measureClientFeature("formatting", () =>
-          next(document, position, character, options, token)
+          next(
+            document,
+            position,
+            character,
+            resolveDocumentFormattingOptions(document, options),
+            token
+          )
         )
     },
     outputChannel,
@@ -143,6 +178,9 @@ const measureClientFeature = async <Result>(
     clientFeaturePerformance[feature].record(performance.now() - started);
   }
 };
+
+const isValidPrintWidth = (value: number | null | undefined): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 20;
 
 export const stopElfLanguageClient = async (
   client: LanguageClient | undefined,

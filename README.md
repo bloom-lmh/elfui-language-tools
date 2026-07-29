@@ -6,7 +6,7 @@ VS Code language features for ElfUI macro components.
 
 The extension now has a browser entry point. In a web extension host such as
 StackBlitz Codeflow, it provides the ElfUI TextMate grammar, macro snippets,
-beta.17 macro/runtime completions, template directives and modifiers, built-in
+beta.20 macro/runtime completions, template directives and modifiers, built-in
 component completions, and the `ElfUI: Diagnose Integration` command without
 requiring a native process.
 
@@ -32,7 +32,7 @@ Marketplace, the same pane can install it by name instead.
 
 - Macro component support for ordinary `.ts` / `.tsx` files that export `defineHtml()` components.
 - Realtime macro diagnostics from the ElfUI macro compiler, including template TypeScript errors, slot checks, and structured source ranges.
-- Macro-aware completion and hover for beta.17 APIs including `defineProps()`, `defineEmits()`, `defineModel()`, `defineSlots()`, `defineOptions()`, `defineDirective()`, `defineHtml()`, `useComponents()`, lifecycle hooks, host/form/observer helpers, and typed `useTemplateRef()` values.
+- Macro-aware completion and hover for beta.20 APIs including `defineProps()`, `defineEmits()`, `defineModel()`, `defineSlots()`, `defineOptions()`, `defineDirective()`, `defineHtml()`, `useComponents()`, lifecycle hooks, host/form/observer helpers, and typed `useTemplateRef()` values.
 - Compiler metadata schema v2 support, including compiler protocol, structured component contracts, source ranges, and structured diagnostics.
 - Template prop hover for local macro components includes the individual TypeScript type and statically declared default value when available.
 - Hover metadata for indexed workspace and package components, including import source, typed props with static defaults, events, slots, and typed slot scopes.
@@ -46,8 +46,8 @@ Marketplace, the same pane can install it by name instead.
 - A bundled TypeScript server plugin suppresses native TS missing-name false positives only for active `v-for` locals, slot-scope locals, and `$event` inside `defineHtml(\`...\`)` `${...}` expressions; ordinary TypeScript diagnostics remain intact.
 - HTML/CSS syntax highlighting inside `defineHtml(\`...\`)` and `defineStyle(\`...\`)` through embedded TextMate scopes.
 - HTML/CSS document and range formatting inside `defineHtml(\`...\`)` and `defineStyle(\`...\`)`.
-- Document and range formatting providers for ElfUI template and style strings. When another formatter such as Prettier owns the TS/JS document, ElfUI also formats only its embedded regions on save while respecting `editor.formatOnSave`.
-- Interactive completion and formatting use cached embedded documents and incremental TypeScript services; diagnostics and workspace indexing are deferred while typing to keep the request path responsive.
+- Document and range formatting providers for ElfUI template and style strings. When another formatter such as Prettier owns the TS/JS document, ElfUI also formats only its embedded regions on save while respecting `editor.formatOnSave`, the effective `editor.tabSize`, and the configured ElfUI or Prettier print width.
+- Interactive completion and formatting use cached embedded documents and incremental TypeScript services; compiler diagnostics and workspace indexing wait for an editor-idle window so they do not block the request path.
 - CSS completion, hover, diagnostics, and color preview inside `defineStyle(\`...\`)`, including Web Components selectors such as `:host-context()`, `::slotted()`, `::part()`, template-derived `part`/`slot` selector snippets, and declared CSS custom property references.
 - Diagnostics for unknown template variables, unregistered local components, undeclared emit calls, non-writable `v-model` targets, and component prop/event/slot mismatches from same-file or workspace metadata.
 - Go to Definition, References, and Document Highlight for same-file template symbols and workspace component tags, props, events, and slots.
@@ -59,7 +59,7 @@ Marketplace, the same pane can install it by name instead.
 - Folding Range, Selection Range, and Linked Editing Range support inside embedded template and style strings.
 - Optional Semantic Tokens for ElfUI component declarations, template component tags, props, events, slots, setup values, template locals, and directives.
 - Quick Fixes for declaring unknown template variables, initializing untyped `v-for` list states, undeclared emits, and same-file component prop/event/slot mismatches.
-- Press `Alt+\` on a missing event handler, method call, or state expression to inject that declaration directly without opening the Quick Fix menu.
+- Press `Alt+\` on a missing event handler, method call, or state expression to inject that declaration directly without opening the Quick Fix menu; the generated declaration is revealed and selected for immediate editing.
 - ElfUI Studio tools: an `ElfUI Components` explorer view, dynamic point/effect reports, a static component preview, a template binding migration command, and a persistent workspace performance report with language-server index and completion latency metrics.
 - Snippets for macro components: `elfc` creates a minimal `defineHtml()` component skeleton, `elfinit` creates a ready-to-run component template, and `elflifecycle` creates lifecycle hooks with a typed template ref.
 
@@ -71,6 +71,7 @@ Marketplace, the same pane can install it by name instead.
 - `elfui.languageFeatures.semanticTokens.enabled`: enable ElfUI semantic tokens. The default is `false` so TypeScript keeps its built-in semantic highlighting.
 - `elfui.languageFeatures.diagnostics.suppressNativeTemplateLocals`: suppress native TS missing-name false positives only for ElfUI template locals. The default is `true`.
 - `elfui.languageFeatures.diagnostics.suppressNativeRefUnwrapComparisons`: suppress native `ts(2367)` false positives only for auto-unwrapped `useRef()` values in ElfUI template expressions. The default is `true`.
+- `elfui.languageFeatures.formatting.printWidth`: embedded HTML/CSS line width. When unset, ElfUI follows `prettier.printWidth`, then `editor.wordWrapColumn`.
 - `elfui.languageFeatures.workspace.maxScanFiles`: maximum number of workspace TS/JS source files scanned for component metadata.
 - `elfui.languageFeatures.workspace.indexDebounceMs`: debounce delay before rebuilding the workspace component index after file changes.
 - `elfui.languageFeatures.workspace.perfLogging`: log workspace index timing and cache stats to the ElfUI language server output.
@@ -128,7 +129,7 @@ The metadata JSON can list exported components:
 `importPath` is optional and defaults to the package name. `props` and `emits` also accept the legacy string form such as `["label", "open"]` or `["confirm"]`; use the structured form to show prop type/default value and event payload type in template hover.
 
 The package index also accepts `MacroComponentMetadata` schema v2 JSON emitted by
-`@elfui/compiler@0.1.0-beta.17`. Structured `props`, `events`, `slots.typeText`, and `tagName`
+`@elfui/compiler@0.1.0-beta.20`. Structured `props`, `events`, `slots.typeText`, and `tagName`
 are consumed directly. Removed legacy Fragment fields are ignored rather than reintroduced by
 the language tools.
 

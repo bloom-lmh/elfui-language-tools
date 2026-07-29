@@ -5,6 +5,7 @@ exports.run = () =>
   new Promise((resolve, reject) => {
     const mocha = new Mocha({
       color: true,
+      grep: process.env.MOCHA_GREP,
       timeout: 120000,
       ui: "tdd"
     });

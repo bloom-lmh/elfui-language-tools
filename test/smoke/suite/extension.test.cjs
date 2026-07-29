@@ -281,6 +281,11 @@ suite("ElfUI Language Features Smoke", function () {
       () => stateDocument.getText().includes("const condition = useRef();"),
       "Alt+backslash state declaration"
     );
+    await waitForGeneratedDeclarationCursor(
+      stateDocument,
+      (editor) => stateDocument.getText(editor.selection) === "condition",
+      "Alt+backslash state declaration selection"
+    );
     assert(
       stateDocument.getText().indexOf("const condition = useRef();") >
         stateDocument.getText().indexOf("const nearbyStateMarker")
@@ -308,6 +313,11 @@ suite("ElfUI Language Features Smoke", function () {
       () => handlerDocument.getText().includes("const handleClick = (e: Event) => {"),
       "Alt+backslash handler declaration"
     );
+    await waitForGeneratedDeclarationCursor(
+      handlerDocument,
+      (editor) => handlerDocument.getText(editor.selection) === "handleClick",
+      "Alt+backslash handler declaration selection"
+    );
     assert(
       handlerDocument.getText().indexOf("const handleClick = (e: Event) => {") >
         handlerDocument.getText().indexOf("const nearbyHandlerMarker")
@@ -333,6 +343,11 @@ suite("ElfUI Language Features Smoke", function () {
     await waitFor(
       () => methodDocument.getText().includes("const canOpen = () => {"),
       "Alt+backslash method declaration"
+    );
+    await waitForGeneratedDeclarationCursor(
+      methodDocument,
+      (editor) => methodDocument.getText(editor.selection) === "canOpen",
+      "Alt+backslash method declaration selection"
     );
   });
 
@@ -810,7 +825,7 @@ suite("ElfUI Language Features Smoke", function () {
         "const count = useRef(0);",
         "const view = defineHtml(`",
         "  <section>",
-        "    <button>{{ count }}</button>",
+        '    <button type="button" aria-label="Save the current record">{{ count }}</button>',
         "    <span>${count.value}</span>",
         "  </section>",
         "`);",
@@ -836,6 +851,13 @@ suite("ElfUI Language Features Smoke", function () {
     const editorConfiguration = vscode.workspace.getConfiguration("editor", document);
     const previousFormatOnSave = editorConfiguration.inspect("formatOnSave")?.workspaceValue;
     const previousDefaultFormatter = editorConfiguration.inspect("defaultFormatter")?.workspaceValue;
+    const previousTabSize = editorConfiguration.inspect("tabSize")?.workspaceValue;
+    const previousInsertSpaces = editorConfiguration.inspect("insertSpaces")?.workspaceValue;
+    const formattingConfiguration = vscode.workspace.getConfiguration(
+      "elfui.languageFeatures.formatting",
+      document
+    );
+    const previousPrintWidth = formattingConfiguration.inspect("printWidth")?.workspaceValue;
     try {
       await editorConfiguration.update(
         "formatOnSave",
@@ -847,6 +869,13 @@ suite("ElfUI Language Features Smoke", function () {
         "vscode.typescript-language-features",
         vscode.ConfigurationTarget.Workspace
       );
+      await editorConfiguration.update("tabSize", 4, vscode.ConfigurationTarget.Workspace);
+      await editorConfiguration.update("insertSpaces", true, vscode.ConfigurationTarget.Workspace);
+      await formattingConfiguration.update(
+        "printWidth",
+        48,
+        vscode.ConfigurationTarget.Workspace
+      );
       await editor.edit((editBuilder) => {
         editBuilder.insert(document.positionAt(document.getText().length), " ");
       });
@@ -856,13 +885,14 @@ suite("ElfUI Language Features Smoke", function () {
 
       await waitFor(
         () =>
-          /defineHtml\(`\n\s*<section>\n\s*<button>{{ count }}<\/button>/.test(
+          /defineHtml\(`\n {4}<section>\n {8}<button/.test(
             document.getText()
           ) &&
+          /\n {12}aria-label="Save the current record"/.test(document.getText()) &&
           /defineStyle\(`\n\s*:host \{\n\s*color: red;\n\s*display: block;\n\s*\}/.test(
             document.getText()
           ),
-        "embedded save formatting"
+        () => `embedded save formatting; current source:\n${document.getText()}`
       );
     } finally {
       await editorConfiguration.update(
@@ -873,6 +903,21 @@ suite("ElfUI Language Features Smoke", function () {
       await editorConfiguration.update(
         "defaultFormatter",
         previousDefaultFormatter,
+        vscode.ConfigurationTarget.Workspace
+      );
+      await editorConfiguration.update(
+        "tabSize",
+        previousTabSize,
+        vscode.ConfigurationTarget.Workspace
+      );
+      await editorConfiguration.update(
+        "insertSpaces",
+        previousInsertSpaces,
+        vscode.ConfigurationTarget.Workspace
+      );
+      await formattingConfiguration.update(
+        "printWidth",
+        previousPrintWidth,
         vscode.ConfigurationTarget.Workspace
       );
     }
@@ -1103,6 +1148,18 @@ async function openFixtureWithCursor(contentWithCursor) {
   }
 
   return { document, position };
+}
+
+async function waitForGeneratedDeclarationCursor(document, predicate, description) {
+  return waitFor(() => {
+    const editor = vscode.window.activeTextEditor;
+
+    return editor &&
+      editor.document.uri.toString() === document.uri.toString() &&
+      predicate(editor)
+      ? editor
+      : undefined;
+  }, description);
 }
 
 async function waitForCompletionLabels(document, position, labels) {

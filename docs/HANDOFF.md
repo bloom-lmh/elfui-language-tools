@@ -35,21 +35,21 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 Current maintained baseline: `0.4.1` released.
 
-Current maintenance cycle: Host latency observability and cold-start optimization are implemented
-and fully verified. The completed implementation plan and measured baseline are recorded in
-`docs/plans/2026-07-29-host-latency-optimization-plan.md`. Implementation commit `1f71570` is
-pushed to Gitee and GitHub `main`.
+Current maintenance cycle: formatting-option inheritance, escaped-template/comment TextMate
+coloring, `Alt+\` generated-declaration navigation, and interactive-priority diagnostics
+scheduling are implemented and fully verified. The plan and measurements are recorded in
+`docs/plans/2026-07-29-formatting-highlighting-alt-jump-fixes.md`.
 
 ## 2. 已经做的工作
 
 - Removed language-core, language-service, TypeScript plugin, grammar, snippet, formatting,
   metadata, navigation, and smoke coverage for `fragment` / `defineFragment`.
-- Upgraded compiler metadata consumption from beta.13 to beta.17.
+- Upgraded compiler metadata consumption from beta.13 to beta.20.
 - Moved initial/full indexing off the interactive LSP path, added asynchronous scans, incremental
   watcher updates, dynamic workspace folders, scan limits, cache reuse, and performance history.
 - Added cached cross-file component/prop/event/slot references and rename with import-alias
   preservation.
-- Shared the beta.17 completion catalog between desktop and Web extension entries.
+- Shared the beta.20 completion catalog between desktop and Web extension entries.
 - Split settings parsing into `configuration.ts` and index state/per-document option caching into
   `workspaceIndex.ts`; enabled unused-local and unused-parameter compiler gates.
 - Reduced the packaged VSIX from roughly 7 MiB to 2.91 MiB by excluding source maps and minifying
@@ -79,6 +79,16 @@ pushed to Gitee and GitHub `main`.
   longer immediately diagnose every stale document retained by VS Code; the instrumented restart
   diagnostics count dropped from 40 to 8 and the development Host suite dropped from roughly two
   minutes to 54 seconds on the same machine class.
+- Embedded formatting now inherits effective VS Code indentation and
+  `elfui.languageFeatures.formatting.printWidth`, with `prettier.printWidth` and
+  `editor.wordWrapColumn` fallbacks across document, range, on-type, and external save formatting.
+- Escaped nested template literals no longer terminate the outer `defineHtml()` TextMate region;
+  parentheses and other brackets inside HTML comments remain comment tokens.
+- `Alt+\` reveals and selects the generated handler, method, or state declaration.
+- Formatting/color-only configuration changes no longer restart the language server. Pending
+  compiler diagnostics wait for a 300 ms editor-idle window and are postponed by interactive
+  requests, eliminating the observed multi-second completion queue stall without disabling
+  diagnostics.
 
 ## 3. 未作的工作（将要做的）
 
@@ -92,23 +102,23 @@ pushed to Gitee and GitHub `main`.
    behavior.
 5. Re-run both development and packaged Host smoke whenever grammar, semantic classifications,
    document edits, or packaging change.
-6. Profile the remaining compiler diagnostics path. Packaged Host diagnostics p95 ranged from
-   about 654 ms to 1.74 seconds under repeated machine contention even though completion and
-   formatting round trips stayed in single-digit milliseconds.
+6. Profile and reduce the intrinsic compiler-diagnostic computation cost if idle-time CPU usage
+   becomes a priority. Diagnostics are now isolated behind an editor-idle window, so the remaining
+   cost no longer blocks completion, hover, navigation, code actions, or formatting.
 
 ## 4. 当前问题
 
 - `src/language-service/languageService.ts` is still 8,617 lines and mixes embedded document
   caching, completion, diagnostics, navigation, formatting, and semantic token providers.
-- `src/language-service/server.ts` is still 2,963 lines. Configuration and index state are split,
+- `src/language-service/server.ts` is still 3,003 lines. Configuration and index state are split,
   but package metadata parsing, source scanning, reference indexing, and LSP orchestration still
   share one module.
-- `src/extension.ts` is 2,237 lines and contains Studio-oriented source analysis that partially
+- `src/extension.ts` is 2,301 lines and contains Studio-oriented source analysis that partially
   duplicates `language-core`.
-- TypeScript-heavy first-use workflows can still take seconds because VS Code's TypeScript Server
-  and compiler diagnostics have independent cold paths. Direct packaged Host completion is 58.5 ms
-  first / 8.68 ms warm p95, while active-document diagnostics ranged from about 654 ms to 1.74
-  seconds p95 under repeated machine contention.
+- Compiler diagnostics remain the largest individual idle-time computation and should eventually
+  be profiled inside `createElfDiagnostics()`. They now run only after a 300 ms idle window and are
+  postponed by interactive LSP requests, so they no longer inflate measured completion/formatting
+  response times.
 - The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
   therefore part of CI reliability.
 
@@ -117,29 +127,26 @@ pushed to Gitee and GitHub `main`.
 Latest confirmed locally on 2026-07-29 for the unreleased performance maintenance after `0.4.1`:
 
 - `pnpm typecheck`: passed with unused-code checks enabled.
-- `pnpm test`: 7 files, 95 tests passed.
-- `pnpm smoke`: extension startup, Windows/Linux/macOS extraction selection, and 7/7 grammar
+- `pnpm test`: 7 files, 96 tests passed.
+- `pnpm smoke`: extension startup, Windows/Linux/macOS extraction selection, and 9/9 grammar
   cases passed.
-- `pnpm verify:m10`: 360 Kit source files, 27 macro components, cold index 101.7 ms, warm
-  472/472 cache reuse in 4.0 ms.
-- `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs. The final
-  repeated run took about one minute; a clean run took 54 seconds. Final isolated first completion
-  was 24.9 ms, warm completion p95 5.89 ms, and warm formatting p95 25.35 ms.
+- `pnpm verify:m10`: 371 Kit source files, 27 macro components, cold index 56.1 ms, warm
+  485/485 cache reuse in 3.6 ms.
+- `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs in 35
+  seconds. Activation was 588.0 ms, latest server startup 317.3 ms, prewarm 71.7 ms, first
+  completion 26.00 ms, warm completion p95 4.44 ms, and warm formatting p95 1.44 ms.
 - `pnpm package:vsix`: 115 files, 2.91 MiB, below the 4 MiB budget.
-- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed on Windows with clean Host logs. A
-  clean run took 56 seconds and the final repeated run took about two minutes under contention.
-  Final activation was 459.2 ms, latest Language Client restart 948.9 ms, active-document prewarm
-  163.4 ms round trip / 2.39 ms server, first completion 58.5 ms, warm completion p95 8.68 ms, and
-  warm formatting p95 1.66 ms.
+- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed on Windows with clean Host logs in
+  51 seconds. Activation was 574.0 ms, latest server startup 358.4 ms, prewarm 64.3 ms, first
+  completion 25.03 ms, warm completion p95 4.65 ms, and warm formatting p95 2.37 ms.
 - GitHub workflow `30420440673`: build, 91 tests, smoke, development Host, package, and Linux
   packaged Host all passed; only the now-optional missing-`VSCE_PAT` publication step failed.
 
 ## Release State
 
 - Released version: `0.4.1`.
-- Unreleased maintenance commit: `1f71570`; Host latency instrumentation, active-document prewarm,
-  active-editor diagnostics scheduling, and Host percentile budgets are verified and pushed to
-  Gitee and GitHub `main`.
+- Unreleased maintenance changes: beta.20 compiler alignment, formatting/highlighting/navigation
+  fixes, and interactive-priority diagnostic scheduling are fully verified; commit/push pending.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.
@@ -157,10 +164,10 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
 - LSP completion, hover, diagnostics, definitions, references, rename, document symbols,
   inlay hints, code actions, document links, folding, selection, linked editing, and color
   providers in ElfUI regions.
-- Local macro support for beta.17 `defineHtml`, `defineProps`, `defineEmits`, `defineSlots`,
+- Local macro support for beta.20 `defineHtml`, `defineProps`, `defineEmits`, `defineSlots`,
   `defineModel`, `defineOptions`, `defineDirective`, and `useComponents`. The removed
   `fragment` / `defineFragment` protocol is intentionally unsupported.
-- `@elfui/compiler@0.1.0-beta.17` metadata schema v2 is the source of truth for structured
+- `@elfui/compiler@0.1.0-beta.20` metadata schema v2 is the source of truth for structured
   components, source ranges, compiler protocol, and diagnostic summaries.
 - Asynchronous, cached workspace and dependency component indexing with a 10,000-file default,
   incremental watcher updates, dynamic workspace folders, auto import, and structured metadata.
@@ -169,7 +176,7 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
 - TypeScript server filtering narrowly scoped to false-positive template locals and
   auto-unwrapped `useRef()` comparisons and semantic classifications inside ElfUI-only HTML/CSS
   comments.
-- The Web entry uses the shared beta.17 API catalog for macro/runtime, lifecycle, host/form/
+- The Web entry uses the shared beta.20 API catalog for macro/runtime, lifecycle, host/form/
   observer, directive, modifier, and built-in component completions.
 - ElfUI Studio commands: component structure, dynamic point report, static preview, binding
   migration, workspace performance report, metadata generation, and performance history export.
@@ -247,7 +254,7 @@ src/language-core/source.ts      TypeScript AST source analysis
 src/language-service/configuration.ts  Validated extension/LSP settings
 src/language-service/            LSP features and workspace/package index
 src/language-service/workspaceIndex.ts Workspace index state and per-document option cache
-src/shared/elfuiCatalog.ts       Shared beta.17 desktop/Web completion catalog
+src/shared/elfuiCatalog.ts       Shared beta.20 desktop/Web completion catalog
 src/web/                         Browser-safe completion logic and tests
 src/typescript-plugin/           Narrow native TS diagnostic suppression
 syntaxes/                        TextMate injection grammar

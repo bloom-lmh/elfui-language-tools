@@ -196,6 +196,15 @@
           "default": true,
           "description": "Suppress native TypeScript no-overlap comparison diagnostics only when an ElfUI template expression compares an auto-unwrapped useRef value."
         },
+        "elfui.languageFeatures.formatting.printWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 20,
+          "description": "Maximum line width for embedded ElfUI HTML/CSS formatting. When unset, ElfUI follows prettier.printWidth, then editor.wordWrapColumn."
+        },
         "elfui.languageFeatures.workspace.maxScanFiles": {
           "type": "number",
           "default": 10000,
@@ -274,7 +283,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@elfui/compiler": "0.1.0-beta.17",
+    "@elfui/compiler": "0.1.0-beta.20",
     "typescript": "^5.9.3",
     "vscode-css-languageservice": "latest",
     "vscode-html-languageservice": "latest",

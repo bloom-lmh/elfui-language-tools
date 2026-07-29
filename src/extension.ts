@@ -5,6 +5,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 import {
   readLanguageClientPerformanceSummary,
+  resolveDocumentFormattingOptions,
   resetLanguageClientPerformance,
   startElfLanguageClient,
   stopElfLanguageClient,
@@ -283,13 +284,36 @@ export const activate = async (context: vscode.ExtensionContext) => {
         },
       ),
       vscode.workspace.onDidChangeConfiguration(async (event) => {
-        if (!event.affectsConfiguration("elfui.languageFeatures")) {
+        const componentColorChanged = event.affectsConfiguration(
+          "elfui.languageFeatures.componentTagColor",
+        );
+        const diagnosticsChanged = event.affectsConfiguration(
+          "elfui.languageFeatures.diagnostics",
+        );
+        const languageServerConfigurationChanged = [
+          "elfui.languageFeatures.enabled",
+          "elfui.languageFeatures.completion",
+          "elfui.languageFeatures.semanticTokens",
+          "elfui.languageFeatures.workspace",
+        ].some((section) => event.affectsConfiguration(section));
+
+        if (
+          !componentColorChanged &&
+          !diagnosticsChanged &&
+          !languageServerConfigurationChanged
+        ) {
           return;
         }
 
-        await applyComponentTagColor();
-        await configureTypeScriptPlugin();
-        await restartLanguageClient(context);
+        if (componentColorChanged) {
+          await applyComponentTagColor();
+        }
+        if (diagnosticsChanged) {
+          await configureTypeScriptPlugin();
+        }
+        if (diagnosticsChanged || languageServerConfigurationChanged) {
+          await restartLanguageClient(context);
+        }
       }),
       vscode.workspace.onWillSaveTextDocument((event) => {
         event.waitUntil(
@@ -402,6 +426,9 @@ const injectMissingTemplateDeclaration = async (): Promise<string | null> => {
     return null;
   }
 
+  const declaration = /^Create (handler|method|state) "([A-Za-z_$][\w$]*)"/.exec(
+    action.title,
+  );
   const codeAction = action as vscode.CodeAction;
 
   if (codeAction.edit && !(await vscode.workspace.applyEdit(codeAction.edit))) {
@@ -415,8 +442,53 @@ const injectMissingTemplateDeclaration = async (): Promise<string | null> => {
     await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
   }
 
+  if (declaration) {
+    await revealGeneratedTemplateDeclaration(
+      editor,
+      declaration[2],
+    );
+  }
+
   return action.title;
 };
+
+const revealGeneratedTemplateDeclaration = async (
+  originalEditor: vscode.TextEditor,
+  name: string,
+): Promise<void> => {
+  const document = originalEditor.document;
+  const source = document.getText();
+  const declarationPattern = new RegExp(`\\bconst\\s+${escapeRegExp(name)}\\b`);
+  const declaration = declarationPattern.exec(source);
+
+  if (!declaration || declaration.index === undefined) {
+    return;
+  }
+
+  const nameOffset = declaration.index + declaration[0].lastIndexOf(name);
+  const declarationRange = new vscode.Range(
+    document.positionAt(declaration.index),
+    document.positionAt(nameOffset + name.length),
+  );
+  const nameRange = new vscode.Range(
+    document.positionAt(nameOffset),
+    document.positionAt(nameOffset + name.length),
+  );
+  const editor =
+    vscode.window.visibleTextEditors.find(
+      (candidate) => candidate.document.uri.toString() === document.uri.toString(),
+    ) ??
+    (await vscode.window.showTextDocument(document, {
+      preserveFocus: false,
+      viewColumn: originalEditor.viewColumn,
+    }));
+
+  editor.selection = new vscode.Selection(nameRange.start, nameRange.end);
+  editor.revealRange(declarationRange, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+};
+
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const restartLanguageClient = async (context: vscode.ExtensionContext) => {
   if (!outputChannel) {
@@ -927,19 +999,12 @@ const createEmbeddedSaveFormattingEdits = async (
     return [];
   }
 
-  const visibleEditor = vscode.window.visibleTextEditors.find(
-    (editor) => editor.document.uri.toString() === document.uri.toString(),
-  );
   const configuredTabSize = editorConfiguration.get<number>("tabSize", 2);
   const configuredInsertSpaces = editorConfiguration.get<boolean>("insertSpaces", true);
-  const tabSize =
-    typeof visibleEditor?.options.tabSize === "number"
-      ? visibleEditor.options.tabSize
-      : configuredTabSize;
-  const insertSpaces =
-    typeof visibleEditor?.options.insertSpaces === "boolean"
-      ? visibleEditor.options.insertSpaces
-      : configuredInsertSpaces;
+  const formattingOptions = resolveDocumentFormattingOptions(document, {
+    insertSpaces: configuredInsertSpaces,
+    tabSize: configuredTabSize,
+  });
 
   try {
     const edits = await languageClient.sendRequest<ProtocolFormattingEdit[] | null>(
@@ -947,8 +1012,7 @@ const createEmbeddedSaveFormattingEdits = async (
       {
         options: {
           elfuiExternalFormatter: true,
-          insertSpaces,
-          tabSize,
+          ...formattingOptions,
         },
         textDocument: { uri: document.uri.toString() },
       },

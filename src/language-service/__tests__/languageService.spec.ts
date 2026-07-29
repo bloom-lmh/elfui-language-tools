@@ -1091,6 +1091,44 @@ describe("ElfUI language service", () => {
     expect(formatted).not.toContain('prop="{');
   });
 
+  it("honors configured indentation and print width while formatting templates", () => {
+    const source = [
+      'import { defineHtml } from "@elfui/core";',
+      "",
+      "export const View = defineHtml(`",
+      "<section>",
+      '<button type="button" class="primary-action" aria-label="Save the current record">Save</button>',
+      "</section>",
+      "`);",
+      ""
+    ].join("\n");
+    const document = createDocument(source);
+    const narrow = applyTextEdits(
+      source,
+      createElfFormattingEdits(document, {
+        insertSpaces: true,
+        tabSize: 4,
+        wrapLineLength: 48
+      })
+    );
+    const wide = applyTextEdits(
+      source,
+      createElfFormattingEdits(document, {
+        insertSpaces: true,
+        tabSize: 4,
+        wrapLineLength: 160
+      })
+    );
+    const narrowLines = narrow.split("\n");
+    const sectionLine = narrowLines.find((line) => line.trim() === "<section>") ?? "";
+    const buttonLine = narrowLines.find((line) => line.includes("<button")) ?? "";
+
+    expect(sectionLine.startsWith("    <section>")).toBe(true);
+    expect(buttonLine.startsWith("        <button")).toBe(true);
+    expect(narrowLines.length).toBeGreaterThan(wide.split("\n").length);
+    expect(narrow).toContain('aria-label="Save the current record"');
+  });
+
   it("reports macro template TypeScript diagnostics", () => {
     const source = `
       /// <!--@elf component-->
@@ -1112,7 +1150,7 @@ describe("ElfUI language service", () => {
     expect(diagnostics.some((item) => item.includes("disabeld"))).toBe(true);
   });
 
-  it("accepts beta.17 direct defineHtml literals", () => {
+  it("accepts beta.20 direct defineHtml literals", () => {
     const source = `
       /// <!--@elf component-->
       import { defineHtml, defineProps } from "@elfui/core";

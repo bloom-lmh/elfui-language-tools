@@ -137,6 +137,41 @@ const cases = [
     }
   ],
   [
+    "keeps escaped nested templates inside defineHtml attributes",
+    () => {
+      const tokens = tokenize(
+        [
+          "defineHtml(`",
+          '  <button type="button" class="tag-remove" :data-key="entry.key"',
+          '    :aria-label="\\`Remove \\${entry.label}\\`"',
+          "    @click=${onRemoveClick}>×</button>",
+          "`);"
+        ].join("\n")
+      );
+
+      expectScope(
+        findToken(tokens, ":aria-label"),
+        "entity.other.attribute-name.directive.elfui",
+        "attribute before escaped nested template"
+      );
+      expectScope(
+        findToken(tokens, "@click"),
+        "entity.other.attribute-name.directive.elfui",
+        "attribute after escaped nested template"
+      );
+      expectScope(
+        findToken(tokens, "onRemoveClick"),
+        "meta.template.expression.ts",
+        "expression after escaped nested template"
+      );
+      expectScope(
+        findTokens(tokens, "button").at(-1),
+        "entity.name.tag.html",
+        "closing tag after escaped nested template"
+      );
+    }
+  ],
+  [
     "highlights defineStyle CSS",
     () => {
       const tokens = tokenize("defineStyle(`\n  :host {\n    color: red;\n  }\n`);");
@@ -206,6 +241,46 @@ const cases = [
           expression,
           "meta.template.expression.ts",
           `commented template interpolation ${index + 1}`
+        );
+      });
+    }
+  ],
+  [
+    "keeps commented parentheses out of bracket coloring scopes",
+    () => {
+      const tokens = tokenize(
+        [
+          "defineHtml(`",
+          '<!-- <span v-if=${!hasValue() && !(props.filterable && openState)}>',
+          "  ${placeholderText()}",
+          "</span> -->",
+          "`);"
+        ].join("\n")
+      );
+      const parentheses = tokens.filter(
+        (token) =>
+          (token.text === "(" || token.text === ")") &&
+          token.scopes.some((scope) => scope.includes("comment.block.html"))
+      );
+
+      if (parentheses.length !== 6) {
+        throw new Error(`commented parentheses: expected 6, got ${parentheses.length}`);
+      }
+      parentheses.forEach((parenthesis, index) => {
+        expectScope(
+          parenthesis,
+          "comment.block.html",
+          `commented parenthesis ${index + 1}`
+        );
+        expectNoScope(
+          parenthesis,
+          "meta.brace.round",
+          `commented parenthesis ${index + 1}`
+        );
+        expectNoScope(
+          parenthesis,
+          "punctuation.section.parens",
+          `commented parenthesis ${index + 1}`
         );
       });
     }

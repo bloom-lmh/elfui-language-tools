@@ -2,6 +2,8 @@
 
 Date: 2026-07-29
 
+Implementation commit: `80c2daf` (pushed to Gitee and GitHub `main`).
+
 ## Goal
 
 Fix four editor-facing regressions before continuing compiler-diagnostic performance work:

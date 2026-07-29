@@ -38,7 +38,8 @@ Current maintained baseline: `0.4.1` released.
 Current maintenance cycle: formatting-option inheritance, escaped-template/comment TextMate
 coloring, `Alt+\` generated-declaration navigation, and interactive-priority diagnostics
 scheduling are implemented and fully verified. The plan and measurements are recorded in
-`docs/plans/2026-07-29-formatting-highlighting-alt-jump-fixes.md`.
+`docs/plans/2026-07-29-formatting-highlighting-alt-jump-fixes.md`. Implementation commit
+`80c2daf` is pushed to Gitee and GitHub `main`.
 
 ## 2. 已经做的工作
 
@@ -145,8 +146,9 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
 ## Release State
 
 - Released version: `0.4.1`.
-- Unreleased maintenance changes: beta.20 compiler alignment, formatting/highlighting/navigation
-  fixes, and interactive-priority diagnostic scheduling are fully verified; commit/push pending.
+- Unreleased maintenance commit: `80c2daf`; beta.20 compiler alignment,
+  formatting/highlighting/navigation fixes, and interactive-priority diagnostic scheduling are
+  fully verified and pushed to Gitee and GitHub `main`.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.

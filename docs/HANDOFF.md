@@ -35,11 +35,9 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 Current maintained baseline: `0.4.1` released.
 
-Current maintenance cycle: formatting-option inheritance, escaped-template/comment TextMate
-coloring, `Alt+\` generated-declaration navigation, and interactive-priority diagnostics
-scheduling are implemented and fully verified. The plan and measurements are recorded in
-`docs/plans/2026-07-29-formatting-highlighting-alt-jump-fixes.md`. Implementation commit
-`80c2daf` is pushed to Gitee and GitHub `main`.
+Current maintenance cycle: intrinsic compiler-diagnostic profiling and optimization are
+implemented and fully verified; commit and remote synchronization are pending. The active record
+is `docs/plans/2026-07-29-compiler-diagnostics-performance-plan.md`.
 
 ## 2. 已经做的工作
 
@@ -90,6 +88,12 @@ scheduling are implemented and fully verified. The plan and measurements are rec
   compiler diagnostics wait for a 300 ms editor-idle window and are postponed by interactive
   requests, eliminating the observed multi-second completion queue stall without disabling
   diagnostics.
+- Added a bounded per-document diagnostics LRU that returns cloned results and invalidates on
+  source or project-component changes. Across all 116 Kit macro files, an unchanged repeat fell
+  from 55.3 seconds to 4.7 ms in aggregate.
+- Batched compiler-mapping false-positive review into one TypeScript semantic request per document
+  instead of one request per diagnostic, and added `pnpm benchmark:diagnostics` with cold/warm and
+  compiler/filter attribution.
 
 ## 3. 未作的工作（将要做的）
 
@@ -103,9 +107,9 @@ scheduling are implemented and fully verified. The plan and measurements are rec
    behavior.
 5. Re-run both development and packaged Host smoke whenever grammar, semantic classifications,
    document edits, or packaging change.
-6. Profile and reduce the intrinsic compiler-diagnostic computation cost if idle-time CPU usage
-   becomes a priority. Diagnostics are now isolated behind an editor-idle window, so the remaining
-   cost no longer blocks completion, hover, navigation, code actions, or formatting.
+6. Coordinate an incremental compiler diagnostic API or compiler-level parse/type-check cache if
+   lower cold idle-time CPU becomes a priority. The language-tools-owned repeat/filter work is now
+   cached and batched.
 
 ## 4. 当前问题
 
@@ -116,10 +120,11 @@ scheduling are implemented and fully verified. The plan and measurements are rec
   share one module.
 - `src/extension.ts` is 2,301 lines and contains Studio-oriented source analysis that partially
   duplicates `language-core`.
-- Compiler diagnostics remain the largest individual idle-time computation and should eventually
-  be profiled inside `createElfDiagnostics()`. They now run only after a 300 ms idle window and are
-  postponed by interactive LSP requests, so they no longer inflate measured completion/formatting
-  response times.
+- Compiler beta.20 template compilation is the remaining cold diagnostic hotspot: 41.56 seconds
+  of the measured 42.79-second cold diagnostic aggregate over 116 Kit macro files, versus 1.11
+  seconds in language-tools filtering. Diagnostics run after a 300 ms idle window and are
+  postponed by interactive requests, while unchanged repeats are cached. Further material cold
+  reduction requires compiler-level incremental support.
 - The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
   therefore part of CI reliability.
 
@@ -128,27 +133,32 @@ scheduling are implemented and fully verified. The plan and measurements are rec
 Latest confirmed locally on 2026-07-29 for the unreleased performance maintenance after `0.4.1`:
 
 - `pnpm typecheck`: passed with unused-code checks enabled.
-- `pnpm test`: 7 files, 96 tests passed.
+- `pnpm test`: 7 files, 98 tests passed.
 - `pnpm smoke`: extension startup, Windows/Linux/macOS extraction selection, and 9/9 grammar
   cases passed.
-- `pnpm verify:m10`: 371 Kit source files, 27 macro components, cold index 56.1 ms, warm
-  485/485 cache reuse in 3.6 ms.
-- `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs in 35
-  seconds. Activation was 588.0 ms, latest server startup 317.3 ms, prewarm 71.7 ms, first
-  completion 26.00 ms, warm completion p95 4.44 ms, and warm formatting p95 1.44 ms.
-- `pnpm package:vsix`: 115 files, 2.91 MiB, below the 4 MiB budget.
+- `pnpm verify:m10`: 376 Kit source files, 27 macro components, cold index 45.6 ms, warm
+  491/491 cache reuse in 3.8 ms.
+- `pnpm benchmark:diagnostics`: 116 Kit macro files; baseline cold/repeat was
+  58,487.4/55,305.0 ms; optimized preparation plus cold was 43,599.8 ms and repeat was 4.7 ms.
+  Remaining cold attribution was 41,558.4 ms compiler compilation and 1,105.1 ms macro filtering.
+- `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs in 24
+  seconds. Activation was 524.9 ms, latest server startup 317.1 ms, prewarm 74.3 ms, first
+  completion 22.90 ms, warm completion p95 5.17 ms, and warm formatting p95 1.19 ms.
+- `pnpm package:vsix`: 115 files, 2.92 MiB, below the 4 MiB budget.
 - `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed on Windows with clean Host logs in
-  51 seconds. Activation was 574.0 ms, latest server startup 358.4 ms, prewarm 64.3 ms, first
-  completion 25.03 ms, warm completion p95 4.65 ms, and warm formatting p95 2.37 ms.
+  24 seconds. Activation was 511.3 ms, latest server startup 472.5 ms, prewarm 66.6 ms, first
+  completion 24.78 ms, warm completion p95 3.74 ms, and warm formatting p95 1.27 ms.
 - GitHub workflow `30420440673`: build, 91 tests, smoke, development Host, package, and Linux
   packaged Host all passed; only the now-optional missing-`VSCE_PAT` publication step failed.
 
 ## Release State
 
 - Released version: `0.4.1`.
-- Unreleased maintenance commit: `80c2daf`; beta.20 compiler alignment,
+- Unreleased editor maintenance commits: `80c2daf` and `998f0a9`; beta.20 compiler alignment,
   formatting/highlighting/navigation fixes, and interactive-priority diagnostic scheduling are
   fully verified and pushed to Gitee and GitHub `main`.
+- Diagnostics cache/batching and benchmark changes are fully verified locally; implementation
+  commit and push are pending.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.

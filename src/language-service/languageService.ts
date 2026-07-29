@@ -123,6 +123,23 @@ export interface ElfLanguageServiceOptions {
   semanticTokens?: ElfSemanticTokensOptions;
 }
 
+export interface ElfDiagnosticsPerformance {
+  analysisDurationMs: number;
+  cacheHit: boolean;
+  compilerDiagnosticCount: number;
+  macroCompilationDurationMs: number;
+  macroDiagnosticCount: number;
+  macroDurationMs: number;
+  macroFilteringDurationMs: number;
+  styleDurationMs: number;
+  suppressedCommentDiagnosticCount: number;
+  suppressedKnownDiagnosticCount: number;
+  suppressedRefDiagnosticCount: number;
+  suppressedVForDiagnosticCount: number;
+  templateDurationMs: number;
+  totalDurationMs: number;
+}
+
 interface ResolvedElfCompletionOptions {
   eventBindingStyle: ElfTemplateBindingStyle;
   templateBindingStyle: ElfTemplateBindingStyle;
@@ -381,10 +398,20 @@ interface CachedSourceAnalysis {
   source: string;
 }
 
+interface CachedDocumentDiagnostics {
+  diagnostics?: Diagnostic[];
+  macroDiagnostics?: Diagnostic[];
+  projectComponents?: ElfProjectComponent[];
+  source: string;
+}
+
 // A single VS Code request fan-outs into several language features. Reusing the
 // parsed source prevents those features from repeatedly building the same AST.
 const sourceAnalysisCache = new Map<string, CachedSourceAnalysis>();
 const sourceAnalysisCacheLimit = 24;
+const documentDiagnosticsCache = new Map<string, CachedDocumentDiagnostics>();
+const documentDiagnosticsCacheLimit = 24;
+const defaultDiagnosticsOptions: ElfLanguageServiceOptions = {};
 
 const analyzeDocument = (document: TextDocument) => {
   const source = document.getText();
@@ -795,34 +822,138 @@ export const createElfOnTypeFormattingEdits = (
 
 export const createElfDiagnostics = (
   document: TextDocument,
-  options: ElfLanguageServiceOptions = {}
+  options: ElfLanguageServiceOptions = defaultDiagnosticsOptions,
+  performanceResult?: ElfDiagnosticsPerformance
 ): Diagnostic[] => {
+  const started = performance.now();
+  const source = document.getText();
   const resolvedOptions = resolveLanguageServiceOptions(options);
-  const analysis = analyzeDocument(document);
-  const macroDiagnostics = analysis.isMacroComponent
-    ? createMacroDiagnostics(document, analysis.components)
-    : [];
+  let cached = documentDiagnosticsCache.get(document.uri);
 
-  return [
-    ...macroDiagnostics,
-    ...analysis.components.flatMap((component) => [
-      ...component.templates.flatMap((region) =>
-        createTemplateDiagnostics(
-          document,
-          analysis.components,
-          component,
-          region,
-          resolvedOptions.projectComponents
-        )
-      ),
-      ...component.styles.flatMap((region) => createStyleDiagnostics(document, region))
-    ])
-  ];
+  if (cached?.source !== source) {
+    cached = { source };
+  } else if (
+    cached.diagnostics &&
+    cached.projectComponents === resolvedOptions.projectComponents
+  ) {
+    touchDocumentDiagnosticsCache(document.uri, cached);
+    const diagnostics = cloneDiagnostics(cached.diagnostics);
+
+    assignDiagnosticsPerformance(performanceResult, {
+      analysisDurationMs: 0,
+      cacheHit: true,
+      compilerDiagnosticCount: 0,
+      macroCompilationDurationMs: 0,
+      macroDiagnosticCount: 0,
+      macroDurationMs: 0,
+      macroFilteringDurationMs: 0,
+      styleDurationMs: 0,
+      suppressedCommentDiagnosticCount: 0,
+      suppressedKnownDiagnosticCount: 0,
+      suppressedRefDiagnosticCount: 0,
+      suppressedVForDiagnosticCount: 0,
+      templateDurationMs: 0,
+      totalDurationMs: performance.now() - started
+    });
+    return diagnostics;
+  }
+
+  const analysisStarted = performance.now();
+  const analysis = analyzeDocument(document);
+  const analysisDurationMs = performance.now() - analysisStarted;
+  const macroStarted = performance.now();
+  const macroDiagnostics =
+    cached.macroDiagnostics ??
+    (analysis.isMacroComponent
+      ? createMacroDiagnostics(document, analysis.components, performanceResult)
+      : []);
+  const macroDurationMs = performance.now() - macroStarted;
+  const templateStarted = performance.now();
+  const templateDiagnostics = analysis.components.flatMap((component) =>
+    component.templates.flatMap((region) =>
+      createTemplateDiagnostics(
+        document,
+        analysis.components,
+        component,
+        region,
+        resolvedOptions.projectComponents
+      )
+    )
+  );
+  const templateDurationMs = performance.now() - templateStarted;
+  const styleStarted = performance.now();
+  const styleDiagnostics = analysis.components.flatMap((component) =>
+    component.styles.flatMap((region) => createStyleDiagnostics(document, region))
+  );
+  const styleDurationMs = performance.now() - styleStarted;
+  const diagnostics = [...macroDiagnostics, ...templateDiagnostics, ...styleDiagnostics];
+
+  cached.diagnostics = diagnostics;
+  cached.macroDiagnostics = macroDiagnostics;
+  cached.projectComponents = resolvedOptions.projectComponents;
+  touchDocumentDiagnosticsCache(document.uri, cached);
+
+  const result = cloneDiagnostics(diagnostics);
+
+  assignDiagnosticsPerformance(performanceResult, {
+    analysisDurationMs,
+    cacheHit: false,
+    compilerDiagnosticCount:
+      performanceResult?.compilerDiagnosticCount ?? 0,
+    macroCompilationDurationMs:
+      performanceResult?.macroCompilationDurationMs ?? 0,
+    macroDiagnosticCount:
+      performanceResult?.macroDiagnosticCount ?? macroDiagnostics.length,
+    macroDurationMs,
+    macroFilteringDurationMs:
+      performanceResult?.macroFilteringDurationMs ?? 0,
+    styleDurationMs,
+    suppressedCommentDiagnosticCount:
+      performanceResult?.suppressedCommentDiagnosticCount ?? 0,
+    suppressedKnownDiagnosticCount:
+      performanceResult?.suppressedKnownDiagnosticCount ?? 0,
+    suppressedRefDiagnosticCount:
+      performanceResult?.suppressedRefDiagnosticCount ?? 0,
+    suppressedVForDiagnosticCount:
+      performanceResult?.suppressedVForDiagnosticCount ?? 0,
+    templateDurationMs,
+    totalDurationMs: performance.now() - started
+  });
+  return result;
 };
+
+const assignDiagnosticsPerformance = (
+  target: ElfDiagnosticsPerformance | undefined,
+  value: ElfDiagnosticsPerformance
+) => {
+  if (target) {
+    Object.assign(target, value);
+  }
+};
+
+const touchDocumentDiagnosticsCache = (
+  uri: string,
+  entry: CachedDocumentDiagnostics
+) => {
+  documentDiagnosticsCache.delete(uri);
+  documentDiagnosticsCache.set(uri, entry);
+
+  if (documentDiagnosticsCache.size > documentDiagnosticsCacheLimit) {
+    const oldestUri = documentDiagnosticsCache.keys().next().value;
+
+    if (oldestUri) {
+      documentDiagnosticsCache.delete(oldestUri);
+    }
+  }
+};
+
+const cloneDiagnostics = (diagnostics: Diagnostic[]): Diagnostic[] =>
+  structuredClone(diagnostics);
 
 const createMacroDiagnostics = (
   document: TextDocument,
-  components: ComponentMeta[]
+  components: ComponentMeta[],
+  performanceResult?: ElfDiagnosticsPerformance
 ): Diagnostic[] => {
   const source = document.getText();
 
@@ -831,18 +962,65 @@ const createMacroDiagnostics = (
   }
 
   try {
-    return compileMacroComponent(source, {
+    const compilationStarted = performance.now();
+    const compilerDiagnostics = compileMacroComponent(source, {
       filename: documentUriToFileName(document.uri),
       templateTypeCheck: true
-    })
-      .diagnostics.map((diagnostic) => mapMacroDiagnostic(document, diagnostic))
-      .filter(
-        (diagnostic) =>
-          !isDiagnosticInsideTemplateComment(document, components, diagnostic) &&
-          !isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic) &&
-          !isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic) &&
-          !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic)
-      );
+    }).diagnostics;
+    const macroCompilationDurationMs = performance.now() - compilationStarted;
+    const filteringStarted = performance.now();
+    const diagnostics: Diagnostic[] = [];
+    const diagnosticsRequiringKnownSymbolReview: Diagnostic[] = [];
+    let suppressedCommentDiagnosticCount = 0;
+    let suppressedKnownDiagnosticCount = 0;
+    let suppressedRefDiagnosticCount = 0;
+    let suppressedVForDiagnosticCount = 0;
+
+    compilerDiagnostics
+      .map((diagnostic) => mapMacroDiagnostic(document, diagnostic))
+      .forEach((diagnostic) => {
+        if (isDiagnosticInsideTemplateComment(document, components, diagnostic)) {
+          suppressedCommentDiagnosticCount += 1;
+        } else if (isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic)) {
+          suppressedVForDiagnosticCount += 1;
+        } else if (
+          isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic)
+        ) {
+          suppressedRefDiagnosticCount += 1;
+        } else {
+          diagnosticsRequiringKnownSymbolReview.push(diagnostic);
+        }
+      });
+    const resolvedKnownDiagnostics = collectResolvedKnownMacroTemplateDiagnostics(
+      document,
+      components,
+      diagnosticsRequiringKnownSymbolReview
+    );
+
+    diagnosticsRequiringKnownSymbolReview.forEach((diagnostic) => {
+      if (resolvedKnownDiagnostics.has(diagnostic)) {
+        suppressedKnownDiagnosticCount += 1;
+      } else {
+        diagnostics.push(diagnostic);
+      }
+    });
+    const macroFilteringDurationMs = performance.now() - filteringStarted;
+
+    if (performanceResult) {
+      performanceResult.compilerDiagnosticCount = compilerDiagnostics.length;
+      performanceResult.macroCompilationDurationMs = macroCompilationDurationMs;
+      performanceResult.macroDiagnosticCount = diagnostics.length;
+      performanceResult.macroFilteringDurationMs = macroFilteringDurationMs;
+      performanceResult.suppressedCommentDiagnosticCount =
+        suppressedCommentDiagnosticCount;
+      performanceResult.suppressedKnownDiagnosticCount =
+        suppressedKnownDiagnosticCount;
+      performanceResult.suppressedRefDiagnosticCount =
+        suppressedRefDiagnosticCount;
+      performanceResult.suppressedVForDiagnosticCount =
+        suppressedVForDiagnosticCount;
+    }
+    return diagnostics;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
@@ -3262,32 +3440,97 @@ const isResolvedInterpolationRefValueDiagnostic = (
   });
 };
 
-/** 宏编译器映射偏移时，以原始脚本作用域复核，保留真实缺失名称给快速修复。 */
-const isResolvedKnownMacroTemplateDiagnostic = (
+/** Recheck compiler mapping candidates against the original script scope in one TS batch. */
+const collectResolvedKnownMacroTemplateDiagnostics = (
   document: TextDocument,
   components: ComponentMeta[],
-  diagnostic: Diagnostic
-): boolean => {
-  if (diagnostic.code !== "ELF_TEMPLATE_TYPE") {
-    return false;
-  }
+  diagnostics: Diagnostic[]
+): Set<Diagnostic> => {
+  const resolved = new Set<Diagnostic>();
+  const expressions = new Map<Diagnostic, string>();
 
-  const parsed = readMacroUnknownLocalDiagnostic(readDiagnosticMessage(diagnostic));
+  diagnostics.forEach((diagnostic) => {
+    if (diagnostic.code !== "ELF_TEMPLATE_TYPE") {
+      return;
+    }
 
-  if (!parsed) {
-    return false;
-  }
+    const parsed = readMacroUnknownLocalDiagnostic(readDiagnosticMessage(diagnostic));
 
-  const sourceOffset = document.offsetAt(diagnostic.range.start);
-  const component = components.find((candidate) =>
-    candidate.templates.some((region) => isInsideEmbeddedRegion(region, sourceOffset))
+    if (!parsed) {
+      return;
+    }
+
+    const sourceOffset = document.offsetAt(diagnostic.range.start);
+    const component = components.find((candidate) =>
+      candidate.templates.some((region) => isInsideEmbeddedRegion(region, sourceOffset))
+    );
+
+    if (
+      component?.props.includes(parsed.localName) ||
+      component?.setupReturns.includes(parsed.localName)
+    ) {
+      resolved.add(diagnostic);
+      return;
+    }
+
+    expressions.set(diagnostic, parsed.expression);
+  });
+
+  const expressionDiagnostics = readTypeScriptExpressionDiagnosticMap(
+    document,
+    [...expressions.values()]
   );
 
-  if (component?.props.includes(parsed.localName)) {
-    return true;
+  expressions.forEach((expression, diagnostic) => {
+    if (expressionDiagnostics.get(expression) === false) {
+      resolved.add(diagnostic);
+    }
+  });
+
+  return resolved;
+};
+
+const readTypeScriptExpressionDiagnosticMap = (
+  document: TextDocument,
+  expressions: string[]
+): Map<string, boolean> => {
+  const uniqueExpressions = [...new Set(expressions)];
+
+  if (uniqueExpressions.length === 0) {
+    return new Map();
   }
 
-  return !hasTypeScriptDiagnosticInExpression(document, parsed.expression);
+  const fileName = "elf-template-diagnostics.ts";
+  const ranges = new Map<string, { end: number; start: number }>();
+  let source = `${document.getText()}\n\n${elfTemplateValueHelper}\nfunction __elfTemplateDiagnostics() {\n`;
+
+  uniqueExpressions.forEach((expression) => {
+    source += "  void (";
+    const start = source.length;
+
+    source += expression;
+    ranges.set(expression, { end: source.length, start });
+    source += ");\n";
+  });
+  source += "}\n";
+
+  const diagnostics = withTypeScriptLanguageService(
+    document,
+    { fileName, source },
+    (service) => service.getSemanticDiagnostics(fileName)
+  );
+
+  return new Map(
+    [...ranges].map(([expression, range]) => [
+      expression,
+      diagnostics.some((diagnostic) => {
+        const start = diagnostic.start ?? -1;
+        const end = start + (diagnostic.length ?? 0);
+
+        return start < range.end && end > range.start;
+      })
+    ])
+  );
 };
 
 const readMacroInterpolationRefValueDiagnostic = (message: string): string | null => {

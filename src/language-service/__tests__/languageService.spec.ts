@@ -30,6 +30,7 @@ import {
   elfSemanticTokensLegend,
   prepareElfDocument
 } from "../languageService";
+import type { ElfDiagnosticsPerformance } from "../languageService";
 import { elfuiDemoFixture } from "../../language-core/__fixtures__/elfuiDemo";
 
 const createDocument = (source: string) =>
@@ -224,6 +225,81 @@ describe("ElfUI language service", () => {
     expect(formattingAverage).toBeLessThan(50);
     expect(declarationAverage).toBeLessThan(50);
   });
+
+  it("reuses diagnostics for unchanged documents without exposing cached mutations", () => {
+    const source = `
+      import { defineHtml } from "@elfui/core";
+
+      export const Demo = defineHtml(\`<main v-if="missingState"></main>\`);
+    `;
+    const document = TextDocument.create(
+      "file:///diagnostics-cache.ts",
+      "typescript",
+      1,
+      source
+    );
+    const first = createElfDiagnostics(document);
+
+    expect(first.length).toBeGreaterThan(0);
+    const expectedMessage =
+      typeof first[0]!.message === "string" ? first[0]!.message : first[0]!.message.value;
+    first[0]!.message = "mutated by consumer";
+    first[0]!.range.start.character = 999;
+
+    const warmStarted = performance.now();
+    const cachePerformance = {} as ElfDiagnosticsPerformance;
+    const second = createElfDiagnostics(document, undefined, cachePerformance);
+    const warmDurationMs = performance.now() - warmStarted;
+
+    expect(cachePerformance.cacheHit).toBe(true);
+    expect(second[0]?.message).toBe(expectedMessage);
+    expect(second[0]?.range.start.character).not.toBe(999);
+    expect(second).not.toBe(first);
+    expect(second[0]).not.toBe(first[0]);
+    expect(warmDurationMs).toBeLessThan(10);
+  });
+
+  it("invalidates diagnostic results for source and project-component changes", () => {
+    const uri = "file:///diagnostics-cache-invalidation.ts";
+    const createSource = (propName: string) => `
+      import { defineHtml, useComponents } from "@elfui/core";
+      import { PackageButton } from "@acme/kit";
+
+      useComponents({ PackageButton });
+      const value = true;
+      export const Demo = defineHtml(\`<PackageButton :${propName}=\${value}></PackageButton>\`);
+    `;
+    const createOptions = (props: string[]) => ({
+      project: {
+        components: [
+          {
+            emits: [],
+            exportName: "PackageButton",
+            importPath: "@acme/kit",
+            localName: "PackageButton",
+            props,
+            slots: []
+          }
+        ]
+      }
+    });
+    const unknownSource = createSource("unknown");
+    const unknownDocument = TextDocument.create(uri, "typescript", 1, unknownSource);
+    const unknownMessages = readDiagnosticMessages(
+      createElfDiagnostics(unknownDocument, createOptions(["label"]))
+    );
+    const knownMessages = readDiagnosticMessages(
+      createElfDiagnostics(unknownDocument, createOptions(["unknown"]))
+    );
+    const changedDocument = TextDocument.create(uri, "typescript", 2, createSource("other"));
+    const changedMessages = readDiagnosticMessages(
+      createElfDiagnostics(changedDocument, createOptions(["unknown"]))
+    );
+
+    expect(unknownMessages.some((message) => message.includes('Prop "unknown"'))).toBe(true);
+    expect(knownMessages.some((message) => message.includes('Prop "unknown"'))).toBe(false);
+    expect(changedMessages.some((message) => message.includes('Prop "other"'))).toBe(true);
+  }, 15_000);
 
   it("prepares each embedded region once and keeps subsequent requests warm", () => {
     const source = `

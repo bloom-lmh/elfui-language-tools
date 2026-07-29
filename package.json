@@ -261,6 +261,7 @@
     "release:version": "changeset version && node ./scripts/sync-release-version.mjs",
     "bundle": "node ./scripts/build.mjs",
     "build": "pnpm typecheck && pnpm bundle",
+    "benchmark:diagnostics": "node ./scripts/benchmark-diagnostics.mjs",
     "clean": "rimraf dist",
     "package:vsix": "node ./scripts/package-local.mjs",
     "package:vsix:fast": "node ./scripts/package-local.mjs --skip-verify",

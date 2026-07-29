@@ -21,7 +21,7 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 ## Current Work
 
-Status: `0.4.1` published; GitHub Release completion in progress.
+Status: `0.4.1` released.
 
 The current cycle aligns Language Tools with `@elfui/compiler@0.1.0-beta.17`, removes the retired
 Fragment authoring protocol, improves workspace indexing and cross-file navigation, reduces VSIX
@@ -34,7 +34,8 @@ development Host, and packaging gates but failed before packaged Host startup be
 tar cannot extract the ZIP-based VSIX. Version `0.4.1` changes packaged smoke extraction to use
 `unzip` on Linux/macOS while retaining the working Windows tar path. Workflow run `30420440673`
 then passed the Linux packaged Host gate but stopped because the repository does not configure
-`VSCE_PAT`; the already-successful local Marketplace publication remains authoritative.
+`VSCE_PAT`; the already-successful local Marketplace publication remains authoritative. GitHub
+Release `v0.4.1` was created through the GitHub API and includes the verified VSIX asset.
 
 No changes are required in `elfui`, `elfui-docs`, or `elfui-kit` for this release. Those repositories
 were used as read-only compatibility and pressure-test inputs.
@@ -81,10 +82,6 @@ were used as read-only compatibility and pressure-test inputs.
   being measured on larger workspaces.
 - The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
   therefore part of CI reliability.
-- The `v0.4.0` GitHub Release was not created because workflow run `30419657827` failed at Linux
-  VSIX extraction. The Marketplace release is valid; `0.4.1` is the non-destructive follow-up.
-- GitHub does not currently expose a `VSCE_PAT` repository secret. Local `vsce publish` works; the
-  release workflow now skips that optional duplicate publication instead of blocking GitHub Release.
 
 ## Next Work
 
@@ -121,9 +118,11 @@ Latest confirmed locally on 2026-07-29 for `0.4.1`:
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.
+- Release-workflow follow-up: `5627d44`; pushed to Gitee and GitHub `main`.
 - Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.1`.
 - Git tag: `v0.4.1`; pushed to Gitee and GitHub.
-- GitHub Release: creation and VSIX upload are pending after the missing-secret workflow stop.
+- GitHub Release: `https://github.com/bloom-lmh/elfui-language-tools/releases/tag/v0.4.1`;
+  verified VSIX asset uploaded (3,052,235 bytes).
 - Local artifact: `.local-vsix/elfui-language-features-0.4.1.vsix`.
 
 ## Current Capability

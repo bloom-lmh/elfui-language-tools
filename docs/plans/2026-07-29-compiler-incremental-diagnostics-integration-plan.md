@@ -57,5 +57,6 @@ compiler without changing diagnostics or interactive behavior.
   Windows host was under unrelated process contention, so the controlled direct-compiler result
   above remains the release performance comparison.
 - Language Tools `0.4.2` was packaged at 2.92 MiB and published to the VS Code Marketplace. The
-  GitHub release workflow remains the authoritative Linux development/packaged Host gate because
-  the local VS Code updater still prevents either Host from launching.
+  local VS Code updater still prevents either Host from launching, but GitHub release workflow
+  `30463741357` passed both Linux development and packaged Host gates and created the GitHub
+  Release with the verified VSIX asset.

@@ -33,11 +33,10 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 - Treat `elfui`, `elfui-docs`, and `elfui-kit` as read-only compatibility inputs unless a future
   task explicitly authorizes changes in those repositories.
 
-Current maintained baseline: `0.4.2` published to the VS Code Marketplace; Git tag and GitHub
-Release verification are pending.
+Current maintained baseline: `0.4.2` released.
 
-Current maintenance cycle: compiler-level incremental template diagnostics are implemented in
-ElfUI beta.21 and consumed by Language Tools 0.4.2. The active plan is
+Current maintenance cycle: compiler-level incremental template diagnostics are implemented,
+released in ElfUI beta.21, and consumed by the released Language Tools 0.4.2. The completed plan is
 `docs/plans/2026-07-29-compiler-incremental-diagnostics-integration-plan.md`.
 
 ## 2. 已经做的工作
@@ -171,10 +170,12 @@ Latest confirmed locally on 2026-07-29 for the `0.4.2` release candidate:
   1.27 ms.
 - Prior GitHub workflow `30420440673`: build, 91 tests, smoke, development Host, package, and Linux
   packaged Host all passed; only the now-optional missing-`VSCE_PAT` publication step failed.
+- GitHub release workflow `30463741357`: build, 98 tests, smoke/grammar, development Host,
+  packaging, packaged VSIX Host, and GitHub Release creation all passed on Linux.
 
 ## Release State
 
-- Release candidate: `0.4.2`.
+- Released version: `0.4.2`.
 - Editor maintenance commits `80c2daf` and `998f0a9`; formatting/highlighting/navigation fixes and
   interactive-priority diagnostic scheduling are fully verified and pushed to Gitee and GitHub
   `main`.
@@ -185,14 +186,17 @@ Latest confirmed locally on 2026-07-29 for the `0.4.2` release candidate:
   `30462473620`, all seven npm packages, and the GitHub prerelease are complete.
 - Corrected benchmark, Host fallback, and beta.21 dependency changes are verified through
   typecheck, 98 tests, smoke/grammar, M10, diagnostics benchmarking, and VSIX packaging. Local Host
-  reruns remain blocked by the external VS Code updater; the GitHub Linux release workflow is
-  pending.
+  reruns remain blocked by the external VS Code updater; GitHub workflow `30463741357` supplied
+  the authoritative development and packaged Host results.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.
 - Release-workflow follow-up: `5627d44`; pushed to Gitee and GitHub `main`.
 - Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.2`.
-- Git tag and GitHub Release: pending the release commit.
+- Release commit: `6031197`; pushed to Gitee and GitHub `main`.
+- Git tag: `v0.4.2`; pushed to Gitee and GitHub.
+- GitHub Release: `https://github.com/bloom-lmh/elfui-language-tools/releases/tag/v0.4.2`;
+  verified VSIX asset uploaded (3,057,299 bytes).
 - Local artifact: `.local-vsix/elfui-language-features-0.4.2.vsix`.
 
 ## Current Capability

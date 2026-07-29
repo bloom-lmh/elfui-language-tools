@@ -50,5 +50,12 @@ compiler without changing diagnostics or interactive behavior.
 - Development and packaged Host reruns are pending because the local VS Code Inno updater has held
   `vscode-updating` since 19:44. The runner now supports an isolated downloaded test archive, but
   the current network path stalled while fetching it.
-- Beta.21 npm publication and permanent package dependency upgrade remain a separate release
-  action.
+- ElfUI `v0.1.0-beta.21` passed its Linux release workflow and all seven packages were published
+  through npm Trusted Publishing.
+- Language Tools now pins `@elfui/compiler@0.1.0-beta.21`; the release-candidate benchmark kept
+  the immediate 117-file repeat at 4.5 ms. Its 64,173.1 ms cold result was collected while the
+  Windows host was under unrelated process contention, so the controlled direct-compiler result
+  above remains the release performance comparison.
+- Language Tools `0.4.2` was packaged at 2.92 MiB and published to the VS Code Marketplace. The
+  GitHub release workflow remains the authoritative Linux development/packaged Host gate because
+  the local VS Code updater still prevents either Host from launching.

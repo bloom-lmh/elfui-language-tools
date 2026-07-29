@@ -6,7 +6,7 @@ VS Code language features for ElfUI macro components.
 
 The extension now has a browser entry point. In a web extension host such as
 StackBlitz Codeflow, it provides the ElfUI TextMate grammar, macro snippets,
-beta.20 macro/runtime completions, template directives and modifiers, built-in
+beta.21 macro/runtime completions, template directives and modifiers, built-in
 component completions, and the `ElfUI: Diagnose Integration` command without
 requiring a native process.
 
@@ -32,7 +32,7 @@ Marketplace, the same pane can install it by name instead.
 
 - Macro component support for ordinary `.ts` / `.tsx` files that export `defineHtml()` components.
 - Realtime macro diagnostics from the ElfUI macro compiler, including template TypeScript errors, slot checks, and structured source ranges.
-- Macro-aware completion and hover for beta.20 APIs including `defineProps()`, `defineEmits()`, `defineModel()`, `defineSlots()`, `defineOptions()`, `defineDirective()`, `defineHtml()`, `useComponents()`, lifecycle hooks, host/form/observer helpers, and typed `useTemplateRef()` values.
+- Macro-aware completion and hover for beta.21 APIs including `defineProps()`, `defineEmits()`, `defineModel()`, `defineSlots()`, `defineOptions()`, `defineDirective()`, `defineHtml()`, `useComponents()`, lifecycle hooks, host/form/observer helpers, and typed `useTemplateRef()` values.
 - Compiler metadata schema v2 support, including compiler protocol, structured component contracts, source ranges, and structured diagnostics.
 - Template prop hover for local macro components includes the individual TypeScript type and statically declared default value when available.
 - Hover metadata for indexed workspace and package components, including import source, typed props with static defaults, events, slots, and typed slot scopes.
@@ -129,7 +129,7 @@ The metadata JSON can list exported components:
 `importPath` is optional and defaults to the package name. `props` and `emits` also accept the legacy string form such as `["label", "open"]` or `["confirm"]`; use the structured form to show prop type/default value and event payload type in template hover.
 
 The package index also accepts `MacroComponentMetadata` schema v2 JSON emitted by
-`@elfui/compiler@0.1.0-beta.20`. Structured `props`, `events`, `slots.typeText`, and `tagName`
+`@elfui/compiler@0.1.0-beta.21`. Structured `props`, `events`, `slots.typeText`, and `tagName`
 are consumed directly. Removed legacy Fragment fields are ignored rather than reintroduced by
 the language tools.
 

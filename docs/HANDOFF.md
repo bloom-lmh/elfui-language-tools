@@ -33,23 +33,23 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 - Treat `elfui`, `elfui-docs`, and `elfui-kit` as read-only compatibility inputs unless a future
   task explicitly authorizes changes in those repositories.
 
-Current maintained baseline: `0.4.1` released.
+Current maintained baseline: `0.4.2` published to the VS Code Marketplace; Git tag and GitHub
+Release verification are pending.
 
-Current maintenance cycle: compiler-level incremental template diagnostics are in progress after
-the corrected benchmark isolated beta.20 compilation as more than 99% of remaining cold cost.
-The active plan is
+Current maintenance cycle: compiler-level incremental template diagnostics are implemented in
+ElfUI beta.21 and consumed by Language Tools 0.4.2. The active plan is
 `docs/plans/2026-07-29-compiler-incremental-diagnostics-integration-plan.md`.
 
 ## 2. 已经做的工作
 
 - Removed language-core, language-service, TypeScript plugin, grammar, snippet, formatting,
   metadata, navigation, and smoke coverage for `fragment` / `defineFragment`.
-- Upgraded compiler metadata consumption from beta.13 to beta.20.
+- Upgraded compiler metadata consumption from beta.13 through beta.21.
 - Moved initial/full indexing off the interactive LSP path, added asynchronous scans, incremental
   watcher updates, dynamic workspace folders, scan limits, cache reuse, and performance history.
 - Added cached cross-file component/prop/event/slot references and rename with import-alias
   preservation.
-- Shared the beta.20 completion catalog between desktop and Web extension entries.
+- Shared the beta.21 completion catalog between desktop and Web extension entries.
 - Split settings parsing into `configuration.ts` and index state/per-document option caching into
   `workspaceIndex.ts`; enabled unused-local and unused-parameter compiler gates.
 - Reduced the packaged VSIX from roughly 7 MiB to 2.91 MiB by excluding source maps and minifying
@@ -99,6 +99,9 @@ The active plan is
   optional local compiler source override for pre-release integration measurements.
 - Added an explicit Host runner fallback to the isolated downloaded VS Code 1.90 archive when the
   user installation is unavailable during an update.
+- Published all seven ElfUI `0.1.0-beta.21` packages after the complete Linux release gate passed,
+  then pinned Language Tools to `@elfui/compiler@0.1.0-beta.21`.
+- Packaged Language Tools 0.4.2 at 2.92 MiB and published it to the VS Code Marketplace.
 
 ## 3. 未作的工作（将要做的）
 
@@ -112,9 +115,9 @@ The active plan is
    behavior.
 5. Re-run both development and packaged Host smoke whenever grammar, semantic classifications,
    document edits, or packaging change.
-6. Coordinate an incremental compiler diagnostic API or compiler-level parse/type-check cache if
-   lower cold idle-time CPU becomes a priority. The language-tools-owned repeat/filter work is now
-   cached and batched.
+6. Profile beta.21 under a controlled low-contention host before attempting another compiler
+   optimization. Program reuse is now bounded in the compiler and unchanged Language Tools
+   repeats are already cached and batched.
 
 ## 4. 当前问题
 
@@ -125,10 +128,10 @@ The active plan is
   share one module.
 - `src/extension.ts` is 2,301 lines and contains Studio-oriented source analysis that partially
   duplicates `language-core`.
-- Compiler beta.20 template compilation is the remaining cold diagnostic hotspot: 58.95 seconds
-  of the corrected 59.06-second cold diagnostic aggregate over 117 Kit macro files, versus 2.8 ms
-  in language-tools filtering. The earlier 41.56/42.79-second attribution used a temporary bundle
-  without the packaged TypeScript libraries and is invalid. Diagnostics run after a 300 ms idle
+- Compiler template compilation remains the dominant cold diagnostic cost after beta.21's bounded
+  program reuse. The controlled direct benchmark improved cold/second-pass time by 23.7%/25.1%;
+  the latest Language Tools release-candidate run was collected under unrelated Windows process
+  contention and is not used as the comparative baseline. Diagnostics run after a 300 ms idle
   window and are postponed by interactive requests, while unchanged repeats are cached.
 - The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
   therefore part of CI reliability.
@@ -139,50 +142,58 @@ The active plan is
 
 ## Verification Snapshot
 
-Latest confirmed locally on 2026-07-29 for the unreleased performance maintenance after `0.4.1`:
+Latest confirmed locally on 2026-07-29 for the `0.4.2` release candidate:
 
 - `pnpm typecheck`: passed with unused-code checks enabled.
 - `pnpm test`: 7 files, 98 tests passed.
 - `pnpm smoke`: extension startup, Windows/Linux/macOS extraction selection, and 9/9 grammar
   cases passed.
-- `pnpm verify:m10`: 380 Kit source files, 27 macro components, cold index 58.5 ms, warm
+- `pnpm verify:m10`: 380 Kit source files, 27 macro components, cold index 50.1 ms, warm
   496/496 cache reuse in 3.6 ms.
 - Corrected `pnpm benchmark:diagnostics` with npm beta.20: 117 Kit macro files; 59,061.0 ms cold,
   10.4 ms aggregate repeat, 58,945.3 ms compiler compilation, and 2.8 ms filtering.
 - Local incremental compiler integration: 51,915.7 ms cold and 3.9 ms aggregate repeat, a 12.1%
   cold reduction against npm beta.20; compiler compilation was 51,799.6 ms.
-- `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs in 24
-  seconds. Activation was 524.9 ms, latest server startup 317.1 ms, prewarm 74.3 ms, first
-  completion 22.90 ms, warm completion p95 5.17 ms, and warm formatting p95 1.19 ms.
+- Published beta.21 release-candidate benchmark: 117 Kit macro files; 64,173.1 ms cold under
+  current Windows process contention, 4.5 ms aggregate repeat, 64,052.4 ms compiler compilation,
+  and 0.7 ms filtering. This run confirms package integration but is not a controlled performance
+  comparison.
+- Prior 0.4.1 `pnpm smoke:host` baseline: 18/18 development-extension Host tests passed with clean
+  Host logs in 24 seconds. Activation was 524.9 ms, latest server startup 317.1 ms, prewarm
+  74.3 ms, first completion 22.90 ms, warm completion p95 5.17 ms, and warm formatting p95
+  1.19 ms.
 - `pnpm package:vsix`: 115 files, 2.92 MiB, below the 4 MiB budget.
-- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed on Windows with clean Host logs in
-  24 seconds. Activation was 511.3 ms, latest server startup 472.5 ms, prewarm 66.6 ms, first
-  completion 24.78 ms, warm completion p95 3.74 ms, and warm formatting p95 1.27 ms.
-- GitHub workflow `30420440673`: build, 91 tests, smoke, development Host, package, and Linux
+- Local `pnpm smoke:vsix`: blocked before extension launch by VS Code's external
+  `vscode-updating` mutex; the GitHub Linux workflow must supply the final packaged Host result.
+- Prior 0.4.1 `pnpm smoke:vsix` baseline: 18/18 packaged-extension Host tests passed on Windows
+  with clean Host logs in 24 seconds. Activation was 511.3 ms, latest server startup 472.5 ms,
+  prewarm 66.6 ms, first completion 24.78 ms, warm completion p95 3.74 ms, and warm formatting p95
+  1.27 ms.
+- Prior GitHub workflow `30420440673`: build, 91 tests, smoke, development Host, package, and Linux
   packaged Host all passed; only the now-optional missing-`VSCE_PAT` publication step failed.
 
 ## Release State
 
-- Released version: `0.4.1`.
-- Unreleased editor maintenance commits: `80c2daf` and `998f0a9`; beta.20 compiler alignment,
-  formatting/highlighting/navigation fixes, and interactive-priority diagnostic scheduling are
-  fully verified and pushed to Gitee and GitHub `main`.
+- Release candidate: `0.4.2`.
+- Editor maintenance commits `80c2daf` and `998f0a9`; formatting/highlighting/navigation fixes and
+  interactive-priority diagnostic scheduling are fully verified and pushed to Gitee and GitHub
+  `main`.
 - Diagnostics cache/batching and benchmark commit: `7c4c81f`; fully verified and pushed to Gitee
   and GitHub `main`.
 - Compiler incremental diagnostics commits `27d5b41` and `59ea441` are verified and pushed in the
-  `elfui` repository. Beta.21 npm publication is pending a separate release action.
-- Corrected benchmark and Host fallback changes are verified through typecheck, 98 tests,
-  smoke/grammar, M10, and VSIX packaging. Host reruns, final Language Tools commit, and push are
-  pending the external VS Code updater lock.
+  `elfui` repository. ElfUI release commit `5c918a7`, tag `v0.1.0-beta.21`, release workflow
+  `30462473620`, all seven npm packages, and the GitHub prerelease are complete.
+- Corrected benchmark, Host fallback, and beta.21 dependency changes are verified through
+  typecheck, 98 tests, smoke/grammar, M10, diagnostics benchmarking, and VSIX packaging. Local Host
+  reruns remain blocked by the external VS Code updater; the GitHub Linux release workflow is
+  pending.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.
 - Release-workflow follow-up: `5627d44`; pushed to Gitee and GitHub `main`.
-- Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.1`.
-- Git tag: `v0.4.1`; pushed to Gitee and GitHub.
-- GitHub Release: `https://github.com/bloom-lmh/elfui-language-tools/releases/tag/v0.4.1`;
-  verified VSIX asset uploaded (3,052,235 bytes).
-- Local artifact: `.local-vsix/elfui-language-features-0.4.1.vsix`.
+- Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.2`.
+- Git tag and GitHub Release: pending the release commit.
+- Local artifact: `.local-vsix/elfui-language-features-0.4.2.vsix`.
 
 ## Current Capability
 
@@ -191,10 +202,10 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
 - LSP completion, hover, diagnostics, definitions, references, rename, document symbols,
   inlay hints, code actions, document links, folding, selection, linked editing, and color
   providers in ElfUI regions.
-- Local macro support for beta.20 `defineHtml`, `defineProps`, `defineEmits`, `defineSlots`,
+- Local macro support for beta.21 `defineHtml`, `defineProps`, `defineEmits`, `defineSlots`,
   `defineModel`, `defineOptions`, `defineDirective`, and `useComponents`. The removed
   `fragment` / `defineFragment` protocol is intentionally unsupported.
-- `@elfui/compiler@0.1.0-beta.20` metadata schema v2 is the source of truth for structured
+- `@elfui/compiler@0.1.0-beta.21` metadata schema v2 is the source of truth for structured
   components, source ranges, compiler protocol, and diagnostic summaries.
 - Asynchronous, cached workspace and dependency component indexing with a 10,000-file default,
   incremental watcher updates, dynamic workspace folders, auto import, and structured metadata.
@@ -203,7 +214,7 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
 - TypeScript server filtering narrowly scoped to false-positive template locals and
   auto-unwrapped `useRef()` comparisons and semantic classifications inside ElfUI-only HTML/CSS
   comments.
-- The Web entry uses the shared beta.20 API catalog for macro/runtime, lifecycle, host/form/
+- The Web entry uses the shared beta.21 API catalog for macro/runtime, lifecycle, host/form/
   observer, directive, modifier, and built-in component completions.
 - ElfUI Studio commands: component structure, dynamic point report, static preview, binding
   migration, workspace performance report, metadata generation, and performance history export.
@@ -281,7 +292,7 @@ src/language-core/source.ts      TypeScript AST source analysis
 src/language-service/configuration.ts  Validated extension/LSP settings
 src/language-service/            LSP features and workspace/package index
 src/language-service/workspaceIndex.ts Workspace index state and per-document option cache
-src/shared/elfuiCatalog.ts       Shared beta.20 desktop/Web completion catalog
+src/shared/elfuiCatalog.ts       Shared beta.21 desktop/Web completion catalog
 src/web/                         Browser-safe completion logic and tests
 src/typescript-plugin/           Narrow native TS diagnostic suppression
 syntaxes/                        TextMate injection grammar
@@ -313,9 +324,9 @@ The recurring VS Code mutex warning in the test environment is harmless when the
 successfully.
 
 `package:vsix` strips source maps from its isolated staging tree and fails if the final VSIX is
-larger than 4 MiB. The maintained 0.4.1 release baseline is 2.91 MiB.
+larger than 4 MiB. The maintained 0.4.2 release baseline is 2.92 MiB.
 
-The latest maintained Kit baseline is 360 source files, 27 direct macro component entries,
+The latest maintained Kit baseline is 380 source files, 27 direct macro component entries,
 cold indexing under 3 seconds, and warm cached indexing under 750 ms. Use
 `ElfUI: Diagnose Integration` first
 when a user reports missing completions, colors, or template-local false positives.

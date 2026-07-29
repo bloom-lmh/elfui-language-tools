@@ -61,7 +61,7 @@ artifacts to `output/host-performance-development.json` and
 `output/host-performance-packaged.json`.
 
 `pnpm package:vsix` also rejects source maps in its staging tree and enforces a 4 MiB compressed
-VSIX budget. The 0.4.1 baseline is 2.91 MiB, down from roughly 7 MiB before source maps
+VSIX budget. The 0.4.2 baseline is 2.92 MiB, down from roughly 7 MiB before source maps
 were excluded.
 
 Use `ElfUI: Show Workspace Index Report` to inspect completion, formatting, and

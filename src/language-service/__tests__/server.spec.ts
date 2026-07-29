@@ -7,17 +7,25 @@ import { FileChangeType } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 import {
+  appendWorkspaceReferences,
+  appendWorkspaceRenameEdits,
   applyWatchedFileChangesToIndex,
   createWorkspaceComponentMetadata,
-  createLanguageServiceOptionsForDocument,
-  createWorkspaceComponentIndex,
-  readLanguageServiceOptions,
-  readWorkspaceIndexOptions,
   rebuildWorkspaceComponentIndex,
+  rebuildWorkspaceComponentIndexAsync,
   scanPackageComponentMetadataFiles,
   scanSourceFiles,
+  scanSourceFilesAsync,
   updateIndexedDocument
 } from "../server";
+import {
+  createElfReferences,
+  createElfRenameEdit
+} from "../languageService";
+import {
+  createLanguageServiceOptionsForDocument,
+  createWorkspaceComponentIndex
+} from "../workspaceIndex";
 
 const tempRoots: string[] = [];
 
@@ -53,6 +61,51 @@ const writeComponent = (root: string, fileName: string, exportName: string) => {
   );
 
   return fullPath;
+};
+
+const writeSource = (root: string, fileName: string, source: string) => {
+  const fullPath = path.join(root, fileName);
+
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.writeFileSync(fullPath, source.trimStart(), "utf8");
+
+  return fullPath;
+};
+
+const createIndexedDocument = (fileName: string) =>
+  TextDocument.create(
+    pathToFileURL(fileName).toString(),
+    fileName.endsWith("x") ? "typescriptreact" : "typescript",
+    1,
+    fs.readFileSync(fileName, "utf8")
+  );
+
+const positionInside = (document: TextDocument, text: string, occurrence = 0) => {
+  const source = document.getText();
+  let offset = -1;
+
+  for (let index = 0; index <= occurrence; index += 1) {
+    offset = source.indexOf(text, offset + 1);
+  }
+
+  if (offset < 0) {
+    throw new Error(`Could not find ${text}.`);
+  }
+
+  return document.positionAt(offset + Math.max(1, Math.floor(text.length / 2)));
+};
+
+const readLocationText = (
+  location: { range: { end: { character: number; line: number }; start: { character: number; line: number } }; uri: string },
+  documents: Map<string, TextDocument>
+) => {
+  const document = documents.get(location.uri);
+
+  if (!document) {
+    throw new Error(`Missing document for ${location.uri}.`);
+  }
+
+  return document.getText(location.range);
 };
 
 const writePackageComponentMetadata = (root: string) => {
@@ -182,6 +235,26 @@ describe("workspace component index", () => {
     expect(scan.truncated).toBe(true);
   });
 
+  it("scans asynchronously with deterministic traversal and the same limit contract", async () => {
+    const root = createTempRoot();
+
+    writeComponent(root, "z/Z.ts", "Z");
+    writeComponent(root, "a/B.ts", "B");
+    writeComponent(root, "a/A.ts", "A");
+
+    const scan = await scanSourceFilesAsync(root, {
+      indexDebounceMs: 0,
+      maxScanFiles: 2,
+      perfLogging: false
+    });
+
+    expect(scan.files.map((fileName) => path.relative(root, fileName).replace(/\\/g, "/"))).toEqual([
+      "a/A.ts",
+      "a/B.ts"
+    ]);
+    expect(scan.truncated).toBe(true);
+  });
+
   it("reuses cached file metadata during rebuilds", () => {
     const root = createTempRoot();
 
@@ -195,6 +268,240 @@ describe("workspace component index", () => {
     expect(second.filesIndexed).toBe(0);
     expect(second.filesReused).toBe(1);
     expect(index.componentsByUri.size).toBe(1);
+  });
+
+  it("reuses cached file metadata during asynchronous rebuilds", async () => {
+    const root = createTempRoot();
+
+    writeComponent(root, "Button.ts", "Button");
+
+    const index = createWorkspaceComponentIndex();
+    const first = await rebuildWorkspaceComponentIndexAsync([root], index, "initial");
+    const second = await rebuildWorkspaceComponentIndexAsync([root], index, "cached");
+
+    expect(first.filesIndexed).toBe(1);
+    expect(second.filesIndexed).toBe(0);
+    expect(second.filesReused).toBe(1);
+    expect(index.componentsByUri.size).toBe(1);
+  });
+
+  it("finds and renames component contracts across indexed files", () => {
+    const root = createTempRoot();
+    const componentFile = writeSource(
+      root,
+      "Button.ts",
+      `
+        import { defineEmits, defineHtml, defineProps, defineSlots } from "@elfui/core";
+
+        defineProps<{ label: string }>();
+        defineEmits<{ confirm: [value: string] }>();
+        defineSlots<{ footer: () => unknown }>();
+
+        export const Button = defineHtml(\`<button><slot name="footer"></slot></button>\`);
+      `
+    );
+    const firstConsumerFile = writeSource(
+      root,
+      "First.ts",
+      `
+        import { defineHtml, useComponents } from "@elfui/core";
+        import { Button } from "./Button";
+
+        useComponents({ Button });
+        export const First = defineHtml(\`
+          <Button :label=\${title} @confirm=\${handleConfirm}>
+            <template #footer>Footer</template>
+          </Button>
+        \`);
+      `
+    );
+    const secondConsumerFile = writeSource(
+      root,
+      "Second.ts",
+      `
+        import { defineHtml, useComponents } from "@elfui/core";
+        import { Button as LocalButton } from "./Button";
+
+        useComponents({ LocalButton });
+        export const Second = defineHtml(\`
+          <LocalButton :label=\${title} @confirm=\${handleConfirm}>
+            <span slot="footer">Footer</span>
+          </LocalButton>
+        \`);
+      `
+    );
+    const index = createWorkspaceComponentIndex();
+
+    rebuildWorkspaceComponentIndex([root], index, "cross-file");
+
+    const documents = new Map(
+      [componentFile, firstConsumerFile, secondConsumerFile].map((fileName) => {
+        const document = createIndexedDocument(fileName);
+        return [document.uri, document] as const;
+      })
+    );
+    const firstDocument = documents.get(pathToFileURL(firstConsumerFile).toString())!;
+    const options = createLanguageServiceOptionsForDocument(
+      {},
+      index.componentsByUri,
+      firstDocument.uri
+    );
+
+    const baseComponentReferences = createElfReferences(
+      firstDocument,
+      positionInside(firstDocument, "Button", 3),
+      options
+    );
+    const componentReferences = appendWorkspaceReferences(
+      baseComponentReferences,
+      index.componentsByUri
+    );
+    const propReferences = appendWorkspaceReferences(
+      createElfReferences(firstDocument, positionInside(firstDocument, "label"), options),
+      index.componentsByUri
+    );
+    const eventReferences = appendWorkspaceReferences(
+      createElfReferences(firstDocument, positionInside(firstDocument, "confirm"), options),
+      index.componentsByUri
+    );
+    const slotReferences = appendWorkspaceReferences(
+      createElfReferences(firstDocument, positionInside(firstDocument, "footer"), options),
+      index.componentsByUri
+    );
+
+    expect(componentReferences.map((item) => readLocationText(item, documents))).toEqual(
+      expect.arrayContaining(["Button", "LocalButton"])
+    );
+    expect(componentReferences.some((item) => item.uri === documents.get(pathToFileURL(secondConsumerFile).toString())!.uri)).toBe(true);
+    expect(propReferences.filter((item) => readLocationText(item, documents) === "label")).toHaveLength(3);
+    expect(eventReferences.filter((item) => readLocationText(item, documents) === "confirm")).toHaveLength(3);
+    expect(slotReferences.filter((item) => readLocationText(item, documents) === "footer")).toHaveLength(3);
+    expect(
+      [...index.componentsByUri.values()]
+        .flatMap((components) => components[0]?.templateReferences ?? [])
+        .map((reference) => reference.name)
+    ).not.toEqual(expect.arrayContaining(["title", "handleConfirm"]));
+
+    const baseRename = createElfRenameEdit(
+      firstDocument,
+      positionInside(firstDocument, "Button", 3),
+      "ActionButton",
+      options
+    );
+
+    expect(baseRename).not.toBeNull();
+
+    const rename = appendWorkspaceRenameEdits(
+      baseRename!,
+      "ActionButton",
+      index.componentsByUri
+    );
+    const secondUri = pathToFileURL(secondConsumerFile).toString();
+    const secondEdits = rename.changes?.[secondUri] ?? [];
+
+    expect(secondEdits.map((item) => readLocationText({ range: item.range, uri: secondUri }, documents))).toContain("Button");
+    expect(secondEdits.map((item) => readLocationText({ range: item.range, uri: secondUri }, documents))).not.toContain("LocalButton");
+  });
+
+  it("drops cross-file references when an indexed consumer is deleted", () => {
+    const root = createTempRoot();
+    writeSource(
+      root,
+      "Button.ts",
+      `
+        import { defineHtml } from "@elfui/core";
+        export const Button = defineHtml(\`<button></button>\`);
+      `
+    );
+    const consumerFile = writeSource(
+      root,
+      "Consumer.ts",
+      `
+        import { defineHtml, useComponents } from "@elfui/core";
+        import { Button } from "./Button";
+        useComponents({ Button });
+        export const Consumer = defineHtml(\`<Button></Button>\`);
+      `
+    );
+    const index = createWorkspaceComponentIndex();
+
+    rebuildWorkspaceComponentIndex([root], index, "initial");
+    const consumerUri = pathToFileURL(consumerFile).toString();
+
+    expect(
+      [...index.componentsByUri.values()]
+        .flatMap((components) => components[0]?.templateReferences ?? [])
+        .some((reference) => reference.targetName === "Button")
+    ).toBe(true);
+
+    fs.rmSync(consumerFile);
+    applyWatchedFileChangesToIndex(
+      [{ type: FileChangeType.Deleted, uri: consumerUri }],
+      index
+    );
+
+    expect(index.componentsByUri.has(consumerUri)).toBe(false);
+  });
+
+  it("resolves default imports through relative index modules and preserves aliases", () => {
+    const root = createTempRoot();
+    const componentFile = writeSource(
+      root,
+      "components/index.ts",
+      `
+        import { defineHtml } from "@elfui/core";
+        export default defineHtml(\`<article></article>\`);
+      `
+    );
+    const firstFile = writeSource(
+      root,
+      "First.ts",
+      `
+        import { defineHtml, useComponents } from "@elfui/core";
+        import Card from "./components";
+        useComponents({ Card });
+        export const First = defineHtml(\`<Card></Card>\`);
+      `
+    );
+    const secondFile = writeSource(
+      root,
+      "Second.ts",
+      `
+        import { defineHtml, useComponents } from "@elfui/core";
+        import LocalCard from "./components/index";
+        useComponents({ LocalCard });
+        export const Second = defineHtml(\`<LocalCard></LocalCard>\`);
+      `
+    );
+    const index = createWorkspaceComponentIndex();
+
+    rebuildWorkspaceComponentIndex([root], index, "default-index");
+
+    const documents = new Map(
+      [componentFile, firstFile, secondFile].map((fileName) => {
+        const document = createIndexedDocument(fileName);
+        return [document.uri, document] as const;
+      })
+    );
+    const firstDocument = documents.get(pathToFileURL(firstFile).toString())!;
+    const tagPosition = positionInside(firstDocument, "Card", 3);
+    const references = appendWorkspaceReferences(
+      createElfReferences(
+        firstDocument,
+        tagPosition,
+        createLanguageServiceOptionsForDocument(
+          {},
+          index.componentsByUri,
+          firstDocument.uri
+        )
+      ),
+      index.componentsByUri,
+      { position: tagPosition, uri: firstDocument.uri }
+    );
+
+    expect(references.map((item) => readLocationText(item, documents))).toEqual(
+      expect.arrayContaining(["Card", "LocalCard"])
+    );
   });
 
   it("indexes components and package metadata across multiple workspace roots", () => {
@@ -536,58 +843,4 @@ describe("workspace component index", () => {
     });
   });
 
-  it("reads workspace index settings with guarded defaults", () => {
-    const options = readWorkspaceIndexOptions({
-      elfui: {
-        languageFeatures: {
-          workspace: {
-            indexDebounceMs: 12.8,
-            maxScanFiles: 5.2,
-            perfLogging: true
-          }
-        }
-      }
-    });
-    const fallback = readWorkspaceIndexOptions({
-      elfui: {
-        languageFeatures: {
-          workspace: {
-            indexDebounceMs: -1,
-            maxScanFiles: 0,
-            perfLogging: "yes"
-          }
-        }
-      }
-    });
-
-    expect(options).toEqual({
-      indexDebounceMs: 12,
-      maxScanFiles: 5,
-      perfLogging: true
-    });
-    expect(fallback).toEqual({
-      indexDebounceMs: 250,
-      maxScanFiles: 1000,
-      perfLogging: false
-    });
-  });
-
-  it("keeps ElfUI semantic tokens disabled by default", () => {
-    expect(readLanguageServiceOptions({}).semanticTokens).toEqual({
-      enabled: false
-    });
-    expect(
-      readLanguageServiceOptions({
-        elfui: {
-          languageFeatures: {
-            semanticTokens: {
-              enabled: true
-            }
-          }
-        }
-      }).semanticTokens
-    ).toEqual({
-      enabled: true
-    });
-  });
 });

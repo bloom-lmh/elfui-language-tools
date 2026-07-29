@@ -6,15 +6,18 @@ const extensionManifest = require("../../../package.json");
 
 const EXTENSION_ID = `${extensionManifest.publisher}.${extensionManifest.name}`;
 const WORKSPACE_ROOT = path.resolve(__dirname, "..", "workspace");
-const FIXTURE_PATH = path.join(WORKSPACE_ROOT, "macro-smoke.ts");
+const GENERATED_FIXTURE_ROOT = path.join(WORKSPACE_ROOT, ".generated-smoke");
 const PACKAGE_JSON_PATH = path.join(WORKSPACE_ROOT, "package.json");
 const EXTERNAL_PACKAGE_ROOT = path.join(WORKSPACE_ROOT, "node_modules", "@acme", "elfui-kit");
 const CURSOR = "/*cursor*/";
+const generatedFixturePaths = new Set();
+let fixtureCounter = 0;
 
 suite("ElfUI Language Features Smoke", function () {
   this.timeout(120000);
 
   suiteSetup(async () => {
+    cleanupGeneratedFixtures();
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
 
     assert(extension, `Expected extension ${EXTENSION_ID} to be available.`);
@@ -31,6 +34,12 @@ suite("ElfUI Language Features Smoke", function () {
 
   teardown(async () => {
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    cleanupGeneratedFixtures();
+  });
+
+  suiteTeardown(async () => {
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    cleanupGeneratedFixtures();
   });
 
   test("activates the extension", async () => {
@@ -680,87 +689,6 @@ suite("ElfUI Language Features Smoke", function () {
     assert(hoverText.includes("index"), "Expected index hover details.");
   });
 
-  test("keeps inline Fragment list locals free of compiler false positives", async () => {
-    const document = await openFixture(
-      [
-        'import { defineHtml, fragment } from "@elfui/core";',
-        "",
-        'const summaryData = [{ label: "Total", trend: 1, unit: "%", value: 42 }];',
-        "",
-        "export const Summary = defineHtml(`",
-        '  <div class="summary-row">',
-        "    ${summaryData.map((item) => fragment`",
-        '      <div class="summary-card">',
-        '        <div class="label">${item.label}</div>',
-        '        <span class="value">${item.value}</span>',
-        '        <span class="unit">${item.unit}</span>',
-        '        <div class="trend" :class=${item.trend >= 0 ? "up" : "down"}>',
-        '          ${item.trend >= 0 ? "up" : "down"} ${Math.abs(item.trend)}%',
-        "        </div>",
-        "      </div>",
-        "    `)}",
-        "    <span>${missingInlineValue}</span>",
-        "  </div>",
-        "`);",
-        ""
-      ].join("\n")
-    );
-    const diagnostics = await waitFor(async () => {
-      const value = vscode.languages.getDiagnostics(document.uri);
-
-      return value.some((item) => item.message.includes("missingInlineValue"))
-        ? value
-        : undefined;
-    }, "inline Fragment diagnostics");
-
-    assert(
-      !diagnostics.some((item) => item.message.includes("__elfInlineFragment")),
-      "Expected compiler-generated Fragment names to remain hidden."
-    );
-    assert(
-      !diagnostics.some(
-        (item) =>
-          item.message.includes("Cannot find name 'item'") ||
-          (item.message.includes("找不到名称") && item.message.includes("item"))
-      ),
-      "Expected inline Fragment callback locals to remain in scope."
-    );
-  });
-
-  test("provides named Fragment props and same-file definition in the real host", async () => {
-    const { document, position } = await openFixtureWithCursor(
-      [
-        'import { defineFragment, defineHtml } from "@elfui/core";',
-        "",
-        "interface CardProps {",
-        "  label: string;",
-        "  selected?: boolean;",
-        "}",
-        "",
-        "const SummaryCard = defineFragment<CardProps>(({ label }) => `",
-        "  <article>${label.toUpperCase()}</article>",
-        "`);",
-        "",
-        "export const Demo = defineHtml(`",
-        `  <SummaryCard ${CURSOR}:label=\${"value"} />`,
-        "`);",
-        ""
-      ].join("\n")
-    );
-    const items = await waitForCompletionLabels(document, position, [":label", ":selected"]);
-    const tagOffset = document.getText().lastIndexOf("<SummaryCard") + 2;
-    const definition = await waitForDefinitionTarget(
-      document,
-      document.positionAt(tagOffset),
-      document.uri.toString(),
-      "named Fragment same-file definition"
-    );
-
-    assert(hasCompletionLabel(items, ":label"), "Expected named Fragment prop completion.");
-    assert(hasCompletionLabel(items, ":selected"), "Expected optional Fragment prop completion.");
-    assert(definition, "Expected named Fragment definition.");
-  });
-
   test("provides DOM event member completions inside template expressions", async () => {
     const { document, position } = await openFixtureWithCursor(
       [
@@ -812,19 +740,13 @@ suite("ElfUI Language Features Smoke", function () {
   test("formats embedded regions on save while another formatter owns TypeScript", async () => {
     const document = await openFixture(
       [
-        'import { defineFragment, defineHtml, defineStyle, fragment } from "@elfui/core";',
+        'import { defineHtml, defineStyle, useRef } from "@elfui/core";',
         "",
-        "const items = [];",
-        "const IndexCard = defineFragment(",
-        "  ({ item }) =>",
-        "    `<div>${item}</div>`,",
-        ");",
+        "const count = useRef(0);",
         "const view = defineHtml(`",
         "  <section>",
         "    <button>{{ count }}</button>",
-        "    ${items.map(",
-        "      (item) => fragment`<span>${item}</span>`",
-        "    )}",
+        "    <span>${count.value}</span>",
         "  </section>",
         "`);",
         "const styles = defineStyle(`:host{color:red;display:block;}`);",
@@ -849,13 +771,6 @@ suite("ElfUI Language Features Smoke", function () {
     const editorConfiguration = vscode.workspace.getConfiguration("editor", document);
     const previousFormatOnSave = editorConfiguration.inspect("formatOnSave")?.workspaceValue;
     const previousDefaultFormatter = editorConfiguration.inspect("defaultFormatter")?.workspaceValue;
-    const saveSnapshots = [];
-    const changeSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
-      if (event.document.uri.toString() === document.uri.toString()) {
-        saveSnapshots.push(event.document.getText());
-      }
-    });
-
     try {
       await editorConfiguration.update(
         "formatOnSave",
@@ -884,17 +799,7 @@ suite("ElfUI Language Features Smoke", function () {
           ),
         "embedded save formatting"
       );
-      assert(
-        !saveSnapshots.some((source) => source.includes("items.map((item) => fragment`")),
-        "Did not expect ElfUI save formatting to compact an external formatter's Fragment wrapper."
-      );
-      assert.match(
-        document.getText(),
-        /=> `\r?\n\s*<div>/,
-        "Expected the defineFragment arrow and template opener on one line."
-      );
     } finally {
-      changeSubscription.dispose();
       await editorConfiguration.update(
         "formatOnSave",
         previousFormatOnSave,
@@ -906,109 +811,6 @@ suite("ElfUI Language Features Smoke", function () {
         vscode.ConfigurationTarget.Workspace
       );
     }
-  });
-
-  test("keeps named Fragment formatting idempotent across repeated saves", async () => {
-    const document = await openFixture(
-      [
-        'import { defineFragment, defineHtml } from "@elfui/core";',
-        "",
-        "const MenuPanel = defineFragment(() => `",
-        "  <button :class=\"{",
-        "                          'is-disabled': item.disabled,",
-        "                          'is-selected': isSelected(item)",
-        "                        }\">{{ item.label }}</button>",
-        "`);",
-        "",
-        "export const Menu = defineHtml(`<MenuPanel />`);",
-        ""
-      ].join("\n")
-    );
-    const firstEdits = await waitFor(async () => {
-      const edits = await vscode.commands.executeCommand(
-        "vscode.executeFormatDocumentProvider",
-        document.uri,
-        { insertSpaces: true, tabSize: 2 }
-      );
-
-      return Array.isArray(edits) && edits.length > 0 ? edits : undefined;
-    }, "named Fragment formatting");
-    const workspaceEdit = new vscode.WorkspaceEdit();
-
-    firstEdits.forEach((edit) => workspaceEdit.replace(document.uri, edit.range, edit.newText));
-    assert.equal(await vscode.workspace.applyEdit(workspaceEdit), true);
-
-    const formattedOnce = document.getText();
-    const formattedTwice = await waitFor(async () => {
-      const secondEdits = await vscode.commands.executeCommand(
-        "vscode.executeFormatDocumentProvider",
-        document.uri,
-        { insertSpaces: true, tabSize: 2 }
-      );
-      const candidate = applyTextEdits(formattedOnce, document, secondEdits ?? []);
-
-      return candidate === formattedOnce ? { candidate, edits: secondEdits ?? [] } : undefined;
-    }, "synchronized idempotent Fragment formatting");
-
-    assert.equal(formattedTwice.candidate, formattedOnce);
-    assert.equal(formattedTwice.edits.length, 0, "Expected no redundant full-region formatting edit.");
-    assert.match(
-      formattedOnce,
-      /:class="\{\n\s+'is-disabled': item\.disabled,\n\s+'is-selected': isSelected\(item\)\n\s+\}"/
-    );
-  });
-
-  test("keeps inline Fragment list wrappers compact across repeated formatting", async () => {
-    const document = await openFixture(
-      [
-        'import { defineHtml, fragment } from "@elfui/core";',
-        "",
-        "const summaryData = [];",
-        "export const Dashboard = defineHtml(`",
-        '  <div class="summary-row">',
-        "    ${summaryData.map(",
-        "            (item) => fragment`",
-        '      <div class="summary-card"><span>${item.label}</span></div>',
-        "    `",
-        "        )}",
-        "  </div>",
-        "`);",
-        ""
-      ].join("\n")
-    );
-    const firstEdits = await waitFor(async () => {
-      const edits = await vscode.commands.executeCommand(
-        "vscode.executeFormatDocumentProvider",
-        document.uri,
-        { insertSpaces: true, tabSize: 2 }
-      );
-
-      return Array.isArray(edits) && edits.length > 0 ? edits : undefined;
-    }, "inline Fragment list formatting");
-    const formattedOnce = applyTextEdits(document.getText(), document, firstEdits);
-
-    assert.match(formattedOnce, /\$\{summaryData\.map\(\(item\) => fragment`/);
-    assert.match(formattedOnce, /\n\s*`\)}\n/);
-    assert(!/summaryData\.map\(\s*\n/.test(formattedOnce));
-
-    const workspaceEdit = new vscode.WorkspaceEdit();
-
-    firstEdits.forEach((edit) => workspaceEdit.replace(document.uri, edit.range, edit.newText));
-    assert.equal(await vscode.workspace.applyEdit(workspaceEdit), true);
-    await waitFor(() => document.getText() === formattedOnce, "inline Fragment edit synchronization");
-
-    const stableEdits = await waitFor(async () => {
-      const edits = await vscode.commands.executeCommand(
-        "vscode.executeFormatDocumentProvider",
-        document.uri,
-        { insertSpaces: true, tabSize: 2 }
-      );
-      const candidate = applyTextEdits(formattedOnce, document, edits ?? []);
-
-      return candidate === formattedOnce ? edits ?? [] : undefined;
-    }, "stable inline Fragment formatting");
-
-    assert.equal(stableEdits.length, 0, "Expected no second inline Fragment formatting edit.");
   });
 
   test("applies the configured component tag color to real ElfUI TextMate scopes", async () => {
@@ -1159,30 +961,16 @@ function removeDirectoryIfEmpty(directory) {
 }
 
 async function openFixture(content) {
-  fs.mkdirSync(path.dirname(FIXTURE_PATH), { recursive: true });
-  const fixtureUri = vscode.Uri.file(FIXTURE_PATH);
-  const existing = vscode.workspace.textDocuments.find(
-    (document) => document.uri.toString() === fixtureUri.toString()
+  fs.mkdirSync(GENERATED_FIXTURE_ROOT, { recursive: true });
+  fixtureCounter += 1;
+  const fixturePath = path.join(
+    GENERATED_FIXTURE_ROOT,
+    `macro-smoke-${process.pid}-${fixtureCounter}.ts`
   );
+  generatedFixturePaths.add(fixturePath);
+  fs.writeFileSync(fixturePath, content, "utf8");
 
-  let document;
-
-  if (existing) {
-    const edit = new vscode.WorkspaceEdit();
-    const fullRange = new vscode.Range(
-      existing.positionAt(0),
-      existing.positionAt(existing.getText().length)
-    );
-
-    edit.replace(existing.uri, fullRange, content);
-    assert(await vscode.workspace.applyEdit(edit), "Expected fixture WorkspaceEdit to apply.");
-    await existing.save();
-    document = existing;
-  } else {
-    fs.writeFileSync(FIXTURE_PATH, content, "utf8");
-    document = await vscode.workspace.openTextDocument(fixtureUri);
-  }
-
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(fixturePath));
   await vscode.window.showTextDocument(document, { preview: false });
 
   await waitFor(
@@ -1191,6 +979,23 @@ async function openFixture(content) {
   );
 
   return document;
+}
+
+function cleanupGeneratedFixtures() {
+  for (const fixturePath of generatedFixturePaths) {
+    fs.rmSync(fixturePath, { force: true });
+  }
+  generatedFixturePaths.clear();
+
+  if (!fs.existsSync(GENERATED_FIXTURE_ROOT)) {
+    return;
+  }
+
+  for (const entry of fs.readdirSync(GENERATED_FIXTURE_ROOT, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.startsWith("macro-smoke-") && entry.name.endsWith(".ts")) {
+      fs.rmSync(path.join(GENERATED_FIXTURE_ROOT, entry.name), { force: true });
+    }
+  }
 }
 
 async function openFixtureWithCursor(contentWithCursor) {

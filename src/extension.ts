@@ -14,11 +14,14 @@ let typeScriptPluginConfiguration: TypeScriptPluginConfiguration = {
   message: "TypeScript plugin configuration has not been requested yet.",
   state: "not-requested",
 };
+const deferredEmbeddedSaveFormatting = new Set<string>();
+const postSaveFormattingInProgress = new Set<string>();
 
 const typeScriptPluginId = "elfui-language-features-typescript-plugin";
 const nativeMissingNameCodes = new Set([2304, 2552]);
 const workspacePerformanceHistoryKey = "elfui.workspacePerformanceHistory";
 const workspacePerformanceHistoryLimit = 20;
+const embeddedSaveFormattingWillSaveBudgetMs = 1000;
 
 interface LanguageServerPerformanceSummary {
   completion: {
@@ -228,7 +231,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
         clearWorkspacePerformanceHistory(context),
       ),
       vscode.commands.registerCommand("elfui.generateWorkspaceComponentMetadata", () =>
-        generateWorkspaceComponentMetadata(context),
+        generateWorkspaceComponentMetadata(),
       ),
       vscode.commands.registerCommand("elfui.injectMissingTemplateDeclaration", () =>
         injectMissingTemplateDeclaration(),
@@ -260,8 +263,20 @@ export const activate = async (context: vscode.ExtensionContext) => {
       }),
       vscode.workspace.onWillSaveTextDocument((event) => {
         event.waitUntil(
-          createEmbeddedSaveFormattingEdits(event.document, context.extension.id),
+          createEmbeddedSaveFormattingEditsWithinHostBudget(
+            event.document,
+            context.extension.id,
+          ),
         );
+      }),
+      vscode.workspace.onDidSaveTextDocument((document) => {
+        void applyDeferredEmbeddedSaveFormatting(document, context.extension.id);
+      }),
+      vscode.workspace.onDidCloseTextDocument((document) => {
+        const key = document.uri.toString();
+
+        deferredEmbeddedSaveFormatting.delete(key);
+        postSaveFormattingInProgress.delete(key);
       }),
       vscode.window.onDidChangeActiveTextEditor((editor) => {
         updateStatusBarVisibility(editor);
@@ -690,6 +705,95 @@ const isElfComponentTagColorRule = (rule: unknown) => {
 const isSupportedLanguage = (languageId: string) =>
   ["typescript", "typescriptreact", "javascript", "javascriptreact"].includes(languageId);
 
+const createEmbeddedSaveFormattingEditsWithinHostBudget = async (
+  document: vscode.TextDocument,
+  extensionId: string,
+): Promise<readonly vscode.TextEdit[]> => {
+  const key = document.uri.toString();
+
+  if (postSaveFormattingInProgress.has(key)) {
+    return [];
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    createEmbeddedSaveFormattingEdits(document, extensionId).then((edits) => ({
+      edits,
+      timedOut: false as const,
+    })),
+    new Promise<{ timedOut: true }>((resolve) => {
+      timeout = setTimeout(
+        () => resolve({ timedOut: true }),
+        embeddedSaveFormattingWillSaveBudgetMs,
+      );
+    }),
+  ]);
+
+  if (timeout) {
+    clearTimeout(timeout);
+  }
+
+  if (!result.timedOut) {
+    deferredEmbeddedSaveFormatting.delete(key);
+
+    return result.edits;
+  }
+
+  deferredEmbeddedSaveFormatting.add(key);
+  outputChannel?.appendLine(
+    "ElfUI save formatting exceeded the VS Code will-save budget; deferring embedded edits until after save.",
+  );
+
+  return [];
+};
+
+const applyDeferredEmbeddedSaveFormatting = async (
+  document: vscode.TextDocument,
+  extensionId: string,
+): Promise<void> => {
+  const key = document.uri.toString();
+
+  if (
+    !deferredEmbeddedSaveFormatting.delete(key) ||
+    postSaveFormattingInProgress.has(key) ||
+    document.isClosed
+  ) {
+    return;
+  }
+
+  postSaveFormattingInProgress.add(key);
+
+  try {
+    const version = document.version;
+    const edits = await createEmbeddedSaveFormattingEdits(document, extensionId);
+
+    if (document.isClosed || document.version !== version || edits.length === 0) {
+      return;
+    }
+
+    const workspaceEdit = new vscode.WorkspaceEdit();
+
+    workspaceEdit.set(document.uri, [...edits]);
+
+    if (!(await vscode.workspace.applyEdit(workspaceEdit))) {
+      outputChannel?.appendLine("ElfUI deferred save formatting could not apply embedded edits.");
+      return;
+    }
+
+    if (document.isDirty && !(await document.save())) {
+      outputChannel?.appendLine("ElfUI deferred save formatting could not save embedded edits.");
+    }
+  } catch (error) {
+    outputChannel?.appendLine(
+      `ElfUI deferred save formatting failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  } finally {
+    postSaveFormattingInProgress.delete(key);
+  }
+};
+
 const createEmbeddedSaveFormattingEdits = async (
   document: vscode.TextDocument,
   extensionId: string,
@@ -1090,17 +1194,6 @@ const extractObjectKeysFromBody = (body: string): string[] =>
     (item) => item[1] ?? "",
   );
 
-const extractStringValues = (source: string, pattern: RegExp): string[] =>
-  [...source.matchAll(pattern)].flatMap((match) => {
-    if (match[2] && !match[1]?.includes(",")) {
-      return [match[2]];
-    }
-
-    const body = match[1] ?? "";
-
-    return [...body.matchAll(/(["'])([\w:-]+)\1/g)].map((item) => item[2] ?? "");
-  });
-
 const normalizeModelPropName = (name: string): string =>
   name === "model-value" ? "modelValue" : name;
 
@@ -1295,9 +1388,7 @@ const migrateActiveTemplateBindings = async (): Promise<number> => {
   return count;
 };
 
-const generateWorkspaceComponentMetadata = async (
-  context: vscode.ExtensionContext,
-): Promise<MetadataGenerationResult[]> => {
+const generateWorkspaceComponentMetadata = async (): Promise<MetadataGenerationResult[]> => {
   if (!languageClient || languageClient.state !== State.Running) {
     void vscode.window.showInformationMessage("Start the ElfUI language server before generating metadata.");
 

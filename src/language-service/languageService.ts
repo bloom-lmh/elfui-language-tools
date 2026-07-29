@@ -6,6 +6,14 @@ import {
   type ComponentUseMeta,
   type EmbeddedRegion
 } from "../language-core";
+import {
+  elfBuiltInComponentCompletions,
+  elfBuiltInComponentTags,
+  elfCommonDomEvents,
+  elfEventModifiers,
+  elfModelModifiers,
+  elfTemplateDirectives
+} from "../shared/elfuiCatalog";
 import { compileMacroComponent, type ElfDiagnostic } from "@elfui/compiler/macro-component";
 import path from "node:path";
 import * as ts from "typescript";
@@ -426,49 +434,11 @@ const resolvedLanguageServiceOptionsCache = new WeakMap<
   ResolvedElfLanguageServiceOptions
 >();
 
-const templateDirectives: Array<
-  | {
-      label: string;
-      placeholder: string;
-      value: "expression";
-    }
-  | {
-      label: string;
-      value: "for";
-    }
-  | {
-      label: string;
-      value: "none";
-    }
-> = [
-  { label: "v-if", placeholder: "condition", value: "expression" },
-  { label: "v-for", value: "for" },
-  { label: "v-model", placeholder: "value", value: "expression" },
-  { label: "v-show", placeholder: "visible", value: "expression" },
-  { label: "v-else-if", placeholder: "condition", value: "expression" },
-  { label: "v-else", value: "none" },
-  { label: "v-once", value: "none" },
-  { label: "v-memo", placeholder: "[deps]", value: "expression" },
-  { label: "v-text", placeholder: "value", value: "expression" },
-  { label: "v-html", placeholder: "html", value: "expression" }
-];
-
-const eventModifiers = [".stop", ".prevent", ".capture", ".once", ".passive", ".self"];
-const modelModifiers = [".trim", ".number", ".lazy"];
+const templateDirectives = elfTemplateDirectives;
+const eventModifiers = elfEventModifiers;
+const modelModifiers = elfModelModifiers;
 const emitHelpers = ["emit", "$emit"];
-const commonDomEvents = [
-  "blur",
-  "change",
-  "click",
-  "focus",
-  "input",
-  "keydown",
-  "keyup",
-  "mouseenter",
-  "mouseleave",
-  "mouseover",
-  "submit"
-];
+const commonDomEvents = elfCommonDomEvents;
 const formControlMembers = [
   "form",
   "form.value",
@@ -573,47 +543,6 @@ const voidHtmlTags = new Set([
   "track",
   "wbr"
 ]);
-
-const elfBuiltInComponentTags = new Set([
-  "KeepAlive",
-  "Suspense",
-  "Teleport",
-  "Transition",
-  "TransitionGroup"
-]);
-
-const elfBuiltInComponentCompletions = [
-  {
-    detail: "ElfUI built-in component",
-    label: "Teleport",
-    newText: 'Teleport to="${1:body}">$0</Teleport>'
-  },
-  {
-    detail: "ElfUI built-in component",
-    label: "Transition",
-    newText: 'Transition name="${1:fade}">$0</Transition>'
-  },
-  {
-    detail: "ElfUI built-in component",
-    label: "TransitionGroup",
-    newText: 'TransitionGroup name="${1:list}" tag="${2:div}">$0</TransitionGroup>'
-  },
-  {
-    detail: "ElfUI built-in component",
-    label: "KeepAlive",
-    newText: "KeepAlive>$0</KeepAlive>"
-  },
-  {
-    detail: "ElfUI built-in component",
-    label: "Suspense",
-    newText: "Suspense>$0</Suspense>"
-  },
-  {
-    detail: "ElfUI dynamic component outlet",
-    label: "component",
-    newText: "component :is=${1:component}></component>"
-  }
-];
 
 export const createElfCompletionList = (
   document: TextDocument,
@@ -838,7 +767,6 @@ export const createElfDiagnostics = (
   document: TextDocument,
   options: ElfLanguageServiceOptions = {}
 ): Diagnostic[] => {
-  const source = document.getText();
   const resolvedOptions = resolveLanguageServiceOptions(options);
   const analysis = analyzeDocument(document);
   const macroDiagnostics = analysis.isMacroComponent
@@ -881,8 +809,6 @@ const createMacroDiagnostics = (
       .filter(
         (diagnostic) =>
           !isDiagnosticInsideTemplateComment(document, components, diagnostic) &&
-          !isCompilerGeneratedInlineFragmentDiagnostic(diagnostic) &&
-          !isResolvedFragmentScopeDiagnostic(document, components, diagnostic) &&
           !isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic) &&
           !isResolvedInterpolationRefValueDiagnostic(document, components, diagnostic) &&
           !isResolvedKnownMacroTemplateDiagnostic(document, components, diagnostic)
@@ -933,7 +859,6 @@ const mapMacroDiagnostic = (document: TextDocument, diagnostic: ElfDiagnostic): 
     code: diagnostic.code,
     data: {
       ...(diagnostic.component ? { component: diagnostic.component } : {}),
-      ...(diagnostic.fragment ? { fragment: diagnostic.fragment } : {}),
       ...(diagnostic.sourceId ? { sourceId: diagnostic.sourceId } : {})
     },
     message: `${diagnostic.message}${hint}`,
@@ -1255,10 +1180,6 @@ const isOffsetInNodeStartTagName = (node: HTMLNode, offset: number): boolean => 
   return offset >= start && offset <= end;
 };
 
-const readSlotWordNameAtOffset = (source: string, offset: number): string | null => {
-  return readSlotWordRangeAtOffset(source, offset)?.value ?? null;
-};
-
 const readSlotWordRangeAtOffset = (
   source: string,
   offset: number
@@ -1316,7 +1237,6 @@ export const createElfDocumentSymbols = (document: TextDocument): DocumentSymbol
 };
 
 export const createElfDocumentLinks = (document: TextDocument): DocumentLink[] => {
-  const source = document.getText();
   const analysis = analyzeDocument(document);
 
   return [
@@ -1917,7 +1837,7 @@ const createTemplateExpressionSemanticTokens = (
   component: ComponentMeta,
   region: EmbeddedRegion
 ): ElfSemanticToken[] => {
-  const knownNames = createKnownTemplateNames(component, region);
+  const knownNames = createKnownTemplateNames(component);
 
   return collectTemplateExpressions(region.content).flatMap((expression) => {
     const locals = new Set([...expression.locals, ...knownNames]);
@@ -1956,7 +1876,6 @@ const semanticTokenTypeForComponentSymbol = (
 ): ElfSemanticToken["type"] => {
   switch (kind) {
     case "component":
-    case "fragment":
       return "class";
     case "emit":
       return "event";
@@ -2171,61 +2090,7 @@ export const createElfFormattingEdits = (
 ): TextEdit[] => {
   const analysis = analyzeDocument(document);
   const regions = collectUniqueEmbeddedRegions(analysis.components);
-  const roots = regions.filter(
-    (region) =>
-      !regions.some(
-        (candidate) =>
-          candidate !== region &&
-          candidate.kind === region.kind &&
-          strictlyContainsRegion(candidate, region)
-      )
-  );
-
-  return [
-    ...createDefineFragmentTemplateOpenerEdits(document, regions),
-    ...roots.flatMap((region) =>
-      formatEmbeddedRegionTree(document, region, regions, options)
-    )
-  ];
-};
-
-const createDefineFragmentTemplateOpenerEdits = (
-  document: TextDocument,
-  regions: EmbeddedRegion[]
-): TextEdit[] => {
-  const source = document.getText();
-
-  return regions.flatMap((region) => {
-    if (region.kind !== "template" || region.method !== "defineFragment") {
-      return [];
-    }
-
-    const backtick = source.lastIndexOf("`", region.contentStart);
-
-    if (backtick < 0) {
-      return [];
-    }
-
-    const prefixStart = Math.max(0, backtick - 512);
-    const prefix = source.slice(prefixStart, backtick);
-    const match = /=>([ \t]*\r?\n[ \t]*)$/.exec(prefix);
-
-    if (!match?.[1]) {
-      return [];
-    }
-
-    const start = prefixStart + match.index + match[0].length - match[1].length;
-
-    return [
-      {
-        newText: " ",
-        range: {
-          end: document.positionAt(backtick),
-          start: document.positionAt(start)
-        }
-      }
-    ];
-  });
+  return regions.flatMap((region) => formatEmbeddedRegion(document, region, options));
 };
 
 const collectUniqueEmbeddedRegions = (components: ComponentMeta[]): EmbeddedRegion[] => {
@@ -2243,158 +2108,6 @@ const collectUniqueEmbeddedRegions = (components: ComponentMeta[]): EmbeddedRegi
       seen.add(key);
       return true;
     });
-};
-
-const strictlyContainsRegion = (
-  container: EmbeddedRegion,
-  candidate: EmbeddedRegion
-): boolean =>
-  container.contentStart < candidate.contentStart &&
-  container.contentEnd > candidate.contentEnd;
-
-const formatEmbeddedRegionTree = (
-  document: TextDocument,
-  region: EmbeddedRegion,
-  regions: EmbeddedRegion[],
-  options: ElfFormattingOptions
-): TextEdit[] => {
-  const hasNestedRegion = regions.some(
-    (candidate) =>
-      candidate.kind === region.kind && strictlyContainsRegion(region, candidate)
-  );
-
-  if (!hasNestedRegion) {
-    return formatEmbeddedRegion(document, region, options);
-  }
-
-  const originalText = document.getText().slice(region.contentStart, region.contentEnd);
-  let currentDocument = document;
-  let currentRegion = region;
-  let currentRegions = regions;
-  let replacement = originalText;
-
-  // Settle nested Fragment indentation in memory so VS Code applies one stable edit.
-  for (let pass = 0; pass < 3; pass += 1) {
-    const edit = formatEmbeddedRegionTreePass(
-      currentDocument,
-      currentRegion,
-      currentRegions,
-      options
-    )[0];
-
-    if (!edit || edit.newText === replacement) {
-      break;
-    }
-
-    replacement = edit.newText;
-    const currentSource = currentDocument.getText();
-    const nextSource =
-      currentSource.slice(0, currentRegion.contentStart) +
-      replacement +
-      currentSource.slice(currentRegion.contentEnd);
-    currentDocument = TextDocument.create(
-      document.uri,
-      document.languageId,
-      document.version + pass + 1,
-      nextSource
-    );
-    currentRegions = collectUniqueEmbeddedRegions(analyzeDocument(currentDocument).components);
-    const nextRegion = currentRegions.find(
-      (candidate) =>
-        candidate.kind === region.kind &&
-        candidate.method === region.method &&
-        candidate.contentStart === region.contentStart
-    );
-
-    if (!nextRegion) {
-      break;
-    }
-
-    currentRegion = nextRegion;
-  }
-
-  return replacement === originalText
-    ? []
-    : [
-        {
-          newText: replacement,
-          range: {
-            end: document.positionAt(region.contentEnd),
-            start: document.positionAt(region.contentStart)
-          }
-        }
-      ];
-};
-
-const formatEmbeddedRegionTreePass = (
-  document: TextDocument,
-  region: EmbeddedRegion,
-  regions: EmbeddedRegion[],
-  options: ElfFormattingOptions
-): TextEdit[] => {
-  const nested = regions.filter(
-    (candidate) =>
-      candidate.kind === region.kind &&
-      strictlyContainsRegion(region, candidate)
-  );
-  const children = nested.filter(
-    (candidate) =>
-      !nested.some(
-        (other) =>
-          other !== candidate &&
-          strictlyContainsRegion(other, candidate)
-      )
-  );
-
-  if (children.length === 0) {
-    return formatEmbeddedRegion(document, region, options);
-  }
-
-  let source = document.getText();
-  let delta = 0;
-
-  children
-    .sort((left, right) => right.contentStart - left.contentStart)
-    .forEach((child) => {
-      const childEdit = formatEmbeddedRegionTreePass(document, child, regions, options)[0];
-
-      if (!childEdit) {
-        return;
-      }
-
-      source =
-        source.slice(0, child.contentStart) +
-        childEdit.newText +
-        source.slice(child.contentEnd);
-      delta += childEdit.newText.length - (child.contentEnd - child.contentStart);
-    });
-
-  const temporaryDocument = TextDocument.create(
-    document.uri,
-    document.languageId,
-    document.version,
-    source
-  );
-  const temporaryEnd = region.contentEnd + delta;
-  const temporaryRegion: EmbeddedRegion = {
-    ...region,
-    content: source.slice(region.contentStart, temporaryEnd),
-    contentEnd: temporaryEnd,
-    end: region.end + delta
-  };
-  const formatted = formatEmbeddedRegion(temporaryDocument, temporaryRegion, options)[0];
-
-  return formatted
-    ? [
-        {
-          newText: formatted.newText,
-          range: {
-            end: document.positionAt(region.contentEnd),
-            start: document.positionAt(region.contentStart)
-          }
-        }
-      ]
-    : [];
 };
 
 export const createElfRangeFormattingEdits = (
@@ -2435,7 +2148,6 @@ const symbolKindForComponentSymbol = (
 ): SymbolKind => {
   switch (kind) {
     case "component":
-    case "fragment":
       return SymbolKind.Class;
     case "emit":
       return SymbolKind.Event;
@@ -2573,13 +2285,7 @@ const collectElfReferenceItems = (
       })
     );
 
-  const templates = target.component.uses.some(
-    (item) => item.source === "fragment" && item.localName === target.name
-  )
-    ? target.component.referenceTemplates
-    : target.component.templates;
-
-  templates.forEach((region) => {
+  target.component.templates.forEach((region) => {
     collectTemplateReferenceItems(document, region, aliases).forEach((item) => add(result, item));
   });
 
@@ -3221,14 +2927,6 @@ const createElfScopeExpressionCompletions = (
       newText: label
     })
   ),
-  ...(context.region.scopeNames ?? []).map((label) =>
-    createTemplateCompletionItem(document, context, completionContext, {
-      detail: "ElfUI Fragment scope",
-      kind: CompletionItemKind.Variable,
-      label,
-      newText: label
-    })
-  ),
   ...createTemplateLocalCompletions(
     document,
     context,
@@ -3506,43 +3204,6 @@ const isResolvedVForLocalUnknownDiagnostic = (
 
     return start < expressionEnd && end > expressionStart;
   });
-};
-
-const isCompilerGeneratedInlineFragmentDiagnostic = (diagnostic: Diagnostic): boolean => {
-  if (diagnostic.code !== "ELF_TEMPLATE_TYPE") {
-    return false;
-  }
-
-  const parsed = readMacroUnknownLocalDiagnostic(readDiagnosticMessage(diagnostic));
-
-  return Boolean(parsed && /^__elfInlineFragment(?:List)?\d+$/.test(parsed.localName));
-};
-
-const isResolvedFragmentScopeDiagnostic = (
-  document: TextDocument,
-  components: ComponentMeta[],
-  diagnostic: Diagnostic
-): boolean => {
-  if (diagnostic.code !== "ELF_TEMPLATE_TYPE") {
-    return false;
-  }
-
-  const parsed = readMacroUnknownLocalDiagnostic(readDiagnosticMessage(diagnostic));
-
-  if (!parsed) {
-    return false;
-  }
-
-  const sourceOffset = document.offsetAt(diagnostic.range.start);
-
-  return components
-    .flatMap((component) => component.templates)
-    .some(
-      (region) =>
-        region.method === "fragment" &&
-        isInsideEmbeddedRegion(region, sourceOffset) &&
-        (region.scopeNames ?? []).includes(parsed.localName)
-    );
 };
 
 const isResolvedInterpolationRefValueDiagnostic = (
@@ -3948,9 +3609,6 @@ declare module "@elfui/core" {
     peek(): T;
     set(value: T): void;
   }
-  export interface MacroFragment<Props extends object = Record<string, unknown>> {
-    readonly __elfFragmentProps?: Readonly<Props>;
-  }
   export interface ElfUIApp {
     unmount(): void;
   }
@@ -3965,10 +3623,6 @@ declare module "@elfui/core" {
   export function defineProps<T extends object = { [key: string]: unknown }>(options?: unknown): T;
   export function defineEmits<T = { [key: string]: unknown }>(options?: unknown): T;
   export function defineSlots<T = { [key: string]: unknown }>(): T;
-  export function defineFragment<Props extends object = Record<string, unknown>>(
-    render: (props: Readonly<Props>) => string
-  ): MacroFragment<Props>;
-  export function fragment(strings: TemplateStringsArray, ...values: unknown[]): string;
   export function defineHtml<T = unknown>(template: T): unknown;
   export function defineStyle(...styles: Array<string | null | undefined>): void;
   export function useComponents(components: unknown): void;
@@ -3991,7 +3645,7 @@ const createTemplateForLocalDeclarations = (
   context: EmbeddedDocumentContext,
   projectComponents: ElfProjectComponent[]
 ): string[] => {
-  const declarations: string[] = createFragmentScopeLocalDeclarations(context);
+  const declarations: string[] = [];
   const visibleTemplate = maskEmbeddedComments(template);
   const vForPattern = /\sv-for\s*=\s*(["'])([\s\S]*?)\1/g;
 
@@ -4014,38 +3668,11 @@ const createTemplateForLocalDeclarations = (
   }
 
   declarations.push(
-    ...createSlotScopeLocalDeclarations(visibleTemplate, offset, context, projectComponents)
+    ...createSlotScopeLocalDeclarations(offset, context, projectComponents)
   );
   declarations.push(...createEventLocalDeclarations(visibleTemplate, offset));
 
   return declarations;
-};
-
-const createFragmentScopeLocalDeclarations = (
-  context: EmbeddedDocumentContext
-): string[] => {
-  const scopeNames = context.region.scopeNames ?? [];
-
-  if (scopeNames.length === 0) {
-    return [];
-  }
-
-  const fragment = context.component.fragments.find(
-    (candidate) =>
-      candidate.source.start === context.region.contentStart &&
-      candidate.source.end === context.region.contentEnd
-  );
-
-  return scopeNames.map((name) => {
-    const propType = fragment?.propDetails.find((prop) => prop.name === name)?.type;
-    const type =
-      propType ??
-      (scopeNames.length === 1 && fragment?.propsType
-        ? `Readonly<${fragment.propsType}>`
-        : "unknown");
-
-    return `const ${name} = null as unknown as ${type};`;
-  });
 };
 
 const createEventLocalDeclarations = (template: string, offset: number): string[] => {
@@ -4233,7 +3860,6 @@ const createForSecondaryLocalDeclarations = (
 ];
 
 const createSlotScopeLocalDeclarations = (
-  template: string,
   offset: number,
   context: EmbeddedDocumentContext,
   projectComponents: ElfProjectComponent[]
@@ -4687,7 +4313,7 @@ const createTemplateDeclarationActionAtRange = (
     templateGlobals.has(word.value) ||
     templateReservedWords.has(word.value) ||
     expression.locals.has(word.value) ||
-    createKnownTemplateNames(context.component, context.region).has(word.value) ||
+    createKnownTemplateNames(context.component).has(word.value) ||
     isPropertyAccess(expression.value, word.start) ||
     isObjectPropertyKey(expression.value, word.end)
   ) {
@@ -6886,9 +6512,7 @@ const formatHoverNames = (names: string[]) => names.map((name) => `\`${name}\``)
 const createLocalComponentHover = (component: ComponentUseMeta): string => {
   const lines = [
     `**<${component.localName}>**`,
-    component.source === "fragment"
-      ? "ElfUI local compile-time Fragment."
-      : "ElfUI local component."
+    "ElfUI local component."
   ];
 
   if (component.expression) {
@@ -6997,7 +6621,7 @@ const mayBeInsideEmbeddedRegion = (
 ): boolean => {
   const pattern =
     kind === "template"
-      ? /\b(?:defineHtml\b\s*(?:<[^`]*?>\s*)?\(\s*`|fragment\s*`)/g
+      ? /\bdefineHtml\b\s*(?:<[^`]*?>\s*)?\(\s*`/g
       : /\bdefineStyle\b\s*(?:<[^`]*?>\s*)?\(\s*`/g;
   let lastOpen = -1;
 
@@ -7348,130 +6972,7 @@ const formatMultilineTemplateExpression = (
   expression: string,
   expressionIndent: string,
   options: ElfFormattingOptions
-) =>
-  formatInlineFragmentListExpression(
-    expression,
-    expressionIndent,
-    options,
-    !options.elfuiExternalFormatter
-  ) ??
-  formatMultilineObjectExpression(expression, expressionIndent, options);
-
-const formatInlineFragmentListExpression = (
-  expression: string,
-  expressionIndent: string,
-  options: ElfFormattingOptions,
-  compact: boolean
-): string | null => {
-  const trimmed = expression.trim();
-
-  if (!trimmed.startsWith("${") || !trimmed.endsWith("}") || !/\r?\n/.test(trimmed)) {
-    return null;
-  }
-
-  const openingMatch = /\.map\s*\(\s*(\([^()\r\n]*\)|[A-Za-z_$][\w$]*)\s*=>\s*fragment\s*`/g;
-  let opening: RegExpExecArray | null = null;
-
-  for (const match of trimmed.matchAll(openingMatch)) {
-    opening = match;
-  }
-
-  if (!opening || opening.index === undefined) {
-    return null;
-  }
-
-  const templateStart = opening.index + opening[0].lastIndexOf("`");
-  const templateEnd = trimmed.lastIndexOf("`");
-  const closing = trimmed.slice(templateEnd + 1);
-
-  if (templateEnd <= templateStart || !/^\s*\)\s*}$/.test(closing)) {
-    return null;
-  }
-
-  const callback = opening[1] ?? "item";
-  const receiver = trimmed.slice(0, opening.index);
-  const prefix = `${receiver}.map(${callback} => fragment\``;
-  const template = formatInlineFragmentTemplate(
-    dedentMultilineText(trimmed.slice(templateStart + 1, templateEnd)),
-    options
-  );
-
-  if (!template) {
-    return `${prefix}\`)}`;
-  }
-
-  const newLine = expression.includes("\r\n") ? "\r\n" : "\n";
-  const indentUnit = createIndentUnit(options);
-
-  if (!compact) {
-    const callbackIndent = `${expressionIndent}${indentUnit}`;
-    const templateIndent = `${callbackIndent}${indentUnit}`;
-
-    return [
-      `${receiver}.map(`,
-      `${callbackIndent}${callback} => fragment\``,
-      indentLines(template, templateIndent),
-      `${callbackIndent}\``,
-      `${expressionIndent})}`
-    ].join(newLine);
-  }
-
-  const templateIndent = `${expressionIndent}${indentUnit}`;
-
-  return [
-    prefix,
-    indentLines(template, templateIndent),
-    `${expressionIndent}\`)}`
-  ].join(newLine);
-};
-
-const formatInlineFragmentTemplate = (
-  template: string,
-  options: ElfFormattingOptions
-): string => {
-  if (!template) {
-    return "";
-  }
-
-  const protectedTemplate = protectTemplateExpressions(template);
-  const virtualDocument = TextDocument.create(
-    "elfui-inline-fragment.html",
-    "html",
-    0,
-    protectedTemplate.source
-  );
-  const edits = htmlLanguageService.format(virtualDocument, undefined, {
-    insertSpaces: options.insertSpaces,
-    tabSize: options.tabSize,
-    wrapAttributes: "auto",
-    ...(typeof options.wrapLineLength === "number"
-      ? { wrapLineLength: options.wrapLineLength }
-      : {})
-  });
-
-  return restoreTemplateExpressions(
-    applyVirtualTextEdits(virtualDocument.getText(), virtualDocument, edits),
-    protectedTemplate,
-    options
-  ).trim();
-};
-
-const dedentMultilineText = (value: string): string => {
-  const lines = value.trim().split(/\r?\n/);
-  const contentLines = lines.filter((line) => line.trim());
-
-  if (contentLines.length === 0) {
-    return "";
-  }
-
-  const commonIndent = Math.min(
-    ...contentLines.map((line) => line.match(/^[ \t]*/)?.[0].length ?? 0)
-  );
-
-  return lines
-    .map((line) => (line.trim() ? line.slice(commonIndent) : ""))
-    .join("\n");
-};
+) => formatMultilineObjectExpression(expression, expressionIndent, options);
 
 const formatMultilineQuotedBinding = (
   expression: string,
@@ -8061,16 +7562,12 @@ const readForSourceExpression = (
   };
 };
 
-const createKnownTemplateNames = (
-  component: ComponentMeta,
-  region?: EmbeddedRegion
-): Set<string> =>
+const createKnownTemplateNames = (component: ComponentMeta): Set<string> =>
   new Set([
     ...component.props,
     ...component.setupReturns,
     ...component.uses.map((item) => item.localName),
     ...component.slots,
-    ...(region?.scopeNames ?? []),
     ...(component.formControl ? ["ctx", "form"] : [])
   ]);
 
@@ -8182,15 +7679,6 @@ const findTemplateComponentDefinitionForTag = (
   }
 
   const registration = findComponentRegistrationForTag(owner, tag);
-
-  if (registration?.source === "fragment") {
-    return {
-      emits: [],
-      localName: registration.localName,
-      props: registration.props ?? [],
-      slots: []
-    };
-  }
 
   return registration?.slotsType
     ? {

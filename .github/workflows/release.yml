@@ -13,18 +13,19 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
           version: 10.28.0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test
       - run: pnpm smoke
+      - run: xvfb-run -a pnpm smoke:host
       - name: Resolve release metadata
         id: release
         shell: bash
@@ -38,6 +39,8 @@ jobs:
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
       - name: Package VSIX
         run: pnpm package:vsix:fast
+      - name: Verify packaged VSIX
+        run: xvfb-run -a pnpm smoke:vsix
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}

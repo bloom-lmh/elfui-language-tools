@@ -54,7 +54,7 @@ export const startElfLanguageClient = async (
           },
           workspace: {
             indexDebounceMs: configuration.get("workspace.indexDebounceMs", 250),
-            maxScanFiles: configuration.get("workspace.maxScanFiles", 1000),
+            maxScanFiles: configuration.get("workspace.maxScanFiles", 10000),
             perfLogging: configuration.get("workspace.perfLogging", false)
           }
         }

@@ -6,8 +6,9 @@ VS Code language features for ElfUI macro components.
 
 The extension now has a browser entry point. In a web extension host such as
 StackBlitz Codeflow, it provides the ElfUI TextMate grammar, macro snippets,
-directive completions, macro completions, and the `ElfUI: Diagnose Integration`
-command without requiring a native process.
+beta.17 macro/runtime completions, template directives and modifiers, built-in
+component completions, and the `ElfUI: Diagnose Integration` command without
+requiring a native process.
 
 The full language server, workspace component index, TypeScript server plugin,
 and ElfUI Studio commands still require the Node extension host used by desktop
@@ -31,9 +32,8 @@ Marketplace, the same pane can install it by name instead.
 
 - Macro component support for ordinary `.ts` / `.tsx` files that export `defineHtml()` components.
 - Realtime macro diagnostics from the ElfUI macro compiler, including template TypeScript errors, slot checks, and structured source ranges.
-- Macro-aware completion and hover for `defineProps()`, `defineEmits()`, `defineSlots()`, `defineHtml()`, `defineFragment()`, `fragment`, `useComponents()`, lifecycle hooks, `useId()`, and typed `useTemplateRef()` values.
-- Compiler metadata schema v2 support, including compiler protocol, structured component contracts, Fragment ownership/dependencies/identity/source ranges, and structured diagnostics.
-- Named Fragment tag and Props completion, source definition, references, rename, typed render scope completion, and nested Fragment formatting without overlapping edits.
+- Macro-aware completion and hover for beta.17 APIs including `defineProps()`, `defineEmits()`, `defineModel()`, `defineSlots()`, `defineOptions()`, `defineDirective()`, `defineHtml()`, `useComponents()`, lifecycle hooks, host/form/observer helpers, and typed `useTemplateRef()` values.
+- Compiler metadata schema v2 support, including compiler protocol, structured component contracts, source ranges, and structured diagnostics.
 - Template prop hover for local macro components includes the individual TypeScript type and statically declared default value when available.
 - Hover metadata for indexed workspace and package components, including import source, typed props with static defaults, events, slots, and typed slot scopes.
 - HTML completion, hover, diagnostics, and closing tag support inside `defineHtml(\`...\`)` regions.
@@ -51,7 +51,7 @@ Marketplace, the same pane can install it by name instead.
 - CSS completion, hover, diagnostics, and color preview inside `defineStyle(\`...\`)`, including Web Components selectors such as `:host-context()`, `::slotted()`, `::part()`, template-derived `part`/`slot` selector snippets, and declared CSS custom property references.
 - Diagnostics for unknown template variables, unregistered local components, undeclared emit calls, non-writable `v-model` targets, and component prop/event/slot mismatches from same-file or workspace metadata.
 - Go to Definition, References, and Document Highlight for same-file template symbols and workspace component tags, props, events, and slots.
-- Rename for same-file template symbols, current-file workspace component usages, and matching external declarations when the template name is the real exported name.
+- Cached cross-file references and rename for component tags, imports, props, events, and slots. Import aliases are preserved when an exported component is renamed.
 - Workspace Symbols for indexed ElfUI components and their props, events, and slots.
 - Dependency package component metadata from `package.json` declarations, so component libraries can provide completions, diagnostics, definitions, and auto imports without scanning `node_modules`.
 - `ElfUI: Generate Component Metadata` creates package metadata from the cached local component index and only writes files whose generated content changed.
@@ -128,9 +128,9 @@ The metadata JSON can list exported components:
 `importPath` is optional and defaults to the package name. `props` and `emits` also accept the legacy string form such as `["label", "open"]` or `["confirm"]`; use the structured form to show prop type/default value and event payload type in template hover.
 
 The package index also accepts `MacroComponentMetadata` schema v2 JSON emitted by
-`@elfui/compiler@0.1.0-beta.13`. Structured `props`, `events`, `slots.typeText`, and `tagName`
-are consumed directly. Named Fragments remain file-local and are never exposed as package
-components or auto-import candidates.
+`@elfui/compiler@0.1.0-beta.17`. Structured `props`, `events`, `slots.typeText`, and `tagName`
+are consumed directly. Removed legacy Fragment fields are ignored rather than reintroduced by
+the language tools.
 
 Run `ElfUI: Generate Component Metadata` in a component-library workspace to write `elfui.components.json` (or the existing declared metadata path). When `package.json` exists without an ElfUI metadata declaration, the command adds `elfui.languageTools.components` automatically. It uses the language server's cached workspace index and skips unchanged writes.
 

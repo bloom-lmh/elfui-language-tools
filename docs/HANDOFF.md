@@ -1,10 +1,113 @@
 # ElfUI Language Tools Maintenance Handoff
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 This repository, `E:\dev_projects\elfui-official\elfui-language-tools`, is the
 only maintained home for the ElfUI VS Code extension. Do not modify the retired
 `E:\dev_projects\elfui\tools\vscode-extension` copy.
+
+## Continuity Protocol
+
+This file is the required state ledger for ongoing maintenance, not a one-time summary.
+
+- Read it before changing code.
+- Update it when a maintenance cycle starts and again before handoff, commit, or release.
+- Keep `Current Work`, `Completed This Cycle`, `Known Issues`, `Next Work`, `Verification
+  Snapshot`, and `Release State` aligned with the working tree.
+- Record only confirmed results. If a gate has not run, mark it pending instead of carrying
+  forward an older result.
+- Keep long-form release history in `CHANGELOG.md` and Git; keep this document focused on the
+  latest actionable state.
+
+## Current Work
+
+Status: `0.4.0` release candidate.
+
+The current cycle aligns Language Tools with `@elfui/compiler@0.1.0-beta.17`, removes the retired
+Fragment authoring protocol, improves workspace indexing and cross-file navigation, reduces VSIX
+size, separates configuration/index state from server orchestration, and strengthens CI plus real
+Extension Host coverage.
+
+Local release verification is complete. The intermittent Host failures were resolved by isolating
+generated smoke fixtures per document URI and by keeping embedded save formatting within VS Code's
+will-save time budget, with guarded post-save completion when the language server is busy. The
+release is ready to commit, push, and publish.
+
+No changes are required in `elfui`, `elfui-docs`, or `elfui-kit` for this release. Those repositories
+were used as read-only compatibility and pressure-test inputs.
+
+## Completed This Cycle
+
+- Removed language-core, language-service, TypeScript plugin, grammar, snippet, formatting,
+  metadata, navigation, and smoke coverage for `fragment` / `defineFragment`.
+- Upgraded compiler metadata consumption from beta.13 to beta.17.
+- Moved initial/full indexing off the interactive LSP path, added asynchronous scans, incremental
+  watcher updates, dynamic workspace folders, scan limits, cache reuse, and performance history.
+- Added cached cross-file component/prop/event/slot references and rename with import-alias
+  preservation.
+- Shared the beta.17 completion catalog between desktop and Web extension entries.
+- Split settings parsing into `configuration.ts` and index state/per-document option caching into
+  `workspaceIndex.ts`; enabled unused-local and unused-parameter compiler gates.
+- Reduced the packaged VSIX from roughly 7 MiB to 2.91 MiB by excluding source maps and minifying
+  production bundles; packaging now rejects source maps and artifacts above 4 MiB.
+- Fixed recursive TextMate injection into embedded HTML, which caused real VS Code renderer
+  `Token length and text length do not match` errors during incremental edits.
+- Isolated real Host smoke documents by URI and added deterministic generated-fixture cleanup,
+  preventing TextMate and semantic-token state from leaking across tests.
+- Added a one-second will-save budget plus guarded post-save completion for embedded formatting,
+  preventing VS Code listener timeouts when the language server is temporarily busy.
+- Expanded CI and release gates to include M10 pressure checks, development Host smoke, packaging,
+  packaged VSIX Host smoke, token-length failures, ElfUI will-save listener failures, and deferred
+  formatting failures.
+
+## Known Issues
+
+- `src/language-service/languageService.ts` is still 8,587 lines and mixes embedded document
+  caching, completion, diagnostics, navigation, formatting, and semantic token providers.
+- `src/language-service/server.ts` is still 2,863 lines. Configuration and index state are split,
+  but package metadata parsing, source scanning, reference indexing, and LSP orchestration still
+  share one module.
+- `src/extension.ts` is about 2,000 lines and contains Studio-oriented source analysis that
+  partially duplicates `language-core`.
+- Real first-use Host workflows can take seconds while TypeScript and the workspace index warm up;
+  internal warm completion/formatting and index budgets pass, but end-to-end latency should keep
+  being measured on larger workspaces.
+- The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
+  therefore part of CI reliability.
+
+## Next Work
+
+1. Split `languageService.ts` by provider family around a shared embedded-document/cache context,
+   starting with completion/hover and diagnostics/code actions.
+2. Move workspace/package scanning, metadata parsing, and cross-file reference indexing out of
+   `server.ts`; leave the server module responsible for LSP lifecycle and request wiring.
+3. Reuse `language-core` analysis in Studio commands and remove the regex-based duplicate analyzer
+   from `extension.ts`.
+4. Add focused coverage and bundle-size attribution for each extracted module before changing
+   behavior.
+5. Re-run both development and packaged Host smoke whenever grammar, semantic classifications,
+   document edits, or packaging change.
+
+## Verification Snapshot
+
+Latest confirmed locally on 2026-07-29:
+
+- `pnpm typecheck`: passed with unused-code checks enabled.
+- `pnpm test`: 6 files, 91 tests passed.
+- `pnpm smoke`: extension startup checks and 7/7 grammar cases passed.
+- `pnpm verify:m10`: 360 Kit source files, 27 macro components, cold index 45.8 ms, warm
+  472/472 cache reuse in 3.0 ms.
+- `pnpm smoke:host`: 18/18 passed after the final save-fallback change; the deferred path was
+  exercised and Host logs contained no listener or token-length failure.
+- `pnpm package:vsix`: 115 files, 2.91 MiB, below the 4 MiB budget.
+- `pnpm smoke:vsix`: two consecutive 18/18 packaged-extension runs passed with clean Host logs.
+
+## Release State
+
+- Target version: `0.4.0`.
+- Working tree: all local release gates passed; commit, remote push, Marketplace publication, tag,
+  and GitHub Release are pending.
+- Artifact target: `.local-vsix/elfui-language-features-0.4.0.vsix`.
 
 ## Current Capability
 
@@ -13,17 +116,20 @@ only maintained home for the ElfUI VS Code extension. Do not modify the retired
 - LSP completion, hover, diagnostics, definitions, references, rename, document symbols,
   inlay hints, code actions, document links, folding, selection, linked editing, and color
   providers in ElfUI regions.
-- Local macro support for `defineHtml`, `defineProps`, `defineEmits`, `defineSlots`,
-  `defineModel`, `defineFragment`, `fragment`, and `useComponents`, including named Fragment
-  props/scope completion, source navigation, references, and rename.
-- `@elfui/compiler@0.1.0-beta.13` metadata schema v2 is the source of truth for structured
-  components, Fragment ownership/dependencies/identity/source ranges, compiler protocol, and
-  diagnostic summaries. The language core does not depend on the temporary v1 adapter.
-- Workspace and dependency component indexing with auto import, structured package metadata,
-  typed prop/default hover, event payload hover, and typed slot scopes.
+- Local macro support for beta.17 `defineHtml`, `defineProps`, `defineEmits`, `defineSlots`,
+  `defineModel`, `defineOptions`, `defineDirective`, and `useComponents`. The removed
+  `fragment` / `defineFragment` protocol is intentionally unsupported.
+- `@elfui/compiler@0.1.0-beta.17` metadata schema v2 is the source of truth for structured
+  components, source ranges, compiler protocol, and diagnostic summaries.
+- Asynchronous, cached workspace and dependency component indexing with a 10,000-file default,
+  incremental watcher updates, dynamic workspace folders, auto import, and structured metadata.
+- Cached cross-file component, prop, event, and slot references/rename with import-alias
+  preservation.
 - TypeScript server filtering narrowly scoped to false-positive template locals and
-  auto-unwrapped `useRef()` comparisons, semantic classifications inside ElfUI-only HTML/CSS
-  comments, plus `defineFragment` declarations consumed only as template tags.
+  auto-unwrapped `useRef()` comparisons and semantic classifications inside ElfUI-only HTML/CSS
+  comments.
+- The Web entry uses the shared beta.17 API catalog for macro/runtime, lifecycle, host/form/
+  observer, directive, modifier, and built-in component completions.
 - ElfUI Studio commands: component structure, dynamic point report, static preview, binding
   migration, workspace performance report, metadata generation, and performance history export.
 
@@ -89,8 +195,7 @@ metadata, and adds the default `elfui.languageTools.components` declaration when
 `package.json` does not have one.
 
 Dependency metadata readers accept both the existing package metadata shape and compiler schema
-v2 JSON. Named Fragments are intentionally excluded from cross-file indexing because they are
-private compile-time slices.
+v2 JSON. Legacy Fragment metadata is not indexed.
 
 ## Source Layout
 
@@ -98,7 +203,11 @@ private compile-time slices.
 src/extension.ts                 VS Code activation, Studio commands, report persistence
 src/lsp/client.ts                Language client configuration
 src/language-core/source.ts      TypeScript AST source analysis
+src/language-service/configuration.ts  Validated extension/LSP settings
 src/language-service/            LSP features and workspace/package index
+src/language-service/workspaceIndex.ts Workspace index state and per-document option cache
+src/shared/elfuiCatalog.ts       Shared beta.17 desktop/Web completion catalog
+src/web/                         Browser-safe completion logic and tests
 src/typescript-plugin/           Narrow native TS diagnostic suppression
 syntaxes/                        TextMate injection grammar
 snippets/                        Macro component snippets
@@ -121,11 +230,17 @@ pnpm package:vsix
 pnpm smoke:vsix
 ```
 
-`smoke:host` and `smoke:vsix` launch a real VS Code Extension Host. The recurring VS Code
-mutex warning in the test environment is harmless when the command exits successfully.
+`smoke:host` and `smoke:vsix` launch a real VS Code Extension Host and fail on TextMate
+token-length mismatches, ElfUI will-save listener failures, or deferred save-formatting failures.
+The recurring VS Code mutex warning in the test environment is harmless when the command exits
+successfully.
 
-The latest M10 baseline is 257 source files, 55 macro component files, cold indexing
-under 3 seconds, and warm cached indexing under 750 ms. Use `ElfUI: Diagnose Integration` first
+`package:vsix` strips source maps from its isolated staging tree and fails if the final VSIX is
+larger than 4 MiB. The maintained 0.4.0 release-candidate baseline is 2.91 MiB.
+
+The latest maintained Kit baseline is 360 source files, 27 direct macro component entries,
+cold indexing under 3 seconds, and warm cached indexing under 750 ms. Use
+`ElfUI: Diagnose Integration` first
 when a user reports missing completions, colors, or template-local false positives.
 
 ## Release

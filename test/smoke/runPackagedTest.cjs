@@ -2,6 +2,7 @@ const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { runTests } = require("@vscode/test-electron");
+const { assertHostLogsClean } = require("./assertHostLogs.cjs");
 
 async function main() {
   const extensionRoot = path.resolve(__dirname, "..", "..");
@@ -13,6 +14,8 @@ async function main() {
   );
   const unpackedRoot = path.join(extensionRoot, ".vscode-test-packaged", "extension");
   const extensionDevelopmentPath = path.join(unpackedRoot, "extension");
+  const cachePath = path.join(extensionRoot, ".vscode-test-packaged", "runtime");
+  const startedAt = Date.now();
 
   if (!fs.existsSync(vsixPath)) {
     throw new Error(`Missing VSIX package: ${vsixPath}`);
@@ -23,7 +26,7 @@ async function main() {
   childProcess.execFileSync("tar", ["-xf", vsixPath, "-C", unpackedRoot], { stdio: "inherit" });
 
   await runTests({
-    cachePath: path.join(extensionRoot, ".vscode-test-packaged", "runtime"),
+    cachePath,
     extensionDevelopmentPath,
     extensionTestsPath: path.join(extensionRoot, "test", "smoke", "suite", "index.cjs"),
     launchArgs: [path.join(extensionRoot, "test", "smoke", "workspace"), "--disable-extensions"],
@@ -31,6 +34,10 @@ async function main() {
     version: "1.90.0",
     vscodeExecutablePath: resolveLocalVSCodeExecutable()
   });
+  assertHostLogsClean(
+    [cachePath, path.join(extensionRoot, ".vscode-test")],
+    startedAt
+  );
 }
 
 function resolveLocalVSCodeExecutable() {

@@ -4,18 +4,13 @@ import {
   compileMacroComponent,
   type MacroComponentMetadata,
   type MacroExportedComponentMetadata,
-  type MacroFragmentMetadata,
   type MacroLocalComponentMetadata,
   type MacroSourceRange
 } from "@elfui/compiler/macro-component";
 import { analyzeElfMacroUsage } from "@elfui/compiler/vite";
 
 export type EmbeddedRegionKind = "template" | "style";
-export type EmbeddedRegionMethod =
-  | "defineFragment"
-  | "defineHtml"
-  | "defineStyle"
-  | "fragment";
+export type EmbeddedRegionMethod = "defineHtml" | "defineStyle";
 
 export interface EmbeddedRegion {
   content: string;
@@ -25,7 +20,6 @@ export interface EmbeddedRegion {
   kind: EmbeddedRegionKind;
   languageId: "html" | "css";
   method: EmbeddedRegionMethod;
-  scopeNames?: string[];
   start: number;
 }
 
@@ -37,10 +31,10 @@ export interface ComponentUseMeta {
   props?: string[];
   propsType?: string;
   slotsType?: string;
-  source: "alias" | "array" | "fragment" | "macro" | "object";
+  source: "alias" | "array" | "macro" | "object";
 }
 
-export type ComponentSymbolKind = "component" | "emit" | "fragment" | "prop" | "setup" | "slot";
+export type ComponentSymbolKind = "component" | "emit" | "prop" | "setup" | "slot";
 
 export interface ComponentSymbolMeta {
   end: number;
@@ -55,26 +49,11 @@ export interface ComponentPropMeta {
   type?: string;
 }
 
-export interface ComponentFragmentMeta {
-  dependencies: string[];
-  identity: MacroFragmentMetadata["identity"];
-  kind: MacroFragmentMetadata["kind"];
-  name: string;
-  ownerComponents: string[];
-  propDetails: ComponentPropMeta[];
-  props: string[];
-  propsType: string;
-  renderName: string;
-  scopeNames: string[];
-  source: MacroSourceRange;
-}
-
 export interface ComponentMeta {
   emits: string[];
   emitsType?: string;
   exportName?: "default" | string;
   formControl: boolean;
-  fragments: ComponentFragmentMeta[];
   id: string;
   localName?: string;
   macro: boolean;
@@ -122,20 +101,11 @@ interface MacroSymbols {
   uses: NamedMeta[];
 }
 
-interface FragmentDeclaration {
-  props: NamedMeta[];
-  propsType: string;
-  scopeNames: string[];
-  source: MacroSourceRange;
-  symbol: NamedMeta;
-}
-
 const macroRuntimePackages = ["@elfui/core"];
 
 export const createEmptyComponentMeta = (id: string): ComponentMeta => ({
   emits: [],
   formControl: false,
-  fragments: [],
   id,
   macro: false,
   name: null,
@@ -203,9 +173,7 @@ const applyMacroAnalysis = (
   const styleRegions = collectDefineStyleRegions(sourceFile);
   const typeMembers = collectTopLevelTypeMembers(sourceFile);
   const symbols = collectMacroSymbols(sourceFile, typeMembers);
-  const fragmentDeclarations = collectDefineFragmentDeclarations(sourceFile, typeMembers);
-  const metadata = readMacroMetadata(source, fileName, symbols, fragmentDeclarations);
-  const fragmentRegions = collectMacroFragmentRegions(source, metadata.fragments);
+  const metadata = readMacroMetadata(source, fileName, symbols);
   const componentMetadata: MacroExportedComponentMetadata[] = metadata.components.length
     ? metadata.components
     : [
@@ -249,33 +217,9 @@ const applyMacroAnalysis = (
     appendRegions(component.styles, styleRegions);
   });
 
-  const analyzedComponents = [...components.values()];
-  const namedFragments = metadata.fragments.filter((fragment) => fragment.kind === "named");
-  const fragmentSymbols = namedFragments.flatMap((fragment) => {
-    const declaration = fragmentDeclarations.get(fragment.name);
-
-    return declaration ? [declaration.symbol] : [];
+  components.forEach((component) => {
+    component.referenceTemplates = templateRegions;
   });
-  const fragmentUses = namedFragments.map((fragment) =>
-    toMacroFragmentUseMeta(fragment, fragmentDeclarations.get(fragment.name)?.props ?? [])
-  );
-  const fragmentMetadata = metadata.fragments.map((fragment) =>
-    toComponentFragmentMeta(fragment, fragmentDeclarations.get(fragment.name)?.props ?? [])
-  );
-  const allTemplateRegions = [...templateRegions, ...fragmentRegions];
-
-  analyzedComponents.forEach((component) => {
-    appendUses(component.uses, fragmentUses);
-    appendSymbols(component.symbols, fragmentSymbols, "fragment");
-    component.fragments = fragmentMetadata;
-    component.referenceTemplates = allTemplateRegions;
-  });
-
-  const fragmentOwner = analyzedComponents[0];
-
-  if (fragmentOwner) {
-    appendRegions(fragmentOwner.templates, fragmentRegions);
-  }
 
   return metadata;
 };
@@ -283,8 +227,7 @@ const applyMacroAnalysis = (
 const readMacroMetadata = (
   source: string,
   fileName: string,
-  symbols: MacroSymbols,
-  fragmentDeclarations: Map<string, FragmentDeclaration>
+  symbols: MacroSymbols
 ): MacroComponentMetadata => {
   try {
     return compileMacroComponent(source, {
@@ -304,7 +247,6 @@ const readMacroMetadata = (
       },
       exposed: [],
       filename: fileName,
-      fragments: createFallbackFragmentMetadata(fragmentDeclarations),
       localComponents: symbols.uses.map((item) => ({
         constructorType: "unknown",
         emitsType: "Record<string, unknown[]>",
@@ -373,41 +315,6 @@ const toMacroUseMeta = (item: MacroLocalComponentMetadata): ComponentUseMeta => 
   propsType: item.propsType,
   slotsType: item.slotsType,
   source: "macro"
-});
-
-const toMacroFragmentUseMeta = (
-  fragment: MacroFragmentMetadata,
-  props: NamedMeta[]
-): ComponentUseMeta => ({
-  expression: fragment.name,
-  localName: fragment.name,
-  propDetails: props.map(toComponentPropMeta),
-  props: props.map((prop) => prop.name),
-  propsType: fragment.propsType,
-  source: "fragment"
-});
-
-const toComponentFragmentMeta = (
-  fragment: MacroFragmentMetadata,
-  props: NamedMeta[]
-): ComponentFragmentMeta => ({
-  dependencies: [...fragment.dependencies],
-  identity: fragment.identity,
-  kind: fragment.kind,
-  name: fragment.name,
-  ownerComponents: [...fragment.ownerComponents],
-  propDetails: props.map(toComponentPropMeta),
-  props: props.map((prop) => prop.name),
-  propsType: fragment.propsType,
-  renderName: fragment.renderName,
-  scopeNames: [...fragment.scopeNames],
-  source: fragment.source
-});
-
-const toComponentPropMeta = (prop: NamedMeta): ComponentPropMeta => ({
-  ...(prop.defaultValue !== undefined ? { defaultValue: prop.defaultValue } : {}),
-  name: prop.name,
-  ...(prop.type ? { type: prop.type } : {})
 });
 
 const createEmptyMacroSourceRange = (): MacroSourceRange => ({
@@ -501,162 +408,6 @@ const collectDefineHtmlRegions = (sourceFile: ts.SourceFile): EmbeddedRegion[] =
   return regions;
 };
 
-const collectDefineFragmentDeclarations = (
-  sourceFile: ts.SourceFile,
-  typeMembers: Map<string, NamedMeta[]>
-): Map<string, FragmentDeclaration> => {
-  const declarations = new Map<string, FragmentDeclaration>();
-
-  sourceFile.statements.forEach((statement) => {
-    if (!ts.isVariableStatement(statement)) {
-      return;
-    }
-
-    statement.declarationList.declarations.forEach((declaration) => {
-      if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
-        return;
-      }
-
-      const initializer = unwrapExpression(declaration.initializer);
-
-      if (
-        !ts.isCallExpression(initializer) ||
-        callExpressionName(initializer) !== "defineFragment"
-      ) {
-        return;
-      }
-
-      const render = initializer.arguments[0]
-        ? unwrapExpression(initializer.arguments[0])
-        : null;
-      const templateNode =
-        render && (ts.isArrowFunction(render) || ts.isFunctionExpression(render))
-          ? readFragmentReturnExpression(render)
-          : null;
-      const embeddedString = templateNode
-        ? readEmbeddedString(templateNode, sourceFile)
-        : null;
-
-      if (
-        !render ||
-        (!ts.isArrowFunction(render) && !ts.isFunctionExpression(render)) ||
-        !embeddedString
-      ) {
-        return;
-      }
-
-      declarations.set(declaration.name.text, {
-        props: readMembersFromTypeArgument(
-          initializer.typeArguments?.[0],
-          sourceFile,
-          typeMembers
-        ),
-        propsType:
-          initializer.typeArguments?.[0]?.getText(sourceFile) ??
-          "Record<string, unknown>",
-        scopeNames: render.parameters.flatMap((parameter) =>
-          readBindingNameMeta(parameter.name, sourceFile).map((item) => item.name)
-        ),
-        source: createMacroSourceRange(
-          sourceFile,
-          embeddedString.contentStart,
-          embeddedString.contentEnd
-        ),
-        symbol: {
-          end: declaration.name.getEnd(),
-          name: declaration.name.text,
-          start: declaration.name.getStart(sourceFile)
-        }
-      });
-    });
-  });
-
-  return declarations;
-};
-
-const readFragmentReturnExpression = (
-  render: ts.ArrowFunction | ts.FunctionExpression
-): ts.Expression | null => {
-  if (!ts.isBlock(render.body)) {
-    return unwrapExpression(render.body);
-  }
-
-  if (
-    render.body.statements.length !== 1 ||
-    !ts.isReturnStatement(render.body.statements[0]) ||
-    !render.body.statements[0].expression
-  ) {
-    return null;
-  }
-
-  return unwrapExpression(render.body.statements[0].expression);
-};
-
-const createMacroSourceRange = (
-  sourceFile: ts.SourceFile,
-  start: number,
-  end: number
-): MacroSourceRange => {
-  const first = sourceFile.getLineAndCharacterOfPosition(start);
-  const last = sourceFile.getLineAndCharacterOfPosition(end);
-
-  return {
-    column: first.character + 1,
-    end,
-    endColumn: last.character + 1,
-    endLine: last.line + 1,
-    line: first.line + 1,
-    start
-  };
-};
-
-const createFallbackFragmentMetadata = (
-  declarations: Map<string, FragmentDeclaration>
-): MacroFragmentMetadata[] =>
-  [...declarations].map(([name, declaration]) => ({
-    dependencies: [],
-    identity: "not-applicable",
-    kind: "named",
-    name,
-    ownerComponents: [],
-    propsType: declaration.propsType,
-    renderName: `__elfRenderFragment_${name.replace(/[^A-Za-z0-9_$]/g, "_")}`,
-    scopeNames: declaration.scopeNames,
-    source: declaration.source
-  }));
-
-const collectMacroFragmentRegions = (
-  source: string,
-  fragments: MacroFragmentMetadata[]
-): EmbeddedRegion[] =>
-  fragments.flatMap((fragment) => {
-    const start = clampSourceOffset(fragment.source.start, source.length);
-    const end = clampSourceOffset(fragment.source.end, source.length);
-    const method: EmbeddedRegionMethod =
-      fragment.kind === "named" ? "defineFragment" : "fragment";
-
-    if (end < start) {
-      return [];
-    }
-
-    return [
-      {
-        content: source.slice(start, end),
-        contentEnd: end,
-        contentStart: start,
-        end,
-        kind: "template" as const,
-        languageId: "html" as const,
-        method,
-        scopeNames: [...fragment.scopeNames],
-        start
-      }
-    ];
-  });
-
-const clampSourceOffset = (value: number, sourceLength: number): number =>
-  Math.max(0, Math.min(value, sourceLength));
-
 const hasElfComponentPragma = (source: string): boolean => {
   const header = source.slice(0, 1024);
 
@@ -749,7 +500,7 @@ const collectMacroSymbols = (
         if (initializer && ts.isCallExpression(initializer)) {
           const name = callExpressionName(initializer);
 
-          if (name === "defineHtml" || name === "defineFragment") {
+          if (name === "defineHtml") {
             return;
           }
 
@@ -1247,7 +998,5 @@ const appendSymbols = (
     }
   });
 };
-
-const isString = (value: string | null | undefined): value is string => typeof value === "string";
 
 const isNamed = (value: NamedMeta | null): value is NamedMeta => value !== null;

@@ -6,7 +6,6 @@ export {
 } from "./source";
 export type {
   AnalyzeElfSourceOptions,
-  ComponentFragmentMeta,
   ComponentMeta,
   ComponentSymbolKind,
   ComponentSymbolMeta,

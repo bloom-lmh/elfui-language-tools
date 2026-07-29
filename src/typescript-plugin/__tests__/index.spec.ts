@@ -130,7 +130,6 @@ describe("ElfUI TypeScript server plugin", () => {
     const source = `
       declare const defineHtml: (value: unknown) => unknown;
       declare const defineStyle: (value: unknown) => unknown;
-      declare const fragment: (parts: TemplateStringsArray, ...values: unknown[]) => string;
       const commentedTemplateValue = "commented";
       const liveTemplateValue = "live";
       const commentedStyleValue = "red";
@@ -139,7 +138,6 @@ describe("ElfUI TypeScript server plugin", () => {
       export const Home = defineHtml(\`
         <!-- <button>\${commentedTemplateValue}</button> -->
         <button>\${liveTemplateValue}</button>
-        \${fragment\`<!-- <span>\${commentedTemplateValue}</span> -->\`}
       \`);
       defineStyle(\`/* color: \${commentedStyleValue}; */\`);
       const ordinaryTemplate = \`<!-- \${ordinaryTemplateValue} -->\`;
@@ -151,11 +149,10 @@ describe("ElfUI TypeScript server plugin", () => {
     const commentedStyleStarts = readAllTextStarts(source, "commentedStyleValue");
     const ordinaryTemplateStarts = readAllTextStarts(source, "ordinaryTemplateValue");
 
-    expect(commentedTemplateStarts).toHaveLength(3);
+    expect(commentedTemplateStarts).toHaveLength(2);
     expect(commentedStyleStarts).toHaveLength(2);
     expect(classifiedStarts.has(commentedTemplateStarts[0]!)).toBe(true);
     expect(classifiedStarts.has(commentedTemplateStarts[1]!)).toBe(false);
-    expect(classifiedStarts.has(commentedTemplateStarts[2]!)).toBe(false);
     expect(classifiedStarts.has(liveTemplateStarts[0]!)).toBe(true);
     expect(classifiedStarts.has(liveTemplateStarts[1]!)).toBe(true);
     expect(classifiedStarts.has(commentedStyleStarts[0]!)).toBe(true);
@@ -196,45 +193,6 @@ describe("ElfUI TypeScript server plugin", () => {
     });
 
     expect(readDiagnosticMessages(diagnostics).some((message) => message.includes("user"))).toBe(true);
-  });
-
-  it("filters unused diagnostics for defineFragment values consumed as template tags", () => {
-    const source = `
-      import { defineFragment, defineHtml } from "@elfui/core";
-
-      const MenuPanel = defineFragment(() => \`<div>Menu</div>\`);
-      export const Menu = defineHtml(\`<MenuPanel />\`);
-    `;
-    const diagnostics = readPluginDiagnostics(source, undefined, {
-      noUnusedLocals: true,
-    });
-
-    expect(
-      diagnostics.some(
-        (diagnostic) =>
-          diagnostic.code === 6133 &&
-          readDiagnosticMessages([diagnostic]).some((message) => message.includes("MenuPanel")),
-      ),
-    ).toBe(false);
-  });
-
-  it("keeps unused diagnostics for unconsumed and commented defineFragment values", () => {
-    const source = `
-      import { defineFragment, defineHtml } from "@elfui/core";
-
-      const UnusedPanel = defineFragment(() => \`<div>Unused</div>\`);
-      const CommentedPanel = defineFragment(() => \`<div>Commented</div>\`);
-      export const Menu = defineHtml(\`<!-- <CommentedPanel /> --><main>Menu</main>\`);
-    `;
-    const diagnostics = readPluginDiagnostics(source, undefined, {
-      noUnusedLocals: true,
-    });
-    const messages = readDiagnosticMessages(
-      diagnostics.filter((diagnostic) => diagnostic.code === 6133),
-    );
-
-    expect(messages.some((message) => message.includes("UnusedPanel"))).toBe(true);
-    expect(messages.some((message) => message.includes("CommentedPanel"))).toBe(true);
   });
 
   it("filters native TS no-overlap comparisons for auto-unwrapped useRef values", () => {
@@ -412,9 +370,6 @@ const createLanguageService = (
           export interface Ref<T> { readonly value: T; peek(): T }
           export declare function useRef<T>(value: T): Ref<T>;
           export declare function defineHtml(value: string): unknown;
-          export declare function defineFragment<Props extends object = Record<string, unknown>>(
-            render: (props: Readonly<Props>) => string
-          ): (props: Readonly<Props>) => string;
         `,
         version: "1",
       },

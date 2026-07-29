@@ -9,7 +9,7 @@ this repository.
 pnpm verify:m10
 ```
 
-The gate scans the real `ui-kit/src/components` tree and checks:
+The gate scans the maintained `elfui-kit/src/components` tree and checks:
 
 - macro component pressure
 - `${...}` expression binding pressure
@@ -20,23 +20,26 @@ The gate scans the real `ui-kit/src/components` tree and checks:
 - Host smoke coverage for `useComponents()` aliases, `defineModel()`,
   `defineSlots<T>()`, dependency package metadata, workspace symbols,
   definition/references/rename, inlay hints, quick fixes, and auto imports
+- asynchronous scan limits/cache reuse and cached cross-file component contract rename
+- real Host logs, including hard failures on TextMate token-length mismatches, ElfUI will-save
+  listener errors, and deferred save-formatting failures
 
 ## Current Baseline
 
-Latest local run on 2026-07-28:
+Latest local baseline on 2026-07-29:
 
 | Gate | Result |
 | --- | --- |
-| ui-kit source files | 257 TS files |
-| macro component files | 55 files |
-| expression bindings | 911 |
-| `v-for` declarations | 50 |
+| elfui-kit source files | 360 TS files |
+| macro component files | 27 files |
+| expression bindings | 2380 |
+| `v-for` declarations | 68 |
 | `v-model` bindings | 16 |
-| `:host` selectors | 444 |
-| `::part` / `::slotted` selectors | 16 |
-| `--elf-*` token references | 1343 |
-| cold scan budget | 47-62 ms observed, budget <= 3000 ms |
-| warm cache budget | 2-4 ms observed, budget <= 750 ms |
+| `:host` selectors | 766 |
+| `::part` / `::slotted` selectors | 83 |
+| `--elf-*` token references | 2049 |
+| cold scan budget | 45.8 ms observed, budget <= 3000 ms |
+| warm cache budget | 3.0 ms observed, budget <= 750 ms |
 
 ## Studio Features
 

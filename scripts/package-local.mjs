@@ -11,6 +11,7 @@ const outDir = path.join(packageRoot, ".local-vsix");
 const outFile = path.join(outDir, `${packageJson.name}-${packageJson.version}.vsix`);
 const stageDir = path.join(outDir, ".package-stage");
 const typeScriptPluginName = "elfui-language-features-typescript-plugin";
+const maxVsixBytes = 4 * 1024 * 1024;
 const skipVerify = process.argv.includes("--skip-verify");
 
 fs.mkdirSync(outDir, { recursive: true });
@@ -40,6 +41,12 @@ if (!stat.isFile() || stat.size <= 0) {
   throw new Error(`VSIX package was not created: ${outFile}`);
 }
 
+if (stat.size > maxVsixBytes) {
+  throw new Error(
+    `VSIX package exceeds the ${formatBytes(maxVsixBytes)} budget: ${formatBytes(stat.size)}`
+  );
+}
+
 console.log(`ElfUI VS Code extension package created: ${outFile}`);
 console.log(`Package size: ${formatBytes(stat.size)}`);
 
@@ -62,11 +69,46 @@ function preparePackageStage() {
   ["dist", "images", "snippets", "syntaxes"].forEach((name) => {
     fs.cpSync(path.join(packageRoot, name), path.join(stageDir, name), { recursive: true });
   });
+  removeSourceMaps(path.join(stageDir, "dist"));
   ["LICENSE.txt", "README.md"].forEach((name) => {
     fs.copyFileSync(path.join(packageRoot, name), path.join(stageDir, name));
   });
   fs.cpSync(pluginSourceDir, pluginTargetDir, { recursive: true });
+  removeSourceMaps(path.join(pluginTargetDir, "dist"));
   fs.writeFileSync(path.join(stageDir, "package.json"), `${JSON.stringify(stageManifest, null, 2)}\n`);
+  assertNoSourceMaps(stageDir);
+}
+
+function removeSourceMaps(directory) {
+  if (!fs.existsSync(directory)) return;
+
+  fs.readdirSync(directory, { withFileTypes: true }).forEach((entry) => {
+    const entryPath = path.join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      removeSourceMaps(entryPath);
+    } else if (entry.isFile() && entry.name.endsWith(".map")) {
+      fs.rmSync(entryPath);
+    }
+  });
+}
+
+function assertNoSourceMaps(directory) {
+  const pending = [directory];
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const entryPath = path.join(current, entry.name);
+
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+      } else if (entry.isFile() && entry.name.endsWith(".map")) {
+        throw new Error(`Source map leaked into VSIX staging: ${entryPath}`);
+      }
+    }
+  }
 }
 
 function run(command, args, cwd = packageRoot, shell = process.platform === "win32") {

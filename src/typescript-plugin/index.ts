@@ -15,7 +15,6 @@ interface TypeScriptServerPluginCreateInfo {
 const cannotFindNameCode = 2304;
 const cannotFindNameSuggestionCode = 2552;
 const noTypeOverlapComparisonCode = 2367;
-const unusedLocalCode = 6133;
 
 interface TypeScriptPluginConfiguration {
   suppressNativeRefUnwrapComparisons: boolean;
@@ -63,7 +62,6 @@ const init = (modules: TypeScriptServerPluginModules) => {
       );
       const getEncodedSemanticClassifications =
         info.languageService.getEncodedSemanticClassifications.bind(info.languageService);
-      const consumedFragmentNamesCache = new WeakMap<ts.SourceFile, Set<string>>();
       const templateCommentRangesCache = new WeakMap<ts.SourceFile, SourceRange[]>();
 
       proxy.getSemanticDiagnostics = (fileName) => {
@@ -80,25 +78,9 @@ const init = (modules: TypeScriptServerPluginModules) => {
         const templateRefNames = configuration.suppressNativeRefUnwrapComparisons
           ? collectUseRefVariableNames(tsModule, sourceFile)
           : new Set<string>();
-        const consumedFragmentNames = configuration.suppressNativeTemplateLocals
-          ? readCachedConsumedFragmentNames(
-              tsModule,
-              sourceFile,
-              consumedFragmentNamesCache,
-            )
-          : new Set<string>();
-
         return diagnostics.filter(
           (diagnostic) =>
             !isElfTemplateCommentDiagnostic(tsModule, sourceFile, diagnostic) &&
-            !(
-              configuration.suppressNativeTemplateLocals &&
-              isConsumedDefineFragmentDiagnostic(
-                sourceFile,
-                consumedFragmentNames,
-                diagnostic,
-              )
-            ) &&
             !(
               configuration.suppressNativeTemplateLocals &&
               isElfTemplateLocalDiagnostic(tsModule, sourceFile, templatePropNames, diagnostic)
@@ -175,14 +157,6 @@ const collectTemplateCommentRanges = (
     "defineStyle",
     ...collectElfuiImportNames(tsModule, sourceFile, "defineStyle"),
   ]);
-  const defineFragmentNames = new Set([
-    "defineFragment",
-    ...collectElfuiImportNames(tsModule, sourceFile, "defineFragment"),
-  ]);
-  const fragmentNames = new Set([
-    "fragment",
-    ...collectElfuiImportNames(tsModule, sourceFile, "fragment"),
-  ]);
   const ranges: SourceRange[] = [];
   const visitedTemplates = new Set<ts.TemplateLiteral>();
   const collectTemplate = (
@@ -238,15 +212,7 @@ const collectTemplateCommentRanges = (
           "/*",
           "*/",
         );
-      } else if (defineFragmentNames.has(name)) {
-        collectTemplate(readDefineFragmentTemplate(tsModule, node), "<!--", "-->");
       }
-    } else if (
-      tsModule.isTaggedTemplateExpression(node) &&
-      tsModule.isIdentifier(node.tag) &&
-      fragmentNames.has(node.tag.text)
-    ) {
-      collectTemplate(node.template, "<!--", "-->");
     }
 
     tsModule.forEachChild(node, visit);
@@ -287,101 +253,10 @@ const filterSemanticClassificationSpans = (
   return filtered;
 };
 
-const readCachedConsumedFragmentNames = (
-  tsModule: typeof ts,
-  sourceFile: ts.SourceFile,
-  cache: WeakMap<ts.SourceFile, Set<string>>,
-): Set<string> => {
-  const cached = cache.get(sourceFile);
-
-  if (cached) {
-    return cached;
-  }
-
-  const consumed = collectConsumedDefineFragmentNames(tsModule, sourceFile);
-  cache.set(sourceFile, consumed);
-  return consumed;
-};
-
-const collectConsumedDefineFragmentNames = (
-  tsModule: typeof ts,
-  sourceFile: ts.SourceFile,
-): Set<string> => {
-  const defineFragmentNames = collectElfuiImportNames(
-    tsModule,
-    sourceFile,
-    "defineFragment",
-  );
-  const defineHtmlNames = collectElfuiImportNames(tsModule, sourceFile, "defineHtml");
-  const declarations = new Set<string>();
-  const templates: ts.TemplateLiteral[] = [];
-
-  const visit = (node: ts.Node) => {
-    if (
-      tsModule.isVariableDeclaration(node) &&
-      tsModule.isIdentifier(node.name) &&
-      node.initializer
-    ) {
-      const initializer = unwrapPluginExpression(tsModule, node.initializer);
-
-      if (
-        tsModule.isCallExpression(initializer) &&
-        tsModule.isIdentifier(initializer.expression) &&
-        defineFragmentNames.has(initializer.expression.text)
-      ) {
-        declarations.add(node.name.text);
-        const template = readDefineFragmentTemplate(tsModule, initializer);
-
-        if (template) {
-          templates.push(template);
-        }
-      }
-    }
-
-    if (
-      tsModule.isCallExpression(node) &&
-      tsModule.isIdentifier(node.expression) &&
-      defineHtmlNames.has(node.expression.text)
-    ) {
-      const template = node.arguments[0];
-
-      if (template && tsModule.isTemplateLiteral(template)) {
-        templates.push(template);
-      }
-    }
-
-    tsModule.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
-
-  if (declarations.size === 0 || templates.length === 0) {
-    return new Set();
-  }
-
-  const consumed = new Set<string>();
-
-  templates.forEach((template) => {
-    const content = sourceFile.text
-      .slice(template.getStart(sourceFile) + 1, template.getEnd() - 1)
-      .replace(/<!--[\s\S]*?-->/g, "");
-
-    for (const match of content.matchAll(/<\s*([A-Za-z_$][\w$]*)\b/g)) {
-      const name = match[1];
-
-      if (name && declarations.has(name)) {
-        consumed.add(name);
-      }
-    }
-  });
-
-  return consumed;
-};
-
 const collectElfuiImportNames = (
   tsModule: typeof ts,
   sourceFile: ts.SourceFile,
-  importedName: "defineFragment" | "defineHtml" | "defineStyle" | "fragment",
+  importedName: "defineHtml" | "defineStyle",
 ): Set<string> => {
   const names = new Set<string>();
 
@@ -408,68 +283,6 @@ const collectElfuiImportNames = (
   });
 
   return names;
-};
-
-const readDefineFragmentTemplate = (
-  tsModule: typeof ts,
-  call: ts.CallExpression,
-): ts.TemplateLiteral | null => {
-  const render = call.arguments[0]
-    ? unwrapPluginExpression(tsModule, call.arguments[0])
-    : null;
-
-  if (
-    !render ||
-    (!tsModule.isArrowFunction(render) && !tsModule.isFunctionExpression(render))
-  ) {
-    return null;
-  }
-
-  if (!tsModule.isBlock(render.body)) {
-    const body = unwrapPluginExpression(tsModule, render.body);
-    return tsModule.isTemplateLiteral(body) ? body : null;
-  }
-
-  const statement =
-    render.body.statements.length === 1 ? render.body.statements[0] : undefined;
-  const expression =
-    statement && tsModule.isReturnStatement(statement) && statement.expression
-      ? unwrapPluginExpression(tsModule, statement.expression)
-      : null;
-
-  return expression && tsModule.isTemplateLiteral(expression) ? expression : null;
-};
-
-const unwrapPluginExpression = (
-  tsModule: typeof ts,
-  expression: ts.Expression,
-): ts.Expression => {
-  let current = expression;
-
-  while (
-    tsModule.isParenthesizedExpression(current) ||
-    tsModule.isAsExpression(current) ||
-    tsModule.isTypeAssertionExpression(current) ||
-    tsModule.isNonNullExpression(current) ||
-    tsModule.isSatisfiesExpression(current)
-  ) {
-    current = current.expression;
-  }
-
-  return current;
-};
-
-const isConsumedDefineFragmentDiagnostic = (
-  sourceFile: ts.SourceFile,
-  consumedFragmentNames: Set<string>,
-  diagnostic: ts.Diagnostic,
-): boolean => {
-  if (diagnostic.code !== unusedLocalCode || diagnostic.start === undefined) {
-    return false;
-  }
-
-  const name = readDiagnosticIdentifier(sourceFile.text, diagnostic);
-  return name !== null && consumedFragmentNames.has(name);
 };
 
 const isElfTemplateCommentDiagnostic = (
@@ -871,14 +684,6 @@ const readDefineHtmlTemplate = (
     !tsModule.isIdentifier(node.expression)
   ) {
     return null;
-  }
-
-  if (node.expression.text === "defineFragment") {
-    const fragmentTemplate = readDefineFragmentTemplate(tsModule, node);
-
-    return fragmentTemplate && tsModule.isTemplateExpression(fragmentTemplate)
-      ? fragmentTemplate
-      : null;
   }
 
   if (node.expression.text !== "defineHtml") {

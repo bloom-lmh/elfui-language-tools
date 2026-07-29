@@ -38,6 +38,15 @@ if (!grammar) {
   process.exit(1);
 }
 
+if (
+  grammar.embeddedLanguages?.["meta.embedded.block.html"] !== "html" ||
+  grammar.embeddedLanguages?.["meta.embedded.block.css"] !== "css"
+) {
+  console.error("ElfUI VS Code extension smoke check failed.");
+  console.error("Missing embedded HTML/CSS language mappings.");
+  process.exit(1);
+}
+
 if (!packageJson.browser || !Array.isArray(packageJson.extensionKind)) {
   console.error("ElfUI VS Code extension smoke check failed.");
   console.error("Missing browser extension entry or extension host declaration.");

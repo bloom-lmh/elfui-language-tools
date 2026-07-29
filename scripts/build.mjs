@@ -28,6 +28,8 @@ const baseConfig = {
     ".json": "json"
   },
   mainFields: ["module", "main"],
+  minifySyntax: !watchMode,
+  minifyWhitespace: !watchMode,
   platform: "node",
   sourcemap: true,
   target: "node20",

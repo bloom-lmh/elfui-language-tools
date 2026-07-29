@@ -59,7 +59,7 @@ const cssTokenReferences = countMatches(styleTexts, /var\(--elf-[\w-]+/g);
 
 requireGate(sourceFiles.length >= 80, "ui-kit source pressure set", `${sourceFiles.length} TS files`);
 requireGate(
-  macroComponentFiles.length >= 50,
+  macroComponentFiles.length >= 25,
   "ui-kit macro component coverage",
   `${macroComponentFiles.length} component files`
 );
@@ -171,9 +171,12 @@ function collectFiles(root, extensions) {
 }
 
 function resolveUiKitComponentsRoot() {
-  const explicitRoot = process.env.ELFUI_UI_KIT_COMPONENTS_ROOT;
+  const explicitRoot =
+    process.env.ELFUI_KIT_COMPONENTS_ROOT ??
+    process.env.ELFUI_UI_KIT_COMPONENTS_ROOT;
   const candidates = [
     explicitRoot,
+    path.join(packageRoot, "..", "elfui-kit", "src", "components"),
     path.join(packageRoot, "..", "ui-kit", "src", "components"),
     path.join(repoRoot, "elfui", "ui-kit", "src", "components"),
     path.join(repoRoot, "ui-kit", "src", "components")

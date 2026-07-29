@@ -10,6 +10,8 @@
 
 - 与用户交流使用简洁中文；提交使用 Conventional Commits。
 - 修改前先阅读相关源码、测试和 `docs/HANDOFF.md` / `docs/M10-PRODUCTIZATION.md`。
+- 每轮维护开始和结束时都要更新 `docs/HANDOFF.md`；至少同步当前工作、完成进度、
+  已知问题、后续事项、验证结果和发布状态，禁止让交接信息落后于代码。
 - 修改后至少运行对应测试；涉及扩展行为时运行 `pnpm smoke:host`，打包交付时运行 `pnpm package:vsix`。
 - 修改后保持 `pnpm test`、`pnpm typecheck`、`pnpm smoke` 和 `pnpm verify:m10` 可通过。
 - VSIX 输出位于 `.local-vsix/`，版本必须与根 `package.json` 及 TypeScript 插件 `package.json` 保持一致。

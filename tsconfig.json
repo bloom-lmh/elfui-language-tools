@@ -11,6 +11,8 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "resolveJsonModule": true,
     "noEmit": true
   }

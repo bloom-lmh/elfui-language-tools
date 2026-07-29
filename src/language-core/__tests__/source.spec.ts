@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { elfuiDemoFixture } from "../__fixtures__/elfuiDemo";
-import { analyzeElfSource, isInsideEmbeddedRegion } from "../source";
+import { analyzeElfSource } from "../source";
 
 describe("analyzeElfSource", () => {
   it("ignores legacy chain builder components", () => {
@@ -207,93 +207,15 @@ describe("analyzeElfSource", () => {
     );
   });
 
-  it("consumes compiler metadata v2 for named and inline Fragments", () => {
+  it("does not recognize removed Fragment APIs as embedded regions", () => {
     const source = `
-      import { defineFragment, defineHtml, fragment } from "@elfui/core";
-
-      interface CardProps {
-        label: string;
-        selected?: boolean;
-      }
-
-      const SummaryCard = defineFragment<CardProps>(
-        ({ label, selected }) => \`
-          <article :class=\${selected ? "selected" : ""}>\${label}</article>
-        \`
-      );
-
-      const items = [{ label: "一" }];
-
-      export const Dashboard = defineHtml(\`
-        <main>
-          <SummaryCard label="总计" />
-          \${items.map((item, index) => fragment\`
-            <span>\${index}: \${item.label}</span>
-          \`)}
-        </main>
-      \`);
+      import { defineFragment, fragment } from "@elfui/core";
+      const Card = defineFragment(() => \`<article>Legacy</article>\`);
+      const footer = fragment\`<footer>Legacy</footer>\`;
     `;
-    const result = analyzeElfSource(source, {
-      fileName: "E:\\项目\\组件库\\汇总.ts"
-    });
-    const component = result.components[0];
-    const named = component?.fragments.find((item) => item.name === "SummaryCard");
-    const inlineList = component?.fragments.find((item) => item.kind === "inline-list");
-    const fragmentUse = component?.uses.find((item) => item.localName === "SummaryCard");
+    const result = analyzeElfSource(source, { fileName: "legacy.ts" });
 
-    expect(result.metadata).toMatchObject({
-      compilerProtocol: 1,
-      schemaVersion: 2
-    });
-    expect(result.metadata?.sourceId).toContain("项目/组件库/汇总.ts");
-    expect(named).toMatchObject({
-      identity: "not-applicable",
-      kind: "named",
-      props: ["label", "selected"],
-      propsType: "CardProps",
-      scopeNames: ["label", "selected"]
-    });
-    expect(named?.source.start).toBeGreaterThan(0);
-    expect(inlineList).toMatchObject({
-      identity: "index",
-      scopeNames: ["item", "index"]
-    });
-    expect(fragmentUse).toMatchObject({
-      props: ["label", "selected"],
-      propsType: "CardProps",
-      source: "fragment"
-    });
-    expect(component?.templates.map((region) => region.method)).toEqual(
-      expect.arrayContaining(["defineHtml", "defineFragment", "fragment"])
-    );
-  });
-
-  it("collects a named Fragment returned from a block body", () => {
-    const source = `
-      import { defineFragment, defineHtml } from "@elfui/core";
-
-      interface CardProps {
-        item: { label: string };
-      }
-
-      const IndexCard = defineFragment<CardProps>(({ item }) => {
-        return \`
-          <div class="summary-card">\${item.label}</div>
-        \`;
-      });
-
-      export const Dashboard = defineHtml(\`<IndexCard :item=\${item} />\`);
-    `;
-    const result = analyzeElfSource(source, { fileName: "Dashboard.ts" });
-    const component = result.components[0];
-    const fragment = component?.fragments.find((item) => item.name === "IndexCard");
-    const region = component?.templates.find((item) => item.method === "defineFragment");
-
-    expect(fragment).toMatchObject({
-      kind: "named",
-      props: ["item"],
-      scopeNames: ["item"]
-    });
-    expect(region?.content).toContain('<div class="summary-card">');
+    expect(result.isMacroComponent).toBe(false);
+    expect(result.components).toEqual([]);
   });
 });

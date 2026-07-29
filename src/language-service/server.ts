@@ -3,19 +3,32 @@ import { performance } from "node:perf_hooks";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as ts from "typescript";
+import { getLanguageService as getHtmlLanguageService, type Node as HTMLNode } from "vscode-html-languageservice";
 import {
   FileChangeType,
   SymbolKind,
   TextDocuments,
   TextDocumentSyncKind,
   type Connection,
+  type DidChangeWorkspaceFoldersParams,
   type FileEvent,
   type InitializeResult,
-  type SymbolInformation
+  type Location,
+  type Range,
+  type SymbolInformation,
+  type TextEdit,
+  type WorkspaceEdit
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 import { analyzeElfSource, type ComponentMeta } from "../language-core";
+import {
+  areWorkspaceIndexOptionsEqual,
+  defaultWorkspaceIndexOptions,
+  readLanguageServiceOptions,
+  readWorkspaceIndexOptions,
+  type WorkspaceIndexOptions
+} from "./configuration";
 import {
   createElfCompletionList,
   createElfColorPresentations,
@@ -44,32 +57,37 @@ import {
   type ElfProjectComponentEmit,
   type ElfProjectComponentProp,
   type ElfProjectComponentSlotScope,
-  type ElfProjectComponentSymbol,
-  type ElfTemplateBindingStyle
+  type ElfProjectComponentSymbol
 } from "./languageService";
+import {
+  bumpWorkspaceIndexRevision,
+  createLanguageServiceOptionsForDocument,
+  createWorkspaceComponentIndex,
+  documentUriToFileName,
+  type GeneratedComponentMetadata,
+  type IndexedProjectComponent,
+  type IndexedTemplateReference,
+  type WorkspaceComponentIndex,
+  type WorkspaceIndexStats
+} from "./workspaceIndex";
 
-export interface IndexedProjectComponent extends ElfProjectComponent {
-  fileName: string;
-  packageImportPath?: string;
-  uri: string;
-}
-
-export interface WorkspaceIndexOptions {
-  indexDebounceMs: number;
-  maxScanFiles: number;
-  perfLogging: boolean;
-}
-
-export interface WorkspaceIndexStats {
-  durationMs: number;
-  filesIndexed: number;
-  filesRemoved: number;
-  filesReused: number;
-  filesScanned: number;
-  filesSkipped: number;
-  reason: string;
-  truncated: boolean;
-}
+export {
+  defaultWorkspaceIndexOptions,
+  readLanguageServiceOptions,
+  readWorkspaceIndexOptions
+} from "./configuration";
+export {
+  createLanguageServiceOptionsForDocument,
+  createWorkspaceComponentIndex
+} from "./workspaceIndex";
+export type {
+  GeneratedComponentMetadata,
+  IndexedProjectComponent,
+  IndexedTemplateReference,
+  WorkspaceComponentIndex,
+  WorkspaceIndexOptions,
+  WorkspaceIndexStats
+};
 
 export interface FeaturePerformanceStats {
   averageDurationMs: number;
@@ -90,75 +108,8 @@ export interface LanguageServerPerformanceSummary {
   index: WorkspaceIndexPerformanceSample[];
 }
 
-export interface GeneratedComponentMetadata {
-  emits: string[];
-  exportName: "default" | string;
-  fileName: string;
-  localName: string;
-  props: Array<string | { default?: boolean | null | number | string; name: string; type?: string }>;
-  slotScopes: ElfProjectComponentSlotScope[];
-  slots: string[];
-  tagName?: string;
-}
-
-interface WorkspaceIndexFileCacheEntry {
-  components: IndexedProjectComponent[];
-  mtimeMs: number;
-  size: number;
-}
-
-export interface WorkspaceComponentIndex {
-  componentsByUri: Map<string, IndexedProjectComponent[]>;
-  fileCacheByUri: Map<string, WorkspaceIndexFileCacheEntry>;
-  options: WorkspaceIndexOptions;
-  revision: number;
-}
-
-export const defaultWorkspaceIndexOptions: WorkspaceIndexOptions = {
-  indexDebounceMs: 250,
-  maxScanFiles: 1000,
-  perfLogging: false
-};
-
 const performanceSampleLimit = 20;
-const componentMapRevisions = new WeakMap<
-  Map<string, IndexedProjectComponent[]>,
-  number
->();
-const documentLanguageServiceOptionsCache = new WeakMap<
-  Map<string, IndexedProjectComponent[]>,
-  Map<
-    string,
-    {
-      baseOptions: ElfLanguageServiceOptions;
-      options: ElfLanguageServiceOptions;
-      revision: number;
-    }
-  >
->();
-
-export const createWorkspaceComponentIndex = (
-  options: Partial<WorkspaceIndexOptions> = {}
-): WorkspaceComponentIndex => {
-  const componentsByUri = new Map<string, IndexedProjectComponent[]>();
-
-  componentMapRevisions.set(componentsByUri, 0);
-
-  return {
-    componentsByUri,
-    fileCacheByUri: new Map(),
-    options: {
-      ...defaultWorkspaceIndexOptions,
-      ...options
-    },
-    revision: 0
-  };
-};
-
-const bumpWorkspaceIndexRevision = (index: WorkspaceComponentIndex) => {
-  index.revision += 1;
-  componentMapRevisions.set(index.componentsByUri, index.revision);
-};
+const workspaceHtmlLanguageService = getHtmlLanguageService();
 
 export const startElfLanguageServer = (connection: Connection) => {
   const documents = new TextDocuments(TextDocument);
@@ -169,6 +120,8 @@ export const startElfLanguageServer = (connection: Connection) => {
   const pendingDocumentIndexUpdates = new Map<string, TextDocument>();
   let pendingDocumentIndexTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingWorkspaceIndexTimer: ReturnType<typeof setTimeout> | undefined;
+  let workspaceIndexRebuild: Promise<void> | undefined;
+  let queuedWorkspaceIndexReason: string | undefined;
   const pendingDiagnostics = new Map<string, TextDocument>();
   let pendingDiagnosticsTimer: ReturnType<typeof setTimeout> | undefined;
   const pendingWatchedFileChanges = new Map<string, FileEvent>();
@@ -229,12 +182,33 @@ export const startElfLanguageServer = (connection: Connection) => {
     documents.all().forEach((document) => updateIndexedDocument(document, workspaceIndex));
   };
 
-  const rebuildWorkspaceIndexNow = (reason: string) => {
-    const stats = rebuildWorkspaceComponentIndex(workspaceRoots, workspaceIndex, reason);
+  const rebuildWorkspaceIndexNow = async (reason: string): Promise<void> => {
+    if (workspaceIndexRebuild) {
+      queuedWorkspaceIndexReason = reason;
+      return workspaceIndexRebuild;
+    }
 
-    recordWorkspaceIndexStats(stats);
-    syncOpenDocumentsToIndex();
-    refreshOpenDocumentDiagnostics();
+    workspaceIndexRebuild = (async () => {
+      let nextReason: string | undefined = reason;
+
+      while (nextReason) {
+        queuedWorkspaceIndexReason = undefined;
+        const stats = await rebuildWorkspaceComponentIndexAsync(
+          workspaceRoots,
+          workspaceIndex,
+          nextReason
+        );
+
+        recordWorkspaceIndexStats(stats);
+        syncOpenDocumentsToIndex();
+        refreshOpenDocumentDiagnostics();
+        nextReason = queuedWorkspaceIndexReason;
+      }
+    })().finally(() => {
+      workspaceIndexRebuild = undefined;
+    });
+
+    return workspaceIndexRebuild;
   };
 
   const scheduleWorkspaceIndexRebuild = (reason: string) => {
@@ -244,7 +218,9 @@ export const startElfLanguageServer = (connection: Connection) => {
 
     pendingWorkspaceIndexTimer = setTimeout(() => {
       pendingWorkspaceIndexTimer = undefined;
-      rebuildWorkspaceIndexNow(reason);
+      void rebuildWorkspaceIndexNow(reason).catch((error) => {
+        connection.console.error(`[ElfUI] workspace index failed: ${String(error)}`);
+      });
     }, workspaceIndex.options.indexDebounceMs);
   };
 
@@ -302,7 +278,11 @@ export const startElfLanguageServer = (connection: Connection) => {
     const stats = applyWatchedFileChangesToIndex(changes, workspaceIndex, "watch");
 
     recordWorkspaceIndexStats(stats);
-    scheduleWorkspaceIndexRebuild("watch");
+    if (changes.some((change) => isWorkspaceMetadataChange(change.uri))) {
+      scheduleWorkspaceIndexRebuild("metadata");
+    } else {
+      refreshOpenDocumentDiagnostics();
+    }
   };
 
   const scheduleWatchedFileChanges = (changes: FileEvent[]) => {
@@ -324,9 +304,11 @@ export const startElfLanguageServer = (connection: Connection) => {
     languageServiceOptions = readLanguageServiceOptions(params.initializationOptions);
     workspaceIndex.options = readWorkspaceIndexOptions(params.initializationOptions);
     workspaceRoots = readWorkspaceRoots(params.workspaceFolders, params.rootUri ?? undefined);
-    recordWorkspaceIndexStats(
-      rebuildWorkspaceComponentIndex(workspaceRoots, workspaceIndex, "initialize")
-    );
+    queueMicrotask(() => {
+      void rebuildWorkspaceIndexNow("initialize").catch((error) => {
+        connection.console.error(`[ElfUI] initial workspace index failed: ${String(error)}`);
+      });
+    });
 
     const semanticTokensProvider = languageServiceOptions.semanticTokens?.enabled
       ? {
@@ -367,6 +349,13 @@ export const startElfLanguageServer = (connection: Connection) => {
         hoverProvider: true,
         textDocumentSync: TextDocumentSyncKind.Incremental,
         workspaceSymbolProvider: true
+        ,
+        workspace: {
+          workspaceFolders: {
+            changeNotifications: true,
+            supported: true
+          }
+        }
       }
     };
   });
@@ -374,7 +363,7 @@ export const startElfLanguageServer = (connection: Connection) => {
   connection.onDidChangeConfiguration((change) => {
     languageServiceOptions = readLanguageServiceOptions(change.settings);
     const nextWorkspaceIndexOptions = readWorkspaceIndexOptions(change.settings);
-    const indexOptionsChanged = !isWorkspaceIndexOptionsEqual(
+    const indexOptionsChanged = !areWorkspaceIndexOptionsEqual(
       workspaceIndex.options,
       nextWorkspaceIndexOptions
     );
@@ -390,6 +379,25 @@ export const startElfLanguageServer = (connection: Connection) => {
   connection.onDidChangeWatchedFiles((params) => {
     scheduleWatchedFileChanges(params.changes);
   });
+
+  connection.onNotification(
+    "workspace/didChangeWorkspaceFolders",
+    (params: DidChangeWorkspaceFoldersParams) => {
+      const roots = new Set(workspaceRoots.map((root) => path.resolve(root)));
+
+      params.event.removed.forEach((folder) => {
+        const [root] = readWorkspaceRoots([folder], undefined);
+        if (root) roots.delete(path.resolve(root));
+      });
+      params.event.added.forEach((folder) => {
+        const [root] = readWorkspaceRoots([folder], undefined);
+        if (root) roots.add(path.resolve(root));
+      });
+
+      workspaceRoots = [...roots];
+      scheduleWorkspaceIndexRebuild("workspace-folders");
+    }
+  );
 
   connection.onRequest("elfui/getPerformanceSummary", (): LanguageServerPerformanceSummary => ({
     completion: {
@@ -474,7 +482,7 @@ export const startElfLanguageServer = (connection: Connection) => {
       return [];
     }
 
-    return createElfReferences(
+    const references = createElfReferences(
       document,
       params.position,
       createLanguageServiceOptionsForDocument(
@@ -483,6 +491,11 @@ export const startElfLanguageServer = (connection: Connection) => {
         document.uri
       )
     );
+
+    return appendWorkspaceReferences(references, indexedComponentsByUri, {
+      position: params.position,
+      uri: document.uri
+    });
   });
 
   connection.onDocumentHighlight((params) => {
@@ -618,7 +631,7 @@ export const startElfLanguageServer = (connection: Connection) => {
       return null;
     }
 
-    return createElfRenameEdit(
+    const edit = createElfRenameEdit(
       document,
       params.position,
       params.newName,
@@ -628,6 +641,20 @@ export const startElfLanguageServer = (connection: Connection) => {
         document.uri
       )
     );
+
+    const workspaceEdit = appendWorkspaceRenameEdits(
+      edit ?? { changes: {} },
+      params.newName,
+      indexedComponentsByUri,
+      {
+        position: params.position,
+        uri: document.uri
+      }
+    );
+
+    return Object.values(workspaceEdit.changes ?? {}).some((edits) => edits.length > 0)
+      ? workspaceEdit
+      : null;
   });
 
   connection.languages.inlayHint.on((params) => {
@@ -777,73 +804,6 @@ const readFeaturePerformanceStats = (
   maxDurationMs: stats.maxDurationMs
 });
 
-export const readLanguageServiceOptions = (settings: unknown): ElfLanguageServiceOptions => {
-  const record = isRecord(settings) ? settings : {};
-  const elfui = isRecord(record.elfui) ? record.elfui : record;
-  const languageFeatures = isRecord(elfui.languageFeatures) ? elfui.languageFeatures : elfui;
-  const completion = isRecord(languageFeatures.completion) ? languageFeatures.completion : {};
-  const semanticTokens = isRecord(languageFeatures.semanticTokens)
-    ? languageFeatures.semanticTokens
-    : {};
-  const completionOptions: NonNullable<ElfLanguageServiceOptions["completion"]> = {};
-  const eventBindingStyle = readBindingStyle(completion.eventBindingStyle);
-  const templateBindingStyle = readBindingStyle(completion.templateBindingStyle);
-
-  if (eventBindingStyle) {
-    completionOptions.eventBindingStyle = eventBindingStyle;
-  }
-
-  if (templateBindingStyle) {
-    completionOptions.templateBindingStyle = templateBindingStyle;
-  }
-
-  return {
-    completion: completionOptions,
-    semanticTokens: {
-      enabled: semanticTokens.enabled === true
-    }
-  };
-};
-
-const readBindingStyle = (value: unknown): ElfTemplateBindingStyle | undefined =>
-  value === "expression" || value === "quoted" ? value : undefined;
-
-export const readWorkspaceIndexOptions = (settings: unknown): WorkspaceIndexOptions => {
-  const record = isRecord(settings) ? settings : {};
-  const elfui = isRecord(record.elfui) ? record.elfui : record;
-  const languageFeatures = isRecord(elfui.languageFeatures) ? elfui.languageFeatures : elfui;
-  const workspace = isRecord(languageFeatures.workspace) ? languageFeatures.workspace : {};
-
-  return {
-    indexDebounceMs: readNonNegativeInteger(
-      workspace.indexDebounceMs,
-      defaultWorkspaceIndexOptions.indexDebounceMs
-    ),
-    maxScanFiles: readPositiveInteger(
-      workspace.maxScanFiles,
-      defaultWorkspaceIndexOptions.maxScanFiles
-    ),
-    perfLogging:
-      typeof workspace.perfLogging === "boolean"
-        ? workspace.perfLogging
-        : defaultWorkspaceIndexOptions.perfLogging
-  };
-};
-
-const isWorkspaceIndexOptionsEqual = (
-  left: WorkspaceIndexOptions,
-  right: WorkspaceIndexOptions
-): boolean =>
-  left.indexDebounceMs === right.indexDebounceMs &&
-  left.maxScanFiles === right.maxScanFiles &&
-  left.perfLogging === right.perfLogging;
-
-const readPositiveInteger = (value: unknown, fallback: number): number =>
-  typeof value === "number" && Number.isFinite(value) && value >= 1 ? Math.floor(value) : fallback;
-
-const readNonNegativeInteger = (value: unknown, fallback: number): number =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
-
 const createWorkspaceSymbols = (
   query: string,
   componentsByUri: Map<string, IndexedProjectComponent[]>
@@ -919,6 +879,220 @@ const symbolKindForProjectSymbol = (kind: ElfProjectComponentSymbol["kind"]): Sy
       return SymbolKind.Interface;
   }
 };
+
+interface IndexedRenameTarget {
+  component: IndexedProjectComponent;
+  kind: ElfProjectComponentSymbol["kind"];
+  name: string;
+}
+
+interface IndexedRequestContext {
+  position: Range["start"];
+  uri: string;
+}
+
+export const appendWorkspaceReferences = (
+  base: Location[],
+  componentsByUri: Map<string, IndexedProjectComponent[]>,
+  request?: IndexedRequestContext
+): Location[] => {
+  const target =
+    findIndexedRenameTarget(base, componentsByUri) ??
+    findIndexedRequestTarget(request, componentsByUri);
+  if (!target) return base;
+
+  const seen = new Set(
+    base.map(
+      (location) =>
+        `${location.uri}:${location.range.start.line}:${location.range.start.character}:${location.range.end.line}:${location.range.end.character}`
+    )
+  );
+  const result = [...base];
+
+  collectMatchingIndexedReferences(target, componentsByUri).forEach((reference) => {
+    const key = `${reference.uri}:${reference.range.start.line}:${reference.range.start.character}:${reference.range.end.line}:${reference.range.end.character}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push({ range: reference.range, uri: reference.uri });
+  });
+
+  return result;
+};
+
+export const appendWorkspaceRenameEdits = (
+  edit: WorkspaceEdit,
+  newName: string,
+  componentsByUri: Map<string, IndexedProjectComponent[]>,
+  request?: IndexedRequestContext
+): WorkspaceEdit => {
+  const locations = Object.entries(edit.changes ?? {}).flatMap(([uri, edits]) =>
+    edits.map((item) => ({ range: item.range, uri }))
+  );
+  const target =
+    findIndexedRenameTarget(locations, componentsByUri) ??
+    findIndexedRequestTarget(request, componentsByUri);
+  if (!target) return edit;
+
+  const changes: Record<string, TextEdit[]> = { ...(edit.changes ?? {}) };
+  const seen = new Set(
+    Object.entries(changes).flatMap(([uri, edits]) =>
+      edits.map(
+        (item) =>
+          `${uri}:${item.range.start.line}:${item.range.start.character}:${item.range.end.line}:${item.range.end.character}`
+      )
+    )
+  );
+
+  collectMatchingIndexedReferences(target, componentsByUri)
+    .filter((reference) => reference.renameWithTarget)
+    .forEach((reference) => {
+      const key = `${reference.uri}:${reference.range.start.line}:${reference.range.start.character}:${reference.range.end.line}:${reference.range.end.character}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      (changes[reference.uri] ??= []).push({
+        newText: newName,
+        range: reference.range
+      });
+    });
+
+  return { ...edit, changes };
+};
+
+const findIndexedRequestTarget = (
+  request: IndexedRequestContext | undefined,
+  componentsByUri: Map<string, IndexedProjectComponent[]>
+): IndexedRenameTarget | null => {
+  if (!request) return null;
+
+  const reference = (componentsByUri.get(request.uri)?.[0]?.templateReferences ?? []).find(
+    (item) => isPositionInRange(request.position, item.range)
+  );
+  if (!reference) return null;
+
+  for (const components of componentsByUri.values()) {
+    for (const component of components) {
+      if (
+        isIndexedReferenceTargetMatch(reference, component) &&
+        isIndexedComponentContractMatch(reference, component)
+      ) {
+        return {
+          component,
+          kind: reference.kind,
+          name:
+            reference.kind === "component"
+              ? component.exportName === "default"
+                ? component.localName
+                : component.exportName
+              : reference.name
+        };
+      }
+    }
+  }
+
+  return null;
+};
+
+const isPositionInRange = (position: Range["start"], range: Range): boolean =>
+  (position.line > range.start.line ||
+    (position.line === range.start.line && position.character >= range.start.character)) &&
+  (position.line < range.end.line ||
+    (position.line === range.end.line && position.character <= range.end.character));
+
+const isIndexedComponentContractMatch = (
+  reference: IndexedTemplateReference,
+  component: IndexedProjectComponent
+): boolean => {
+  switch (reference.kind) {
+    case "component":
+      return true;
+    case "emit":
+      return component.emits?.includes(reference.name) ?? false;
+    case "prop":
+      return component.props?.includes(reference.name) ?? false;
+    case "slot":
+      return component.slots?.includes(reference.name) ?? false;
+  }
+};
+
+const findIndexedRenameTarget = (
+  locations: Location[],
+  componentsByUri: Map<string, IndexedProjectComponent[]>
+): IndexedRenameTarget | null => {
+  for (const location of locations) {
+    for (const component of componentsByUri.get(location.uri) ?? []) {
+      if (component.definition && rangesEqual(component.definition, location.range)) {
+        return {
+          component,
+          kind: "component",
+          name: component.exportName === "default" ? component.localName : component.exportName
+        };
+      }
+
+      const symbol = component.symbols?.find((item) =>
+        rangesEqual(item.range, location.range)
+      );
+      if (symbol) {
+        return {
+          component,
+          kind: symbol.kind,
+          name: symbol.name
+        };
+      }
+    }
+  }
+
+  return null;
+};
+
+const collectMatchingIndexedReferences = (
+  target: IndexedRenameTarget,
+  componentsByUri: Map<string, IndexedProjectComponent[]>
+): Array<IndexedTemplateReference & { uri: string }> => {
+  const references: Array<IndexedTemplateReference & { uri: string }> = [];
+
+  componentsByUri.forEach((components, uri) => {
+    const fileReferences = components[0]?.templateReferences ?? [];
+    fileReferences.forEach((reference) => {
+      if (
+        reference.kind === target.kind &&
+        (target.kind === "component" || reference.name === target.name) &&
+        isIndexedReferenceTargetMatch(reference, target.component)
+      ) {
+        references.push({ ...reference, uri });
+      }
+    });
+  });
+
+  return references;
+};
+
+const isIndexedReferenceTargetMatch = (
+  reference: IndexedTemplateReference,
+  component: IndexedProjectComponent
+): boolean => {
+  if (reference.targetSource) {
+    const componentFile = normalizeIndexedModulePath(component.fileName);
+    const packageSource = component.packageImportPath ?? component.importPath;
+    return (
+      reference.targetSource === componentFile ||
+      (Boolean(packageSource) && reference.targetSource === packageSource)
+    );
+  }
+
+  const aliases = new Set([
+    component.localName,
+    component.tagName,
+    component.exportName === "default" ? undefined : component.exportName
+  ]);
+
+  return aliases.has(reference.targetName);
+};
+
+const rangesEqual = (left: Range, right: Range): boolean =>
+  left.start.line === right.start.line &&
+  left.start.character === right.start.character &&
+  left.end.line === right.end.line &&
+  left.end.character === right.end.character;
 
 const createZeroRange = () => ({
   end: { character: 0, line: 0 },
@@ -1000,6 +1174,71 @@ export const rebuildWorkspaceComponentIndex = (
 
   stats.durationMs = performance.now() - start;
 
+  return stats;
+};
+
+export const rebuildWorkspaceComponentIndexAsync = async (
+  workspaceRoots: string[],
+  index: WorkspaceComponentIndex,
+  reason = "rebuild"
+): Promise<WorkspaceIndexStats> => {
+  const start = performance.now();
+  const seenUris = new Set<string>();
+  const stats: WorkspaceIndexStats = {
+    durationMs: 0,
+    filesIndexed: 0,
+    filesRemoved: 0,
+    filesReused: 0,
+    filesScanned: 0,
+    filesSkipped: 0,
+    reason,
+    truncated: false
+  };
+
+  for (const root of workspaceRoots) {
+    const scan = await scanSourceFilesAsync(root, index.options);
+    const packageMetadataFiles = scanPackageComponentMetadataFiles(root);
+
+    stats.filesScanned += scan.files.length;
+    stats.truncated ||= scan.truncated;
+
+    for (let fileIndex = 0; fileIndex < scan.files.length; fileIndex += 1) {
+      const fileName = scan.files[fileIndex]!;
+      const uri = pathToFileURL(fileName).toString();
+      const result = await updateIndexedFileAsync(fileName, index);
+
+      seenUris.add(uri);
+      incrementIndexStats(stats, result);
+
+      if (fileIndex > 0 && fileIndex % 32 === 0) {
+        await yieldToEventLoop();
+      }
+    }
+
+    stats.filesScanned += packageMetadataFiles.length;
+    for (const metadataFile of packageMetadataFiles) {
+      const uri = pathToFileURL(metadataFile.fileName).toString();
+      const result = updateIndexedPackageMetadataFile(metadataFile, index);
+
+      seenUris.add(uri);
+      incrementIndexStats(stats, result);
+    }
+  }
+
+  if (!stats.truncated) {
+    [...index.componentsByUri.keys()].forEach((uri) => {
+      if (seenUris.has(uri) || documentsAreUntitled(uri)) {
+        return;
+      }
+
+      index.componentsByUri.delete(uri);
+      index.fileCacheByUri.delete(uri);
+      bumpWorkspaceIndexRevision(index);
+      stats.filesRemoved += 1;
+    });
+  }
+
+  stats.durationMs = performance.now() - start;
   return stats;
 };
 
@@ -1098,6 +1337,40 @@ export const updateIndexedFile = (
     return "indexed";
   } catch {
     // Ignore unreadable files; the index is a best-effort editing aid.
+    return "skipped";
+  }
+};
+
+const updateIndexedFileAsync = async (
+  fileName: string,
+  index: WorkspaceComponentIndex
+): Promise<"indexed" | "reused" | "skipped"> => {
+  if (!isIndexableSourceFile(fileName)) {
+    return "skipped";
+  }
+
+  try {
+    const uri = pathToFileURL(fileName).toString();
+    const stat = await fs.promises.stat(fileName);
+    const cached = index.fileCacheByUri.get(uri);
+
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      index.componentsByUri.set(uri, cached.components);
+      return "reused";
+    }
+
+    const source = await fs.promises.readFile(fileName, "utf8");
+    const components = readIndexedComponents(source, fileName, uri);
+
+    index.componentsByUri.set(uri, components);
+    index.fileCacheByUri.set(uri, {
+      components,
+      mtimeMs: stat.mtimeMs,
+      size: stat.size
+    });
+    bumpWorkspaceIndexRevision(index);
+    return "indexed";
+  } catch {
     return "skipped";
   }
 };
@@ -1673,6 +1946,64 @@ export const scanSourceFiles = (
   return { files, truncated };
 };
 
+export const scanSourceFilesAsync = async (
+  root: string,
+  options: WorkspaceIndexOptions = defaultWorkspaceIndexOptions
+): Promise<{ files: string[]; truncated: boolean }> => {
+  const files: string[] = [];
+  const directories = [root];
+  let truncated = false;
+  let visitedDirectories = 0;
+
+  while (directories.length > 0 && files.length < options.maxScanFiles) {
+    const directory = directories.pop()!;
+
+    if (isIgnoredDirectory(directory)) {
+      continue;
+    }
+
+    let entries: fs.Dirent[];
+
+    try {
+      entries = await fs.promises.readdir(directory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    const childDirectories: string[] = [];
+
+    for (const entry of entries) {
+      const entryPath = path.join(directory, entry.name);
+
+      if (entry.isDirectory()) {
+        childDirectories.push(entryPath);
+      } else if (entry.isFile() && isIndexableSourceFile(entryPath)) {
+        files.push(entryPath);
+        if (files.length >= options.maxScanFiles) {
+          truncated = true;
+          break;
+        }
+      }
+    }
+
+    directories.push(...childDirectories.reverse());
+    visitedDirectories += 1;
+    if (visitedDirectories % 16 === 0) {
+      await yieldToEventLoop();
+    }
+  }
+
+  if (directories.length > 0) {
+    truncated = true;
+  }
+
+  return { files, truncated };
+};
+
+const yieldToEventLoop = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
+
 const incrementIndexStats = (
   stats: WorkspaceIndexStats,
   result: "indexed" | "reused" | "skipped"
@@ -1709,6 +2040,9 @@ const isIgnoredDirectory = (directory: string): boolean => {
 const isIndexableSourceFile = (fileName: string): boolean =>
   /\.(?:elf\.)?[cm]?[jt]sx?$/.test(fileName.replace(/\\/g, "/"));
 
+const isWorkspaceMetadataChange = (uri: string): boolean =>
+  /(?:^|\/)(?:package\.json|[^/]*elfui[^/]*\.json)$/i.test(uri.replace(/\\/g, "/"));
+
 const readIndexedComponents = (
   source: string,
   fileName: string,
@@ -1718,8 +2052,13 @@ const readIndexedComponents = (
   const exports = collectStaticExports(source, fileName);
   const document = TextDocument.create(uri, readLanguageId(fileName), 0, source);
   const sourceFile = createTsSourceFile(source, fileName);
+  const templateReferences = collectIndexedTemplateReferences(
+    document,
+    sourceFile,
+    analysis.components
+  );
 
-  return analysis.components.flatMap((component) => {
+  const indexedComponents = analysis.components.flatMap((component) => {
     const exportName = readComponentExportName(component, exports);
 
     if (!exportName) {
@@ -1762,6 +2101,398 @@ const readIndexedComponents = (
     }
 
     return [indexedComponent];
+  });
+
+  if (indexedComponents[0]) {
+    indexedComponents[0].templateReferences = templateReferences;
+  }
+
+  return indexedComponents;
+};
+
+interface IndexedImportBinding {
+  importedName: string;
+  localName: string;
+  source: string;
+}
+
+interface IndexedTagTarget {
+  renameWithTarget: boolean;
+  source?: string;
+  targetName: string;
+}
+
+const collectIndexedTemplateReferences = (
+  document: TextDocument,
+  sourceFile: ts.SourceFile,
+  components: ComponentMeta[]
+): IndexedTemplateReference[] => {
+  const imports = collectIndexedImportBindings(document, sourceFile);
+  const references: IndexedTemplateReference[] = collectIndexedImportReferences(
+    document,
+    sourceFile,
+    components
+  );
+
+  components.forEach((component) => {
+    component.templates.forEach((region) => {
+      const virtualDocument = TextDocument.create(
+        `${document.uri}#elfui-template`,
+        "html",
+        document.version,
+        region.content
+      );
+      const htmlDocument = workspaceHtmlLanguageService.parseHTMLDocument(virtualDocument);
+
+      const visit = (nodes: HTMLNode[], parentTarget?: IndexedTagTarget) => {
+        nodes.forEach((node) => {
+          const target = node.tag
+            ? resolveIndexedTagTarget(node.tag, component, imports)
+            : undefined;
+
+          if (node.tag && target) {
+            appendIndexedTagReferences(
+              references,
+              document,
+              region.contentStart,
+              region.content,
+              node,
+              target
+            );
+            appendIndexedAttributeReferences(
+              references,
+              document,
+              region.contentStart,
+              region.content,
+              node,
+              target,
+              parentTarget
+            );
+          } else if (node.tag && parentTarget) {
+            appendIndexedAttributeReferences(
+              references,
+              document,
+              region.contentStart,
+              region.content,
+              node,
+              undefined,
+              parentTarget
+            );
+          }
+
+          visit(node.children, target ?? parentTarget);
+        });
+      };
+
+      visit(htmlDocument.roots);
+    });
+  });
+
+  return dedupeIndexedTemplateReferences(references);
+};
+
+const collectIndexedImportBindings = (
+  document: TextDocument,
+  sourceFile: ts.SourceFile
+): Map<string, IndexedImportBinding> => {
+  const bindings = new Map<string, IndexedImportBinding>();
+
+  sourceFile.statements.forEach((statement) => {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !statement.importClause
+    ) {
+      return;
+    }
+
+    const source = resolveIndexedImportSource(
+      document.uri,
+      statement.moduleSpecifier.text
+    );
+    const defaultImport = statement.importClause.name;
+
+    if (defaultImport) {
+      bindings.set(defaultImport.text, {
+        importedName: "default",
+        localName: defaultImport.text,
+        source
+      });
+    }
+
+    const namedBindings = statement.importClause.namedBindings;
+    if (!namedBindings || !ts.isNamedImports(namedBindings)) {
+      return;
+    }
+
+    namedBindings.elements.forEach((element) => {
+      bindings.set(element.name.text, {
+        importedName: element.propertyName?.text ?? element.name.text,
+        localName: element.name.text,
+        source
+      });
+    });
+  });
+
+  return bindings;
+};
+
+const collectIndexedImportReferences = (
+  document: TextDocument,
+  sourceFile: ts.SourceFile,
+  components: ComponentMeta[]
+): IndexedTemplateReference[] => {
+  const references: IndexedTemplateReference[] = [];
+  const registeredNames = new Set(
+    components.flatMap((component) =>
+      component.uses.flatMap((item) =>
+        [item.expression, item.localName].filter(isString)
+      )
+    )
+  );
+
+  sourceFile.statements.forEach((statement) => {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !statement.importClause
+    ) {
+      return;
+    }
+
+    const source = resolveIndexedImportSource(document.uri, statement.moduleSpecifier.text);
+    const defaultImport = statement.importClause.name;
+
+    if (defaultImport && registeredNames.has(defaultImport.text)) {
+      references.push({
+        kind: "component",
+        name: defaultImport.text,
+        range: createOffsetRange(document, defaultImport.getStart(sourceFile), defaultImport.getEnd()),
+        renameWithTarget: false,
+        targetName: "default",
+        targetSource: source
+      });
+    }
+
+    const namedBindings = statement.importClause.namedBindings;
+    if (!namedBindings || !ts.isNamedImports(namedBindings)) return;
+
+    namedBindings.elements.forEach((element) => {
+      if (!registeredNames.has(element.name.text)) return;
+
+      const imported = element.propertyName ?? element.name;
+      references.push({
+        kind: "component",
+        name: imported.text,
+        range: createOffsetRange(document, imported.getStart(sourceFile), imported.getEnd()),
+        renameWithTarget: true,
+        targetName: imported.text,
+        targetSource: source
+      });
+    });
+  });
+
+  return references;
+};
+
+const resolveIndexedTagTarget = (
+  tag: string,
+  component: ComponentMeta,
+  imports: Map<string, IndexedImportBinding>
+): IndexedTagTarget | undefined => {
+  if (!/^[A-Z]/.test(tag) && !tag.includes("-")) {
+    return undefined;
+  }
+
+  const registration = component.uses.find(
+    (item) => item.localName === tag || toKebabCase(item.localName) === tag
+  );
+  const expression = registration?.expression ?? registration?.localName ?? tag;
+  const binding = imports.get(expression);
+
+  if (binding) {
+    return {
+      renameWithTarget:
+        binding.importedName !== "default" &&
+        (tag === binding.importedName || tag === toKebabCase(binding.importedName)),
+      source: binding.source,
+      targetName: binding.importedName
+    };
+  }
+
+  return {
+    renameWithTarget: true,
+    targetName: expression
+  };
+};
+
+const appendIndexedTagReferences = (
+  references: IndexedTemplateReference[],
+  document: TextDocument,
+  contentStart: number,
+  template: string,
+  node: HTMLNode,
+  target: IndexedTagTarget
+) => {
+  if (!node.tag) return;
+
+  const openNameStart = template.indexOf(node.tag, node.start);
+  if (openNameStart >= node.start && openNameStart < node.end) {
+    references.push({
+      kind: "component",
+      name: node.tag,
+      range: createOffsetRange(
+        document,
+        contentStart + openNameStart,
+        contentStart + openNameStart + node.tag.length
+      ),
+      renameWithTarget: target.renameWithTarget,
+      targetName: target.targetName,
+      ...(target.source ? { targetSource: target.source } : {})
+    });
+  }
+
+  if (node.endTagStart !== undefined) {
+    const closeNameStart = template.indexOf(node.tag, node.endTagStart + 2);
+    if (closeNameStart >= 0) {
+      references.push({
+        kind: "component",
+        name: node.tag,
+        range: createOffsetRange(
+          document,
+          contentStart + closeNameStart,
+          contentStart + closeNameStart + node.tag.length
+        ),
+        renameWithTarget: target.renameWithTarget,
+        targetName: target.targetName,
+        ...(target.source ? { targetSource: target.source } : {})
+      });
+    }
+  }
+};
+
+const appendIndexedAttributeReferences = (
+  references: IndexedTemplateReference[],
+  document: TextDocument,
+  contentStart: number,
+  template: string,
+  node: HTMLNode,
+  target: IndexedTagTarget | undefined,
+  parentTarget: IndexedTagTarget | undefined
+) => {
+  const startTagEnd = node.startTagEnd ?? node.end;
+  const startTag = template.slice(node.start, startTagEnd);
+  const tagNameEnd = node.tag ? startTag.indexOf(node.tag) + node.tag.length : 0;
+  const attributePattern =
+    /(?:^|\s)([:@#]?[A-Za-z_][\w:.-]*|v-[\w:.-]+)(?:\s*=\s*(?:(["'])(.*?)\2|\$\{[\s\S]*?\}|[^\s>]+))?/gs;
+
+  for (const match of startTag.matchAll(attributePattern)) {
+    if (match.index === undefined || match.index < tagNameEnd || !match[1]) continue;
+
+    const attribute = match[1];
+    const attributeStart =
+      contentStart + node.start + match.index + match[0].indexOf(attribute);
+    const normalized = normalizeIndexedAttributeReference(attribute, match[3]);
+
+    if (!normalized) continue;
+
+    const referenceTarget = normalized.kind === "slot" ? parentTarget ?? target : target;
+    if (!referenceTarget) continue;
+
+    const nameStart =
+      normalized.valueOffset === undefined
+        ? attributeStart + normalized.nameOffset
+        : contentStart + node.start + match.index + match[0].indexOf(match[3]!) +
+          normalized.valueOffset;
+
+    references.push({
+      kind: normalized.kind,
+      name: normalized.name,
+      range: createOffsetRange(document, nameStart, nameStart + normalized.name.length),
+      renameWithTarget: true,
+      targetName: referenceTarget.targetName,
+      ...(referenceTarget.source ? { targetSource: referenceTarget.source } : {})
+    });
+  }
+};
+
+const normalizeIndexedAttributeReference = (
+  attribute: string,
+  value: string | undefined
+): {
+  kind: IndexedTemplateReference["kind"];
+  name: string;
+  nameOffset: number;
+  valueOffset?: number;
+} | null => {
+  if (attribute === "slot" && value) {
+    return { kind: "slot", name: value, nameOffset: 0, valueOffset: 0 };
+  }
+  if (attribute.startsWith("#")) {
+    return { kind: "slot", name: attribute.slice(1), nameOffset: 1 };
+  }
+  if (attribute.startsWith("v-slot:")) {
+    return { kind: "slot", name: attribute.slice(7), nameOffset: 7 };
+  }
+  if (attribute.startsWith("@")) {
+    const name = attribute.slice(1).split(".")[0]!;
+    return { kind: "emit", name, nameOffset: 1 };
+  }
+  if (attribute.startsWith("v-on:")) {
+    const name = attribute.slice(5).split(".")[0]!;
+    return { kind: "emit", name, nameOffset: 5 };
+  }
+  if (attribute.startsWith(":")) {
+    return { kind: "prop", name: toCamelCase(attribute.slice(1)), nameOffset: 1 };
+  }
+  if (attribute.startsWith("v-bind:")) {
+    return { kind: "prop", name: toCamelCase(attribute.slice(7)), nameOffset: 7 };
+  }
+  if (
+    attribute.startsWith("v-") ||
+    ["class", "id", "part", "ref", "style"].includes(attribute)
+  ) {
+    return null;
+  }
+  return { kind: "prop", name: toCamelCase(attribute), nameOffset: 0 };
+};
+
+const resolveIndexedImportSource = (documentUri: string, specifier: string): string => {
+  if (!specifier.startsWith(".")) return specifier;
+
+  const fileName = documentUriToFileName(documentUri);
+  return fileName
+    ? normalizeIndexedModulePath(path.resolve(path.dirname(fileName), specifier))
+    : specifier;
+};
+
+const normalizeIndexedModulePath = (value: string): string =>
+  value.replace(/\\/g, "/").replace(/\.(?:[cm]?[jt]sx?)$/i, "").replace(/\/index$/i, "");
+
+const toCamelCase = (value: string): string =>
+  value.replace(/-([a-z0-9])/g, (_match, char: string) => char.toUpperCase());
+
+const toKebabCase = (value: string): string =>
+  value
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/_/g, "-")
+    .toLowerCase();
+
+const createOffsetRange = (document: TextDocument, start: number, end: number) => ({
+  end: document.positionAt(end),
+  start: document.positionAt(start)
+});
+
+const dedupeIndexedTemplateReferences = (
+  references: IndexedTemplateReference[]
+): IndexedTemplateReference[] => {
+  const seen = new Set<string>();
+
+  return references.filter((reference) => {
+    const key = `${reference.kind}:${reference.targetName}:${reference.name}:${reference.range.start.line}:${reference.range.start.character}:${reference.range.end.line}:${reference.range.end.character}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 };
 
@@ -2121,76 +2852,6 @@ const readComponentLocalName = (
   (exportName === "default"
     ? toPascalCase(path.basename(fileName).replace(/\..*$/, ""))
     : exportName);
-
-export const createLanguageServiceOptionsForDocument = (
-  baseOptions: ElfLanguageServiceOptions,
-  componentsByUri: Map<string, IndexedProjectComponent[]>,
-  documentUri: string
-): ElfLanguageServiceOptions => {
-  const revision = componentMapRevisions.get(componentsByUri) ?? 0;
-  let cache = documentLanguageServiceOptionsCache.get(componentsByUri);
-
-  if (!cache) {
-    cache = new Map();
-    documentLanguageServiceOptionsCache.set(componentsByUri, cache);
-  }
-
-  const cached = cache.get(documentUri);
-
-  if (cached?.baseOptions === baseOptions && cached.revision === revision) {
-    return cached.options;
-  }
-
-  const options: ElfLanguageServiceOptions = {
-    ...baseOptions,
-    project: {
-      components: [...componentsByUri.values()]
-        .flat()
-        .filter((component) => component.uri !== documentUri)
-        .map((component) => ({
-          ...component,
-          importPath:
-            component.packageImportPath ?? createRelativeImportPath(documentUri, component.uri)
-        }))
-        .filter((component) => component.importPath.length > 0)
-    }
-  };
-
-  cache.set(documentUri, {
-    baseOptions,
-    options,
-    revision
-  });
-
-  return options;
-};
-
-const createRelativeImportPath = (fromUri: string, toUri: string): string => {
-  const fromFileName = documentUriToFileName(fromUri);
-  const toFileName = documentUriToFileName(toUri);
-
-  if (!fromFileName || !toFileName) {
-    return "";
-  }
-
-  const fromDirectory = path.dirname(fromFileName);
-  const withoutExtension = toFileName.replace(/\.(?:elf\.)?[cm]?[jt]sx?$/, "");
-  let relativePath = path.relative(fromDirectory, withoutExtension).replace(/\\/g, "/");
-
-  if (!relativePath.startsWith(".")) {
-    relativePath = `./${relativePath}`;
-  }
-
-  return relativePath;
-};
-
-const documentUriToFileName = (uri: string): string | null => {
-  try {
-    return fileURLToPath(uri);
-  } catch {
-    return null;
-  }
-};
 
 const toPascalCase = (value: string): string =>
   value

@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: bloom-lmh/elfui-kit
+          path: .fixtures/elfui-kit
       - uses: pnpm/action-setup@v4
         with:
           version: 10.28.0
@@ -22,3 +26,9 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - run: pnpm smoke
+      - run: pnpm verify:m10
+        env:
+          ELFUI_KIT_COMPONENTS_ROOT: ${{ github.workspace }}/.fixtures/elfui-kit/src/components
+      - run: xvfb-run -a pnpm smoke:host
+      - run: pnpm package:vsix
+      - run: xvfb-run -a pnpm smoke:vsix

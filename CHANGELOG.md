@@ -1,5 +1,31 @@
 # elfui-language-features
 
+## 0.4.0 - 2026-07-29
+
+### Breaking Changes
+
+- Upgrade to `@elfui/compiler@0.1.0-beta.17` and remove all language, grammar, snippet,
+  formatting, navigation, metadata, and TypeScript-plugin support for the retired
+  `fragment` / `defineFragment` protocol.
+
+### Changes
+
+- Move workspace indexing off LSP initialization, raise the default scan ceiling to 10,000
+  files, keep ordinary watcher updates incremental, and support dynamic workspace folders.
+- Cache cross-file component tag, import, prop, event, and slot references for complete
+  references and rename while preserving local import aliases.
+- Share a beta.17 API catalog between desktop and Web completions, including lifecycle,
+  host/form/observer helpers, directives, modifiers, and built-in components.
+- Remove the Fragment TextMate rules that caused real VS Code Hosts to report token-length
+  mismatches, stop the grammar from injecting into its own embedded HTML scopes, and make Host
+  smoke tests fail on any recurrence.
+- Exclude source maps from VSIX staging, minify production bundle syntax/whitespace, and enforce
+  a 4 MiB VSIX budget during CI and release packaging.
+- Split language-feature configuration parsing and workspace-index state/caching out of the LSP
+  server orchestration module, and make unused TypeScript code fail type checking.
+- Isolate real Host smoke fixtures per document URI, keep embedded save formatting within VS
+  Code's will-save budget, and fail Host gates on ElfUI listener or deferred-formatting errors.
+
 ## 0.3.8
 
 ### Patch Changes

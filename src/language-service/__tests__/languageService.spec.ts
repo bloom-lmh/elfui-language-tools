@@ -224,213 +224,6 @@ describe("ElfUI language service", () => {
     expect(declarationAverage).toBeLessThan(50);
   });
 
-  it("merges nested inline Fragment formatting without overlapping edits", () => {
-    const source = `
-      import { defineHtml, fragment } from "@elfui/core";
-
-      export const Demo = defineHtml(\`<main>\${fragment\`<section><strong>Value</strong></section>\`}</main>\`);
-    `;
-    const document = createDocument(source);
-    const edits = createElfFormattingEdits(document, {
-      insertSpaces: true,
-      tabSize: 2
-    });
-    const formatted = applyTextEdits(source, edits);
-
-    expect(edits).toHaveLength(1);
-    expect(formatted).toContain("fragment`");
-    expect(formatted).toContain("<section>");
-    expect(formatted).toContain("<strong>Value</strong>");
-
-    const formattedDocument = createDocument(formatted);
-    const secondEdits = createElfFormattingEdits(formattedDocument, {
-      insertSpaces: true,
-      tabSize: 2
-    });
-
-    expect(applyTextEdits(formatted, secondEdits)).toBe(formatted);
-    expect(secondEdits).toEqual([]);
-  });
-
-  it("keeps the defineFragment arrow and template opener on one line", () => {
-    const source = `
-      import { defineFragment, defineHtml } from "@elfui/core";
-
-      const DirectCard = defineFragment(
-        ({ item }) =>
-          \`
-            <div>\${item.label}</div>
-          \`
-      );
-
-      export const Demo = defineHtml(\`<DirectCard :item=\${item} />\`);
-    `;
-    const document = createDocument(source);
-    const formatted = applyTextEdits(
-      source,
-      createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 })
-    );
-
-    expect(formatted).toContain("({ item }) => `");
-    expect(formatted).not.toMatch(/=>\s*\n\s*`/);
-    expect(
-      createElfFormattingEdits(createDocument(formatted), {
-        insertSpaces: true,
-        tabSize: 2
-      })
-    ).toEqual([]);
-  });
-
-  it("keeps inline Fragment list wrappers compact and formatting idempotent", () => {
-    const source = `
-      import { defineHtml, fragment } from "@elfui/core";
-
-      const summaryData = [];
-      export const Dashboard = defineHtml(\`
-        <div class="summary-row">
-          \${summaryData.map(
-                  (item) => fragment\`
-            <div class="summary-card">
-              <span>\${item.label}</span>
-            </div>
-          \`
-              )}
-        </div>
-      \`);
-    `;
-    const document = createDocument(source);
-    const formatted = applyTextEdits(
-      source,
-      createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 })
-    );
-
-    expect(formatted).toContain("${summaryData.map((item) => fragment`");
-    expect(formatted).toMatch(
-      /\n {10}\$\{summaryData\.map\(\(item\) => fragment`\n {12}<div class="summary-card">\n {14}<span>\$\{item\.label}<\/span>\n {12}<\/div>\n {10}`\)}/
-    );
-    expect(formatted).not.toMatch(/summaryData\.map\(\s*\n/);
-
-    const formattedDocument = createDocument(formatted);
-    const secondEdits = createElfFormattingEdits(formattedDocument, {
-      insertSpaces: true,
-      tabSize: 2
-    });
-
-    expect(secondEdits).toEqual([]);
-  });
-
-  it("preserves inline Fragment wrappers when an external formatter owns the file", () => {
-    const source = `
-      import { defineHtml, fragment } from "@elfui/core";
-
-      const summaryData = [];
-      export const Dashboard = defineHtml(\`
-        <div class="summary-row">
-          \${summaryData.map(
-            (item) => fragment\`
-              <div class="summary-card">
-                <span>\${item.label}</span>
-              </div>
-            \`
-          )}
-        </div>
-      \`);
-    `;
-    const document = createDocument(source);
-    const edits = createElfFormattingEdits(document, {
-      elfuiExternalFormatter: true,
-      insertSpaces: true,
-      tabSize: 2
-    });
-    const formatted = applyTextEdits(source, edits);
-
-    expect(formatted).toMatch(/summaryData\.map\(\s*\n/);
-    expect(formatted).not.toContain("summaryData.map((item) => fragment`");
-    expect(
-      createElfFormattingEdits(createDocument(formatted), {
-        elfuiExternalFormatter: true,
-        insertSpaces: true,
-        tabSize: 2
-      })
-    ).toEqual([]);
-  });
-
-  it("suppresses compiler-generated inline Fragment scope diagnostics", () => {
-    const source = `
-      import { defineHtml, fragment } from "@elfui/core";
-
-      interface SummaryItem {
-        label: string;
-        trend: number;
-        unit: string;
-        value: number;
-      }
-
-      const summaryData: SummaryItem[] = [];
-
-      export const Summary = defineHtml(\`
-        <div class="summary-row">
-          \${summaryData.map(
-            (item) => fragment\`
-              <div class="summary-card">
-                <div class="label">\${item.label}</div>
-                <span class="value">\${item.value}</span>
-                <span class="unit">\${item.unit}</span>
-                <div class="trend" :class=\${item.trend >= 0 ? "up" : "down"}>
-                  \${item.trend >= 0 ? "up" : "down"} \${Math.abs(item.trend)}%
-                </div>
-              </div>
-            \`
-          )}
-        </div>
-      \`);
-    `;
-    const diagnostics = readDiagnosticMessages(createElfDiagnostics(createDocument(source)));
-
-    expect(diagnostics.some((message) => message.includes("__elfInlineFragment"))).toBe(false);
-    expect(
-      diagnostics.some(
-        (message) => message.includes("Cannot find name 'item'") || message.includes("找不到名称“item”")
-      )
-    ).toBe(false);
-  });
-
-  it("keeps warm Fragment completion and formatting in the millisecond budget", () => {
-    const source = `
-      import { defineFragment, defineHtml } from "@elfui/core";
-
-      interface CardProps {
-        label: string;
-      }
-
-      const Card = defineFragment<CardProps>(({ label }) => \`
-        <article>\${label.toUpperCase()}</article>
-      \`);
-
-      export const Demo = defineHtml(\`<main><Card :label=\${"value"} /></main>\`);
-    `;
-    const document = TextDocument.create("file:///fragment-performance.ts", "typescript", 1, source);
-    const position = positionAfter(document, source, "${label.");
-
-    createElfCompletionList(document, position);
-    createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 });
-
-    const completionStart = performance.now();
-    for (let index = 0; index < 10; index += 1) {
-      createElfCompletionList(document, position);
-    }
-    const completionAverage = (performance.now() - completionStart) / 10;
-
-    const formattingStart = performance.now();
-    for (let index = 0; index < 10; index += 1) {
-      createElfFormattingEdits(document, { insertSpaces: true, tabSize: 2 });
-    }
-    const formattingAverage = (performance.now() - formattingStart) / 10;
-
-    expect(completionAverage).toBeLessThan(50);
-    expect(formattingAverage).toBeLessThan(50);
-  });
-
   it("provides event completions for @elfui/core macro components", () => {
     const source = `
       import { defineHtml } from "@elfui/core";
@@ -1269,47 +1062,6 @@ describe("ElfUI language service", () => {
     expect(formatted).not.toContain('prop="{');
   });
 
-  it("keeps multiline quoted bindings in named Fragments idempotent across saves", () => {
-    const source = [
-      'import { defineFragment, defineHtml } from "@elfui/core";',
-      "",
-      "const MenuPanel = defineFragment(() => `",
-      '  <button :class="{',
-      "                            'is-disabled': child.disabled,",
-      "                            'is-selected': isSelected(child)",
-      '                          }">',
-      "    {{ child.label }}</button>",
-      "`);",
-      "",
-      "export const Menu = defineHtml(`",
-      "  <MenuPanel />",
-      "`);",
-      ""
-    ].join("\n");
-    const format = (current: string) =>
-      applyTextEdits(
-        current,
-        createElfFormattingEdits(createDocument(current), {
-          insertSpaces: true,
-          tabSize: 2
-        })
-      );
-    const formattedOnce = format(source);
-    const formattedTwice = format(formattedOnce);
-    const formattedThreeTimes = format(formattedTwice);
-    const lines = formattedOnce.split("\n");
-    const attributeLine = lines.find((line) => line.includes(':class="{')) ?? "";
-    const memberLine = lines.find((line) => line.includes("'is-disabled'")) ?? "";
-    const closingLine = lines.find((line) => line.includes('}"')) ?? "";
-    const indentSize = (line: string) => line.match(/^[ \t]*/)?.[0].length ?? 0;
-
-    expect(formattedTwice).toBe(formattedOnce);
-    expect(formattedThreeTimes).toBe(formattedOnce);
-    expect(indentSize(memberLine)).toBe(indentSize(attributeLine) + 2);
-    expect(indentSize(closingLine)).toBe(indentSize(attributeLine));
-    expect(formattedOnce).toContain("<MenuPanel />");
-  });
-
   it("reports macro template TypeScript diagnostics", () => {
     const source = `
       /// <!--@elf component-->
@@ -1331,7 +1083,7 @@ describe("ElfUI language service", () => {
     expect(diagnostics.some((item) => item.includes("disabeld"))).toBe(true);
   });
 
-  it("accepts beta.13 direct defineHtml literals", () => {
+  it("accepts beta.17 direct defineHtml literals", () => {
     const source = `
       /// <!--@elf component-->
       import { defineHtml, defineProps } from "@elfui/core";
@@ -1642,93 +1394,65 @@ describe("ElfUI language service", () => {
     );
   });
 
-  it("supports named Fragment completion, props, definition, references and rename", () => {
+  it("covers direct-template navigation, structure, formatting, links, colors and editing", () => {
     const source = `
-      import { defineFragment, defineHtml } from "@elfui/core";
+      import { defineHtml, defineStyle, useComponents } from "@elfui/core";
+      import { LocalCard } from "./LocalCard";
 
-      interface CardProps {
-        label: string;
-        selected?: boolean;
-      }
-
-      const SummaryCard = defineFragment<CardProps>(
-        ({ label, selected }) => \`
-          <article :class=\${selected ? "selected" : ""}>
-            \${label.toUpperCase()}
-          </article>
-        \`
-      );
+      useComponents({ LocalCard });
+      defineStyle(\`
+        :host {
+          color: #ff0000;
+          background-image: url("./card.png");
+        }
+      \`);
 
       export const Dashboard = defineHtml(\`
         <main>
-          <SummaryCard :
+          <LocalCard><a href="./details.html">Details</a></LocalCard>
+          <section><span>
         </main>
       \`);
     `;
-    const document = TextDocument.create(
-      "file:///E:/项目/组件库/汇总.ts",
-      "typescript",
-      0,
-      source
-    );
-    const tagLabels = createElfCompletionList(
-      document,
-      positionAfter(document, source, "<Summary")
-    ).items.map((item) => item.label);
-    const propLabels = createElfCompletionList(
-      document,
-      positionAfter(document, source, "<SummaryCard :")
-    ).items.map((item) => item.label);
-    const definition = createElfDefinition(
-      document,
-      positionAfter(document, source, "<SummaryCard")
-    );
-    const references = createElfReferences(
-      document,
-      positionAfter(document, source, "const SummaryCard")
-    );
-    const rename = createElfRenameEdit(
-      document,
-      positionAfter(document, source, "const SummaryCard"),
-      "CompactCard"
-    );
-    const renamed = applyTextEdits(source, rename?.changes?.[document.uri] ?? []);
-    const fragmentMemberLabels = createElfCompletionList(
-      document,
-      positionAfter(document, source, "${label.")
-    ).items.map((item) => item.label);
-
-    expect(tagLabels).toContain("SummaryCard");
-    expect(propLabels).toEqual(expect.arrayContaining([":label", ":selected"]));
-    expect(definition).toHaveLength(1);
-    expect(readRange(document, definition[0]!.range)).toBe("SummaryCard");
-    expect(references.map((item) => readRange(document, item.range))).toEqual(
-      expect.arrayContaining(["SummaryCard", "SummaryCard"])
-    );
-    expect(renamed).toContain("const CompactCard");
-    expect(renamed).toContain("<CompactCard :");
-    expect(fragmentMemberLabels).toContain("charAt");
-  });
-
-  it("maps beta.13 Fragment cycle diagnostics from structured ranges", () => {
-    const source = `
-      import { defineFragment, defineHtml } from "@elfui/core";
-
-      const First = defineFragment(() => \`<Second />\`);
-      const Second = defineFragment(() => \`<First />\`);
-
-      export default defineHtml(\`<First />\`);
-    `;
     const document = createDocument(source);
-    const diagnostic = createElfDiagnostics(document).find(
-      (item) => item.code === "ELF_MACRO_FRAGMENT_CYCLE"
-    );
+    const tagPosition = document.positionAt(source.indexOf("<LocalCard") + 2);
+    const spanPosition = positionAfter(document, source, "<span>");
+    const color = createElfDocumentColors(document)[0];
+    const definitions = createElfDefinition(document, tagPosition);
+    const references = createElfReferences(document, tagPosition);
+    const rename = createElfRenameEdit(document, tagPosition, "CompactCard");
+    const selection = createElfSelectionRanges(document, [tagPosition])[0]!;
 
-    expect(diagnostic).toBeDefined();
-    expect(document.offsetAt(diagnostic!.range.start)).toBeGreaterThan(0);
-    expect(diagnostic?.data).toMatchObject({
-      fragment: expect.any(String),
-      sourceId: expect.any(String)
-    });
+    expect(createElfDocumentSymbols(document).length).toBeGreaterThan(0);
+    expect(definitions.map((item) => readRange(document, item.range))).toContain("LocalCard");
+    expect(references.length).toBeGreaterThanOrEqual(2);
+    expect(createElfDocumentHighlights(document, tagPosition).length).toBeGreaterThanOrEqual(2);
+    expect(createElfPrepareRename(document, tagPosition)?.placeholder).toBe("LocalCard");
+    const renamed = applyTextEdits(source, rename?.changes?.[document.uri] ?? []);
+    expect(renamed).toContain("<CompactCard><a");
+    expect(renamed).toContain("</CompactCard>");
+    expect(createElfDocumentLinks(document).map((item) => item.target)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("details.html"),
+        expect.stringContaining("card.png")
+      ])
+    );
+    expect(createElfFoldingRanges(document).length).toBeGreaterThan(0);
+    expect(readSelectionRangeTexts(document, selection).length).toBeGreaterThan(1);
+    expect(createElfLinkedEditingRanges(document, tagPosition)?.ranges).toHaveLength(2);
+    expect(createElfTagComplete(document, spanPosition)).toContain("</span>");
+    expect(createElfOnTypeFormattingEdits(document, spanPosition, ">").length).toBeGreaterThan(0);
+    expect(
+      createElfRangeFormattingEdits(
+        document,
+        {
+          end: document.positionAt(source.length),
+          start: document.positionAt(0)
+        },
+        { insertSpaces: true, tabSize: 2 }
+      ).length
+    ).toBeGreaterThan(0);
+    expect(color).toBeDefined();
+    expect(createElfColorPresentations(document, color!.color, color!.range).length).toBeGreaterThan(0);
   });
 });

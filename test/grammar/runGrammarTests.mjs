@@ -22,6 +22,11 @@ const tsScope = "source.ts";
 const elfScope = elfuiGrammar.scopeName;
 const htmlScope = "text.html.basic";
 const cssScope = "source.css";
+
+if (/text\.html/.test(elfuiGrammar.injectionSelector ?? "")) {
+  throw new Error("ElfUI grammar must not inject into its own embedded HTML scopes");
+}
+
 const htmlGrammar = {
   name: "Test HTML",
   scopeName: htmlScope,
@@ -129,63 +134,6 @@ const cases = [
       const tokens = tokenize("defineHtml(`\n  <section>\n    <button>Save</button>\n  </section>\n`);");
       expectScope(findToken(tokens, "section"), "entity.name.tag.html", "multiline tag");
       expectScope(findToken(tokens, "button"), "entity.name.tag.html", "multiline button");
-    }
-  ],
-  [
-    "highlights named and inline Fragments",
-    () => {
-      const named = tokenize(
-        "const Card = defineFragment<Props>(\n  ({ label }) => `<article>${label}</article>`,\n);"
-      );
-      const multilineNamed = tokenize(
-        [
-          "const MenuPanel = defineFragment(",
-          "  () => `",
-          "    <div v-if=${visible} :class=\"{",
-          "      'is-disabled': item.disabled",
-          "    }\">{{ item.label }}</div>",
-          "  `,",
-          ");"
-        ].join("\n")
-      );
-      const inline = tokenize("const view = fragment`<footer>${label}</footer>`;");
-      const returned = tokenize(
-        [
-          "const IndexCard = defineFragment(({ item }) => {",
-          "  return `",
-          '    <div class="summary-card">${item.label}</div>',
-          "  `;",
-          "});"
-        ].join("\n")
-      );
-
-      expectScope(findToken(named, "article"), "entity.name.tag.html", "named Fragment tag");
-      expectScope(
-        findToken(multilineNamed, "div"),
-        "entity.name.tag.html",
-        "multiline named Fragment tag"
-      );
-      expectScope(
-        findToken(multilineNamed, "v-if"),
-        "entity.other.attribute-name.directive.elfui",
-        "multiline named Fragment directive"
-      );
-      expectScope(
-        findToken(multilineNamed, "item"),
-        "meta.embedded.expression.elfui",
-        "multiline named Fragment binding expression"
-      );
-      expectScope(findToken(inline, "footer"), "entity.name.tag.html", "inline Fragment tag");
-      expectScope(
-        findToken(returned, "summary-card"),
-        "string.quoted.html",
-        "returned named Fragment attribute"
-      );
-      expectScope(
-        returned.find((token) => token.line === 2 && token.text.includes("item")),
-        "meta.template.expression.ts",
-        "returned named Fragment expression"
-      );
     }
   ],
   [

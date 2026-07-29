@@ -1,10 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fork, spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const require = createRequire(import.meta.url);
 const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+const { resolveVsixExtractionCommand } = require(
+  resolve(root, "test/smoke/runPackagedTest.cjs")
+);
 
 const requiredFiles = [
   packageJson.main,
@@ -65,6 +70,20 @@ const injectionKeybinding = packageJson.contributes?.keybindings?.find(
 if (!injectionCommand || !injectionKeybinding) {
   console.error("ElfUI VS Code extension smoke check failed.");
   console.error("Missing Alt+\\ template declaration injection contribution.");
+  process.exit(1);
+}
+
+const windowsExtraction = resolveVsixExtractionCommand("win32", "test.vsix", "target");
+const linuxExtraction = resolveVsixExtractionCommand("linux", "test.vsix", "target");
+const macExtraction = resolveVsixExtractionCommand("darwin", "test.vsix", "target");
+
+if (
+  windowsExtraction.command !== "tar" ||
+  linuxExtraction.command !== "unzip" ||
+  macExtraction.command !== "unzip"
+) {
+  console.error("ElfUI VS Code extension smoke check failed.");
+  console.error("Packaged VSIX extraction is not cross-platform.");
   process.exit(1);
 }
 

@@ -23,7 +23,7 @@ async function main() {
 
   fs.rmSync(unpackedRoot, { force: true, recursive: true });
   fs.mkdirSync(unpackedRoot, { recursive: true });
-  childProcess.execFileSync("tar", ["-xf", vsixPath, "-C", unpackedRoot], { stdio: "inherit" });
+  extractVsix(vsixPath, unpackedRoot);
 
   await runTests({
     cachePath,
@@ -40,6 +40,20 @@ async function main() {
   );
 }
 
+function extractVsix(vsixPath, destination) {
+  const extraction = resolveVsixExtractionCommand(process.platform, vsixPath, destination);
+
+  childProcess.execFileSync(extraction.command, extraction.args, {
+    stdio: "inherit"
+  });
+}
+
+function resolveVsixExtractionCommand(platform, vsixPath, destination) {
+  return platform === "win32"
+    ? { args: ["-xf", vsixPath, "-C", destination], command: "tar" }
+    : { args: ["-q", "-o", vsixPath, "-d", destination], command: "unzip" };
+}
+
 function resolveLocalVSCodeExecutable() {
   const candidates = [
     process.env.VSCODE_SMOKE_EXECUTABLE,
@@ -50,7 +64,11 @@ function resolveLocalVSCodeExecutable() {
   return candidates.find((candidate) => fs.existsSync(candidate));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+exports.resolveVsixExtractionCommand = resolveVsixExtractionCommand;
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

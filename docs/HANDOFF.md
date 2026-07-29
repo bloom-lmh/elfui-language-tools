@@ -21,17 +21,18 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 ## Current Work
 
-Status: `0.4.0` release candidate.
+Status: `0.4.1` release candidate.
 
 The current cycle aligns Language Tools with `@elfui/compiler@0.1.0-beta.17`, removes the retired
 Fragment authoring protocol, improves workspace indexing and cross-file navigation, reduces VSIX
 size, separates configuration/index state from server orchestration, and strengthens CI plus real
 Extension Host coverage.
 
-Local release verification is complete. The intermittent Host failures were resolved by isolating
-generated smoke fixtures per document URI and by keeping embedded save formatting within VS Code's
-will-save time budget, with guarded post-save completion when the language server is busy. The
-release is ready to commit, push, and publish.
+Version `0.4.0` is published to the VS Code Marketplace, and commit `1e2809a` plus tag `v0.4.0`
+are on Gitee and GitHub. GitHub Release workflow run `30419657827` passed build, unit, smoke,
+development Host, and packaging gates but failed before packaged Host startup because Ubuntu GNU
+tar cannot extract the ZIP-based VSIX. Version `0.4.1` changes packaged smoke extraction to use
+`unzip` on Linux/macOS while retaining the working Windows tar path.
 
 No changes are required in `elfui`, `elfui-docs`, or `elfui-kit` for this release. Those repositories
 were used as read-only compatibility and pressure-test inputs.
@@ -56,6 +57,8 @@ were used as read-only compatibility and pressure-test inputs.
   preventing TextMate and semantic-token state from leaking across tests.
 - Added a one-second will-save budget plus guarded post-save completion for embedded formatting,
   preventing VS Code listener timeouts when the language server is temporarily busy.
+- Made packaged VSIX extraction cross-platform: Windows uses its ZIP-capable tar, while Linux and
+  macOS use `unzip`.
 - Expanded CI and release gates to include M10 pressure checks, development Host smoke, packaging,
   packaged VSIX Host smoke, token-length failures, ElfUI will-save listener failures, and deferred
   formatting failures.
@@ -74,6 +77,8 @@ were used as read-only compatibility and pressure-test inputs.
   being measured on larger workspaces.
 - The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
   therefore part of CI reliability.
+- The `v0.4.0` GitHub Release was not created because workflow run `30419657827` failed at Linux
+  VSIX extraction. The Marketplace release is valid; `0.4.1` is the non-destructive follow-up.
 
 ## Next Work
 
@@ -90,24 +95,26 @@ were used as read-only compatibility and pressure-test inputs.
 
 ## Verification Snapshot
 
-Latest confirmed locally on 2026-07-29:
+Latest confirmed locally on 2026-07-29 for `0.4.1`:
 
 - `pnpm typecheck`: passed with unused-code checks enabled.
-- `pnpm test`: 6 files, 91 tests passed.
-- `pnpm smoke`: extension startup checks and 7/7 grammar cases passed.
-- `pnpm verify:m10`: 360 Kit source files, 27 macro components, cold index 45.8 ms, warm
-  472/472 cache reuse in 3.0 ms.
-- `pnpm smoke:host`: 18/18 passed after the final save-fallback change; the deferred path was
-  exercised and Host logs contained no listener or token-length failure.
+- `pnpm test`: 6 files, 91 tests passed when run serially as in CI.
+- `pnpm smoke`: extension startup, Windows/Linux/macOS extraction selection, and 7/7 grammar
+  cases passed.
+- `pnpm verify:m10`: 360 Kit source files, 27 macro components, cold index 131.1 ms, warm
+  472/472 cache reuse in 4.5 ms.
+- `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs.
 - `pnpm package:vsix`: 115 files, 2.91 MiB, below the 4 MiB budget.
-- `pnpm smoke:vsix`: two consecutive 18/18 packaged-extension runs passed with clean Host logs.
+- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed on Windows with clean Host logs.
 
 ## Release State
 
-- Target version: `0.4.0`.
-- Working tree: all local release gates passed; commit, remote push, Marketplace publication, tag,
-  and GitHub Release are pending.
-- Artifact target: `.local-vsix/elfui-language-features-0.4.0.vsix`.
+- Target version: `0.4.1`.
+- Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
+  workflow failed only at Linux VSIX extraction.
+- Current work: cross-platform extraction implemented and all local gates passed; commit, push,
+  Marketplace publication, `v0.4.1` tag, and GitHub Release are pending.
+- Artifact target: `.local-vsix/elfui-language-features-0.4.1.vsix`.
 
 ## Current Capability
 

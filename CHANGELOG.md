@@ -1,5 +1,12 @@
 # elfui-language-features
 
+## 0.4.1 - 2026-07-29
+
+### Patch Changes
+
+- Extract packaged VSIX ZIP archives with `unzip` on Linux and macOS runners while retaining the
+  Windows tar path, allowing the packaged Extension Host release gate to run on GitHub Actions.
+
 ## 0.4.0 - 2026-07-29
 
 ### Breaking Changes

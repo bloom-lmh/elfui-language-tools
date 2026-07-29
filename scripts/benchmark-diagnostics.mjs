@@ -1,5 +1,4 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { createRequire } from "node:module";
@@ -12,31 +11,60 @@ const kitRoot = path.resolve(
   process.env.ELFUI_KIT_ROOT ?? path.join(root, "..", "elfui-kit")
 );
 const componentRoot = path.join(kitRoot, "src", "components");
+const bundledTypeScriptLib = path.join(root, "dist", "typescript-lib", "lib.es2022.d.ts");
+const compilerRoot = process.env.ELFUI_COMPILER_ROOT
+  ? path.resolve(process.env.ELFUI_COMPILER_ROOT)
+  : null;
 
 if (!existsSync(componentRoot)) {
   throw new Error(`ElfUI Kit component root not found: ${componentRoot}`);
 }
+if (!existsSync(bundledTypeScriptLib)) {
+  throw new Error("Bundled TypeScript libraries are missing. Run `pnpm bundle` first.");
+}
 
 const bundlePath = path.join(
-  tmpdir(),
-  `elfui-language-service-diagnostics-${process.pid}.cjs`
+  root,
+  "dist",
+  `.elfui-language-service-diagnostics-${process.pid}.cjs`
 );
 const require = createRequire(import.meta.url);
 
 try {
-  await build({
+  const buildResult = await build({
     bundle: true,
     entryPoints: [path.join(root, "src", "language-service", "languageService.ts")],
+    ...(compilerRoot
+      ? {
+          alias: {
+            "@elfui/compiler": path.join(compilerRoot, "src", "index.ts"),
+            "@elfui/compiler/macro-component": path.join(
+              compilerRoot,
+              "src",
+              "macro-component.ts"
+            ),
+            "@elfui/compiler/vite": path.join(compilerRoot, "src", "vite.ts")
+          }
+        }
+      : {}),
     format: "cjs",
     loader: {
       ".json": "json"
     },
     mainFields: ["module", "main"],
+    metafile: compilerRoot !== null,
     outfile: bundlePath,
     platform: "node",
     sourcemap: false,
     target: "node20"
   });
+  if (compilerRoot && buildResult.metafile) {
+    const compilerInputs = Object.keys(buildResult.metafile.inputs).filter((input) =>
+      input.replace(/\\/g, "/").includes("/packages/compiler/src/")
+    );
+
+    console.log(`Local compiler inputs: ${compilerInputs.length}`);
+  }
 
   const languageService = require(bundlePath);
   const fileFilter = process.env.ELFUI_DIAGNOSTICS_BENCH_FILTER

@@ -32,16 +32,16 @@ Latest local baseline on 2026-07-29:
 
 | Gate | Result |
 | --- | --- |
-| elfui-kit source files | 360 TS files |
+| elfui-kit source files | 380 TS files |
 | macro component files | 27 files |
-| expression bindings | 2386 |
-| `v-for` declarations | 68 |
+| expression bindings | 2587 |
+| `v-for` declarations | 69 |
 | `v-model` bindings | 16 |
-| `:host` selectors | 766 |
-| `::part` / `::slotted` selectors | 89 |
-| `--elf-*` token references | 2053 |
-| cold scan budget | 101.7 ms observed, budget <= 3000 ms |
-| warm cache budget | 4.0 ms observed, budget <= 750 ms |
+| `:host` selectors | 787 |
+| `::part` / `::slotted` selectors | 90 |
+| `--elf-*` token references | 2136 |
+| cold scan budget | 58.5 ms observed, budget <= 3000 ms |
+| warm cache budget | 3.6 ms observed, budget <= 750 ms |
 | packaged Host first completion | 58.5 ms, budget <= 1500 ms |
 | packaged Host warm completion p95 | 8.68 ms, budget <= 250 ms |
 | packaged Host warm formatting p95 | 1.66 ms, budget <= 1000 ms |

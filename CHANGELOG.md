@@ -22,6 +22,11 @@
   reducing an immediate repeat across 116 real Kit macro files from 55.3 seconds to 4.7 ms.
 - Recheck compiler mapping candidates in one TypeScript semantic batch instead of one request per
   diagnostic, and add `pnpm benchmark:diagnostics` for reproducible cold/warm cost attribution.
+- Run the diagnostics benchmark beside the bundled TypeScript standard libraries and support a
+  local compiler source override, preventing temporary-bundle resolution failures from distorting
+  compiler cost and false-positive counts.
+- Allow development and packaged Host smoke to force the isolated downloaded VS Code test archive
+  when a user installation is unavailable during an update.
 
 ## 0.4.1 - 2026-07-29
 

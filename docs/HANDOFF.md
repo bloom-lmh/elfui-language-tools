@@ -35,9 +35,10 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 Current maintained baseline: `0.4.1` released.
 
-Current maintenance cycle: intrinsic compiler-diagnostic profiling and optimization are
-implemented, fully verified, and synchronized to Gitee and GitHub. The completed record is
-`docs/plans/2026-07-29-compiler-diagnostics-performance-plan.md`.
+Current maintenance cycle: compiler-level incremental template diagnostics are in progress after
+the corrected benchmark isolated beta.20 compilation as more than 99% of remaining cold cost.
+The active plan is
+`docs/plans/2026-07-29-compiler-incremental-diagnostics-integration-plan.md`.
 
 ## 2. 已经做的工作
 
@@ -94,6 +95,10 @@ implemented, fully verified, and synchronized to Gitee and GitHub. The completed
 - Batched compiler-mapping false-positive review into one TypeScript semantic request per document
   instead of one request per diagnostic, and added `pnpm benchmark:diagnostics` with cold/warm and
   compiler/filter attribution.
+- Corrected the diagnostics benchmark to build first and run beside `dist/typescript-lib`, with an
+  optional local compiler source override for pre-release integration measurements.
+- Added an explicit Host runner fallback to the isolated downloaded VS Code 1.90 archive when the
+  user installation is unavailable during an update.
 
 ## 3. 未作的工作（将要做的）
 
@@ -120,13 +125,17 @@ implemented, fully verified, and synchronized to Gitee and GitHub. The completed
   share one module.
 - `src/extension.ts` is 2,301 lines and contains Studio-oriented source analysis that partially
   duplicates `language-core`.
-- Compiler beta.20 template compilation is the remaining cold diagnostic hotspot: 41.56 seconds
-  of the measured 42.79-second cold diagnostic aggregate over 116 Kit macro files, versus 1.11
-  seconds in language-tools filtering. Diagnostics run after a 300 ms idle window and are
-  postponed by interactive requests, while unchanged repeats are cached. Further material cold
-  reduction requires compiler-level incremental support.
+- Compiler beta.20 template compilation is the remaining cold diagnostic hotspot: 58.95 seconds
+  of the corrected 59.06-second cold diagnostic aggregate over 117 Kit macro files, versus 2.8 ms
+  in language-tools filtering. The earlier 41.56/42.79-second attribution used a temporary bundle
+  without the packaged TypeScript libraries and is invalid. Diagnostics run after a 300 ms idle
+  window and are postponed by interactive requests, while unchanged repeats are cached.
 - The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
   therefore part of CI reliability.
+- The local VS Code Inno updater has held `vscode-updating` since 19:44 while 28 Code processes
+  remain open. Development and packaged Host reruns cannot launch until the update completes. The
+  isolated archive fallback reached the official download URL, but the current network path
+  stalled before receiving the archive.
 
 ## Verification Snapshot
 
@@ -136,11 +145,12 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
 - `pnpm test`: 7 files, 98 tests passed.
 - `pnpm smoke`: extension startup, Windows/Linux/macOS extraction selection, and 9/9 grammar
   cases passed.
-- `pnpm verify:m10`: 376 Kit source files, 27 macro components, cold index 45.6 ms, warm
-  491/491 cache reuse in 3.8 ms.
-- `pnpm benchmark:diagnostics`: 116 Kit macro files; baseline cold/repeat was
-  58,487.4/55,305.0 ms; optimized preparation plus cold was 43,599.8 ms and repeat was 4.7 ms.
-  Remaining cold attribution was 41,558.4 ms compiler compilation and 1,105.1 ms macro filtering.
+- `pnpm verify:m10`: 380 Kit source files, 27 macro components, cold index 58.5 ms, warm
+  496/496 cache reuse in 3.6 ms.
+- Corrected `pnpm benchmark:diagnostics` with npm beta.20: 117 Kit macro files; 59,061.0 ms cold,
+  10.4 ms aggregate repeat, 58,945.3 ms compiler compilation, and 2.8 ms filtering.
+- Local incremental compiler integration: 51,915.7 ms cold and 3.9 ms aggregate repeat, a 12.1%
+  cold reduction against npm beta.20; compiler compilation was 51,799.6 ms.
 - `pnpm smoke:host`: 18/18 development-extension Host tests passed with clean Host logs in 24
   seconds. Activation was 524.9 ms, latest server startup 317.1 ms, prewarm 74.3 ms, first
   completion 22.90 ms, warm completion p95 5.17 ms, and warm formatting p95 1.19 ms.
@@ -159,6 +169,11 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
   fully verified and pushed to Gitee and GitHub `main`.
 - Diagnostics cache/batching and benchmark commit: `7c4c81f`; fully verified and pushed to Gitee
   and GitHub `main`.
+- Compiler incremental diagnostics commits `27d5b41` and `59ea441` are verified and pushed in the
+  `elfui` repository. Beta.21 npm publication is pending a separate release action.
+- Corrected benchmark and Host fallback changes are verified through typecheck, 98 tests,
+  smoke/grammar, M10, and VSIX packaging. Host reruns, final Language Tools commit, and push are
+  pending the external VS Code updater lock.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.

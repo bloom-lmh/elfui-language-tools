@@ -55,6 +55,10 @@ function resolveVsixExtractionCommand(platform, vsixPath, destination) {
 }
 
 function resolveLocalVSCodeExecutable() {
+  if (process.env.VSCODE_SMOKE_USE_DOWNLOADED === "1") {
+    return undefined;
+  }
+
   const candidates = [
     process.env.VSCODE_SMOKE_EXECUTABLE,
     path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Microsoft VS Code", "Code.exe"),

@@ -149,6 +149,10 @@ pnpm package:vsix
 
 The smoke host suite starts a real VS Code Extension Host and covers activation, template completions, declaration quick fixes, document links, workspace symbols, style completions, closing tags, semantic tokens, embedded formatting, and ElfUI Studio commands.
 
+If the locally installed VS Code is holding an update mutex, set
+`VSCODE_SMOKE_USE_DOWNLOADED=1` to run Host smoke against the isolated cached VS Code 1.90 test
+archive instead.
+
 `verify:m10` scans the real `ui-kit/src/components` tree as the M10 pressure gate. It verifies macro component coverage, `v-for`/`v-model`/`${...}` pressure, Web Components CSS token coverage, cached index performance, and test coverage for `useComponents()` aliases, `defineModel()`, `defineSlots<T>()`, and dependency package metadata.
 
 `benchmark:diagnostics` profiles cold and unchanged-document diagnostics over the real Kit macro

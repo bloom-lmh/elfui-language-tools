@@ -7,7 +7,7 @@ Date: 2026-07-29
 Reduce the intrinsic CPU cost of `createElfDiagnostics()` while preserving every existing macro,
 template, style, comment, `v-for`, ref-unwrapping, and component-contract diagnostic.
 
-## Baseline Method
+## Original Baseline Method
 
 - Benchmark all macro component files under `elfui-kit/src/components`.
 - Record cold and immediate-repeat diagnostic duration per file.
@@ -35,14 +35,6 @@ template, style, comment, `v-for`, ref-unwrapping, and component-contract diagno
 
 ## Verification
 
-- Baseline across 116 real Kit macro files:
-  - cold diagnostics: 58,487.4 ms;
-  - immediate repeat: 55,305.0 ms.
-- Optimized result across the same 116 files:
-  - source preparation plus cold diagnostics: 43,599.8 ms, 25.5% below baseline;
-  - immediate repeat: 4.7 ms, more than 99.99% below baseline;
-  - macro compilation: 41,558.4 ms;
-  - language-tools macro filtering: 1,105.1 ms.
 - The unchanged-document LRU cache returns cloned diagnostics and invalidates on source or
   project-component changes.
 - Compiler mapping candidates now share one TypeScript semantic-diagnostics batch instead of
@@ -52,11 +44,21 @@ template, style, comment, `v-for`, ref-unwrapping, and component-contract diagno
 
 ## Outcome
 
-The language-tools-owned repeat work is removed. A repeated diagnostic request for all 116 Kit
-macro files now costs 4.7 ms in aggregate instead of 55.3 seconds. Cold end-to-end work is 25.5%
-lower, but 41.56 of the remaining 42.79 seconds is the beta.20 compiler's template compilation.
-Further material cold-start gains require an incremental compiler API or compiler-level
-parse/type-check cache; adding another language-service scheduling layer would not remove that
-CPU cost.
+The language-tools-owned repeat work is removed: unchanged diagnostics return directly from a
+bounded cache, while source and project-component changes invalidate the appropriate layers.
+Further material cold-start gains require compiler-level TypeScript program reuse.
 
 Implementation commit: `7c4c81f`; pushed to Gitee and GitHub `main`.
+
+## Benchmark Correction
+
+The original temporary benchmark bundle ran outside `dist/` and could not access the TypeScript
+standard libraries that are shipped beside the real server. Its 43,599.8 ms optimized cold total,
+41,558.4 ms compiler attribution, and false-positive-filter attribution are therefore invalid and
+must not be used for release decisions.
+
+The corrected benchmark builds first and runs beside `dist/typescript-lib`. On 117 current Kit
+macro files with npm compiler beta.20 it records 59,061.0 ms cold diagnostics, 58,945.3 ms macro
+compilation, 2.8 ms compiler-diagnostic filtering, and 10.4 ms aggregate unchanged repeat. The
+cache correctness and invalidation tests remain valid; only the earlier cold-cost attribution was
+incorrect.

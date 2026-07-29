@@ -15,7 +15,7 @@ jobs:
         with:
           repository: bloom-lmh/elfui-kit
           path: .fixtures/elfui-kit
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.28.0
       - uses: actions/setup-node@v4

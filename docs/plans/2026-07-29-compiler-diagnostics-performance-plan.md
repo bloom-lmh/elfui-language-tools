@@ -58,3 +58,5 @@ lower, but 41.56 of the remaining 42.79 seconds is the beta.20 compiler's templa
 Further material cold-start gains require an incremental compiler API or compiler-level
 parse/type-check cache; adding another language-service scheduling layer would not remove that
 CPU cost.
+
+Implementation commit: `7c4c81f`; pushed to Gitee and GitHub `main`.

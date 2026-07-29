@@ -36,8 +36,8 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 Current maintained baseline: `0.4.1` released.
 
 Current maintenance cycle: intrinsic compiler-diagnostic profiling and optimization are
-implemented and fully verified; commit and remote synchronization are pending. The active record
-is `docs/plans/2026-07-29-compiler-diagnostics-performance-plan.md`.
+implemented, fully verified, and synchronized to Gitee and GitHub. The completed record is
+`docs/plans/2026-07-29-compiler-diagnostics-performance-plan.md`.
 
 ## 2. 已经做的工作
 
@@ -157,8 +157,8 @@ Latest confirmed locally on 2026-07-29 for the unreleased performance maintenanc
 - Unreleased editor maintenance commits: `80c2daf` and `998f0a9`; beta.20 compiler alignment,
   formatting/highlighting/navigation fixes, and interactive-priority diagnostic scheduling are
   fully verified and pushed to Gitee and GitHub `main`.
-- Diagnostics cache/batching and benchmark changes are fully verified locally; implementation
-  commit and push are pending.
+- Diagnostics cache/batching and benchmark commit: `7c4c81f`; fully verified and pushed to Gitee
+  and GitHub `main`.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.

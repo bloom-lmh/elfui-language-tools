@@ -1,6 +1,6 @@
 {
   "name": "elfui-language-features-typescript-plugin",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "main": "./index.js",
   "description": "TypeScript server plugin for ElfUI language features.",
   "license": "MIT",

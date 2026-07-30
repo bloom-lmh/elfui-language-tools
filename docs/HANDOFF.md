@@ -38,7 +38,8 @@ Current maintained baseline: `0.4.3` fully released.
 Current maintenance cycle: release `0.4.4` is in progress for the completed editor-experience
 maintenance covering embedded-template attribute formatting, macro diagnostic false positives,
 multiline generic grammar highlighting, and explicitly named bare HTML/CSS template strings.
-Versioning, full release gates, Marketplace publication, commit, tag, and remote pushes are pending.
+Versioning and all local release gates are complete; Marketplace publication, the release commit,
+tag, and remote pushes are pending.
 
 ## 2. 已经做的工作
 
@@ -154,29 +155,30 @@ Versioning, full release gates, Marketplace publication, commit, tag, and remote
   therefore part of CI reliability.
 - The local VS Code test process still logs the recurring updater mutex warning, but development
   and packaged Host suites both launch and complete successfully.
-- On the current Windows workstation, the no-argument `pnpm test` run can exceed existing 5-second
-  and 15-second per-test timeouts in compiler-heavy language-service cases while several Kit/Lab
-  development servers are active. The affected maintenance assertions pass in focused runs; do not
-  raise the timeout or weaken their assertions without a controlled performance investigation.
+- Transient Windows process contention previously pushed compiler-heavy language-service tests
+  past their existing per-test timeouts. The authoritative `0.4.4` release run later passed the
+  original `pnpm test` command without changing thresholds; keep the original limits and rerun
+  under lower contention before treating a timeout-only result as a regression.
 
 ## Verification Snapshot
 
-Latest confirmed locally on 2026-07-30 for the current post-`0.4.3` working tree:
+Latest confirmed locally on 2026-07-30 for the `0.4.4` release candidate:
 
-- Focused maintenance tests: 5/5 passed for attribute wrapping resolution/formatting, reserved
-  component `:key`, and strict quoted-template diagnostic boundaries.
-- `pnpm typecheck`: passed.
-- `pnpm smoke`: passed, including 12/12 grammar cases for multiline generics, named bare HTML/CSS
-  templates, interpolation, and the unrelated-template negative case.
+- `pnpm typecheck`: passed with unused-code checks enabled.
+- `pnpm test`: 7 files, 104 tests passed in 24.73 seconds with the original timeout thresholds.
+- `pnpm smoke`: extension startup and 12/12 grammar cases passed, including multiline generics,
+  named bare HTML/CSS templates, interpolation, and the unrelated-template negative case.
 - `pnpm verify:m10`: passed with 400 Kit source files, 122 style files, 25 macro components, an
-  87.0 ms cold scan, and 522/522 warm cache reuse in 22.6 ms.
-- `pnpm smoke:host`: 18/18 passed, including explicit per-attribute save formatting and repeated
-  formatting idempotency.
-- `pnpm test`: an earlier 7-file/102-test run passed before the final two pure configuration
-  assertions were added. The current run passes 6/7 files and 96/104 tests; eight existing
-  compiler-heavy language-service tests time out under local process contention (seven at 5
-  seconds and one at 15 seconds), with no assertion failures. The failed cases are unrelated to
-  this maintenance cycle's assertions.
+  82.8 ms cold scan, and 522/522 warm cache reuse in 19.0 ms.
+- `pnpm smoke:host`: 18/18 development-extension Host tests passed, including explicit
+  per-attribute save formatting and repeated formatting idempotency. Activation was 562.2 ms,
+  active prewarm 100.2 ms, first completion 42.27 ms, warm completion p95 21.40 ms, and warm
+  formatting p95 9.49 ms.
+- `pnpm package:vsix`: 115 files and 3,058,552 bytes (2.92 MiB), below the 4 MiB budget. SHA-256:
+  `B3F4A72659A5C11D122E71E26D920562392BA2C33AB161271CC59C521B10E53B`.
+- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed. Activation was 756.3 ms, active
+  prewarm 84.8 ms, first completion 32.47 ms, warm completion p95 5.33 ms, and warm formatting p95
+  1.55 ms.
 
 Latest confirmed release baseline for `0.4.3`:
 
@@ -217,9 +219,10 @@ Latest confirmed release baseline for `0.4.3`:
 ## Release State
 
 - Released version: `0.4.3`.
-- Release `0.4.4` is in progress. The editor-experience maintenance is still an uncommitted,
-  unpublished working-tree change; package versions remain aligned at `0.4.3` until the release
-  version step completes.
+- Release `0.4.4` is in progress. Feature commit `ff0cb82` is local, package versions are aligned at
+  `0.4.4`, and the complete local release gate plus VSIX packaging are successful. Marketplace
+  publication, the release commit/tag, and remote pushes are pending.
+- Local release artifact: `.local-vsix/elfui-language-features-0.4.4.vsix` (3,058,552 bytes).
 - The repeated-save formatting fix, cyan italic component-tag default, regression coverage,
   version bump, full local release gate, and Marketplace publication are complete.
 - Release commit `d1ee25e` and tag `v0.4.3` are pushed to Gitee and GitHub.

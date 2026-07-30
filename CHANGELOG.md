@@ -1,5 +1,12 @@
 # elfui-language-features
 
+## 0.4.4
+
+### Patch Changes
+
+- ff0cb82: Honor Prettier single-attribute formatting inside ElfUI templates, suppress the reserved component
+  `key` prop false positive, and highlight multiline generic and explicitly named bare templates.
+
 ## 0.4.3
 
 ### Patch Changes

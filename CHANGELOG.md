@@ -1,5 +1,12 @@
 # elfui-language-features
 
+## 0.4.3
+
+### Patch Changes
+
+- 17db7f4: Keep repeated save formatting idempotent for nested markup inside `pre` and `code`, and style
+  ElfUI component tag names with the new cyan italic default.
+
 ## 0.4.2 - 2026-07-29
 
 ### Changes

@@ -33,11 +33,11 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 - Treat `elfui`, `elfui-docs`, and `elfui-kit` as read-only compatibility inputs unless a future
   task explicitly authorizes changes in those repositories.
 
-Current maintained baseline: `0.4.2` released.
+Current maintained baseline: `0.4.3` published to the VS Code Marketplace.
 
-Current maintenance cycle: repeated save formatting for whitespace-sensitive nested `pre` /
-`code` markup is fixed and fully verified. The completed plan is
-`docs/plans/2026-07-29-embedded-formatting-idempotency-fix.md`.
+Current maintenance cycle: Language Tools `0.4.3` passed the complete local release gate and is
+published to the VS Code Marketplace. Git commits, the `v0.4.3` tag, and the GitHub Release are
+the remaining release bookkeeping.
 
 ## 2. 已经做的工作
 
@@ -146,7 +146,7 @@ Current maintenance cycle: repeated save formatting for whitespace-sensitive nes
 
 ## Verification Snapshot
 
-Latest confirmed locally on 2026-07-30 for the unreleased formatting and highlighting fix:
+Latest confirmed locally on 2026-07-30 for the `0.4.3` release:
 
 - `pnpm typecheck`: passed with unused-code checks enabled.
 - `pnpm test`: 7 files, 99 tests passed.
@@ -154,12 +154,12 @@ Latest confirmed locally on 2026-07-30 for the unreleased formatting and highlig
   cases passed.
 - `pnpm verify:m10`: 387 Kit source files, 28 macro components, cold index 79.2 ms, warm
   505/505 cache reuse in 3.3 ms.
-- `pnpm smoke:host`: 18/18 development-extension Host tests passed in 27 seconds, including
+- `pnpm smoke:host`: 18/18 development-extension Host tests passed in 39 seconds, including
   repeated save-format idempotency and cyan italic component-tag styling. Activation was
-  543.0 ms, active prewarm 63.5 ms, first completion 21.50 ms, warm completion p95 4.42 ms,
-  and warm formatting p95 1.48 ms.
+  595.1 ms, active prewarm 71.8 ms, first completion 19.49 ms, warm completion p95 4.53 ms,
+  and warm formatting p95 2.01 ms.
 - `pnpm package:vsix`: 115 files, 2.92 MiB, below the 4 MiB budget.
-- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed in 24 seconds, including the same
+- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed in 28 seconds, including the same
   formatting and highlighting coverage.
 - Corrected `pnpm benchmark:diagnostics` with npm beta.20: 117 Kit macro files; 59,061.0 ms cold,
   10.4 ms aggregate repeat, 58,945.3 ms compiler compilation, and 2.8 ms filtering.
@@ -184,9 +184,10 @@ Latest confirmed locally on 2026-07-30 for the unreleased formatting and highlig
 
 ## Release State
 
-- Released version: `0.4.2`.
-- The repeated-save formatting fix, cyan italic component-tag default, regression coverage, and
-  patch changeset are complete locally but not yet released.
+- Marketplace version: `0.4.3`.
+- The repeated-save formatting fix, cyan italic component-tag default, regression coverage,
+  version bump, full local release gate, and Marketplace publication are complete.
+- The `v0.4.3` tag and GitHub Release are pending until the release commit is pushed.
 - Editor maintenance commits `80c2daf` and `998f0a9`; formatting/highlighting/navigation fixes and
   interactive-priority diagnostic scheduling are fully verified and pushed to Gitee and GitHub
   `main`.
@@ -201,12 +202,12 @@ Latest confirmed locally on 2026-07-30 for the unreleased formatting and highlig
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.
 - Release-workflow follow-up: `5627d44`; pushed to Gitee and GitHub `main`.
-- Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.2`.
+- Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.3`.
 - Release commit: `6031197`; pushed to Gitee and GitHub `main`.
 - Git tag: `v0.4.2`; pushed to Gitee and GitHub.
 - GitHub Release: `https://github.com/bloom-lmh/elfui-language-tools/releases/tag/v0.4.2`;
   verified VSIX asset uploaded (3,057,299 bytes).
-- Local artifact: `.local-vsix/elfui-language-features-0.4.2.vsix`.
+- Local artifact: `.local-vsix/elfui-language-features-0.4.3.vsix` (3,057,604 bytes).
 
 ## Current Capability
 

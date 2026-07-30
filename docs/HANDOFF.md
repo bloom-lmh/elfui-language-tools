@@ -33,11 +33,11 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 - Treat `elfui`, `elfui-docs`, and `elfui-kit` as read-only compatibility inputs unless a future
   task explicitly authorizes changes in those repositories.
 
-Current maintained baseline: `0.4.3` published to the VS Code Marketplace.
+Current maintained baseline: `0.4.3` fully released.
 
-Current maintenance cycle: Language Tools `0.4.3` passed the complete local release gate and is
-published to the VS Code Marketplace. Git commits, the `v0.4.3` tag, and the GitHub Release are
-the remaining release bookkeeping.
+Current maintenance cycle: Language Tools `0.4.3` passed the complete local and GitHub release
+gates, is published to the VS Code Marketplace, and has matching Gitee/GitHub tags plus a public
+GitHub Release with the verified VSIX asset.
 
 ## 2. 已经做的工作
 
@@ -184,10 +184,12 @@ Latest confirmed locally on 2026-07-30 for the `0.4.3` release:
 
 ## Release State
 
-- Marketplace version: `0.4.3`.
+- Released version: `0.4.3`.
 - The repeated-save formatting fix, cyan italic component-tag default, regression coverage,
   version bump, full local release gate, and Marketplace publication are complete.
-- The `v0.4.3` tag and GitHub Release are pending until the release commit is pushed.
+- Release commit `d1ee25e` and tag `v0.4.3` are pushed to Gitee and GitHub.
+- GitHub workflow `30513172166` completed successfully and created the public Release with its
+  3,057,605-byte VSIX asset.
 - Editor maintenance commits `80c2daf` and `998f0a9`; formatting/highlighting/navigation fixes and
   interactive-priority diagnostic scheduling are fully verified and pushed to Gitee and GitHub
   `main`.
@@ -204,9 +206,9 @@ Latest confirmed locally on 2026-07-30 for the `0.4.3` release:
 - Release-workflow follow-up: `5627d44`; pushed to Gitee and GitHub `main`.
 - Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.3`.
 - Release commit: `6031197`; pushed to Gitee and GitHub `main`.
-- Git tag: `v0.4.2`; pushed to Gitee and GitHub.
-- GitHub Release: `https://github.com/bloom-lmh/elfui-language-tools/releases/tag/v0.4.2`;
-  verified VSIX asset uploaded (3,057,299 bytes).
+- Git tag: `v0.4.3`; pushed to Gitee and GitHub.
+- GitHub Release: `https://github.com/bloom-lmh/elfui-language-tools/releases/tag/v0.4.3`;
+  verified VSIX asset uploaded (3,057,605 bytes).
 - Local artifact: `.local-vsix/elfui-language-features-0.4.3.vsix` (3,057,604 bytes).
 
 ## Current Capability

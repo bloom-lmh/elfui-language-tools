@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-30
 
-This repository, `E:\dev_projects\elfui-official\elfui-language-tools`, is the
+This repository, `E:\elfui-language-tools`, is the
 only maintained home for the ElfUI VS Code extension. Do not modify the retired
 `E:\dev_projects\elfui\tools\vscode-extension` copy.
 
@@ -35,9 +35,10 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 Current maintained baseline: `0.4.3` fully released.
 
-Current maintenance cycle: Language Tools `0.4.3` passed the complete local and GitHub release
-gates, is published to the VS Code Marketplace, and has matching Gitee/GitHub tags plus a public
-GitHub Release with the verified VSIX asset.
+Current maintenance cycle: release `0.4.4` is in progress for the completed editor-experience
+maintenance covering embedded-template attribute formatting, macro diagnostic false positives,
+multiline generic grammar highlighting, and explicitly named bare HTML/CSS template strings.
+Versioning, full release gates, Marketplace publication, commit, tag, and remote pushes are pending.
 
 ## 2. 已经做的工作
 
@@ -108,6 +109,16 @@ GitHub Release with the verified VSIX asset.
 - Changed the managed ElfUI component-tag name default to Dracula Cyan (`#8BE9FD`) with italic
   TextMate styling while continuing to honor a configured custom foreground color. Tag
   punctuation retains the active theme's styling.
+- Embedded HTML formatting now maps `prettier.singleAttributePerLine: true` to the HTML language
+  service's `force-expand-multiline` strategy. Users can override it explicitly with
+  `elfui.languageFeatures.formatting.wrapAttributes`.
+- Component `:key` bindings no longer surface the beta.21 compiler's reserved-attribute prop-name
+  false positive. Diagnostics within the key expression remain active.
+- TextMate highlighting now supports multiline generic arguments in `defineHtml<...>(...)` and
+  explicitly named bare HTML/CSS template strings, while leaving unrelated template strings alone.
+- Confirmed the reported quoted-template diagnostics are real strict-template errors:
+  `category.items[0]` can be undefined with unchecked indexed access, and template refs are
+  auto-unwrapped, so quoted expressions must not use `.value`.
 
 ## 3. 未作的工作（将要做的）
 
@@ -143,10 +154,31 @@ GitHub Release with the verified VSIX asset.
   therefore part of CI reliability.
 - The local VS Code test process still logs the recurring updater mutex warning, but development
   and packaged Host suites both launch and complete successfully.
+- On the current Windows workstation, the no-argument `pnpm test` run can exceed existing 5-second
+  and 15-second per-test timeouts in compiler-heavy language-service cases while several Kit/Lab
+  development servers are active. The affected maintenance assertions pass in focused runs; do not
+  raise the timeout or weaken their assertions without a controlled performance investigation.
 
 ## Verification Snapshot
 
-Latest confirmed locally on 2026-07-30 for the `0.4.3` release:
+Latest confirmed locally on 2026-07-30 for the current post-`0.4.3` working tree:
+
+- Focused maintenance tests: 5/5 passed for attribute wrapping resolution/formatting, reserved
+  component `:key`, and strict quoted-template diagnostic boundaries.
+- `pnpm typecheck`: passed.
+- `pnpm smoke`: passed, including 12/12 grammar cases for multiline generics, named bare HTML/CSS
+  templates, interpolation, and the unrelated-template negative case.
+- `pnpm verify:m10`: passed with 400 Kit source files, 122 style files, 25 macro components, an
+  87.0 ms cold scan, and 522/522 warm cache reuse in 22.6 ms.
+- `pnpm smoke:host`: 18/18 passed, including explicit per-attribute save formatting and repeated
+  formatting idempotency.
+- `pnpm test`: an earlier 7-file/102-test run passed before the final two pure configuration
+  assertions were added. The current run passes 6/7 files and 96/104 tests; eight existing
+  compiler-heavy language-service tests time out under local process contention (seven at 5
+  seconds and one at 15 seconds), with no assertion failures. The failed cases are unrelated to
+  this maintenance cycle's assertions.
+
+Latest confirmed release baseline for `0.4.3`:
 
 - `pnpm typecheck`: passed with unused-code checks enabled.
 - `pnpm test`: 7 files, 99 tests passed.
@@ -185,6 +217,9 @@ Latest confirmed locally on 2026-07-30 for the `0.4.3` release:
 ## Release State
 
 - Released version: `0.4.3`.
+- Release `0.4.4` is in progress. The editor-experience maintenance is still an uncommitted,
+  unpublished working-tree change; package versions remain aligned at `0.4.3` until the release
+  version step completes.
 - The repeated-save formatting fix, cyan italic component-tag default, regression coverage,
   version bump, full local release gate, and Marketplace publication are complete.
 - Release commit `d1ee25e` and tag `v0.4.3` are pushed to Gitee and GitHub.

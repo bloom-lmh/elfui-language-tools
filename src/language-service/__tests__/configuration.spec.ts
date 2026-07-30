@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { resolveAttributeWrapping } from "../../lsp/formatting";
 import {
   areWorkspaceIndexOptionsEqual,
   readLanguageServiceOptions,
@@ -84,5 +85,15 @@ describe("language service configuration", () => {
     ).toEqual({
       enabled: true
     });
+  });
+
+  it("maps Prettier singleAttributePerLine to expanded multiline attributes", () => {
+    expect(resolveAttributeWrapping(undefined, true)).toBe("force-expand-multiline");
+    expect(resolveAttributeWrapping(null, false)).toBeUndefined();
+  });
+
+  it("keeps an explicit ElfUI attribute wrapping strategy authoritative", () => {
+    expect(resolveAttributeWrapping("force-aligned", true)).toBe("force-aligned");
+    expect(resolveAttributeWrapping("unsupported", true)).toBe("force-expand-multiline");
   });
 });

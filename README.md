@@ -72,6 +72,7 @@ Marketplace, the same pane can install it by name instead.
 - `elfui.languageFeatures.diagnostics.suppressNativeTemplateLocals`: suppress native TS missing-name false positives only for ElfUI template locals. The default is `true`.
 - `elfui.languageFeatures.diagnostics.suppressNativeRefUnwrapComparisons`: suppress native `ts(2367)` false positives only for auto-unwrapped `useRef()` values in ElfUI template expressions. The default is `true`.
 - `elfui.languageFeatures.formatting.printWidth`: embedded HTML/CSS line width. When unset, ElfUI follows `prettier.printWidth`, then `editor.wordWrapColumn`.
+- `elfui.languageFeatures.formatting.wrapAttributes`: embedded HTML attribute wrapping. When unset, `prettier.singleAttributePerLine: true` maps to `force-expand-multiline`; otherwise the HTML formatter uses `auto`.
 - `elfui.languageFeatures.workspace.maxScanFiles`: maximum number of workspace TS/JS source files scanned for component metadata.
 - `elfui.languageFeatures.workspace.indexDebounceMs`: debounce delay before rebuilding the workspace component index after file changes.
 - `elfui.languageFeatures.workspace.perfLogging`: log workspace index timing and cache stats to the ElfUI language server output.

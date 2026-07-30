@@ -1205,6 +1205,42 @@ describe("ElfUI language service", () => {
     expect(narrow).toContain('aria-label="Save the current record"');
   });
 
+  it("formats every embedded HTML attribute on its own aligned line", () => {
+    const source = [
+      'import { defineHtml } from "@elfui/core";',
+      "",
+      "export const View = defineHtml(`",
+      '<div class="carousel" role="region" aria-roledescription="carousel" tabindex="0"></div>',
+      "`);",
+      ""
+    ].join("\n");
+    const document = createDocument(source);
+    const formatted = applyTextEdits(
+      source,
+      createElfFormattingEdits(document, {
+        insertSpaces: true,
+        tabSize: 2,
+        wrapAttributes: "force-expand-multiline",
+        wrapLineLength: 120
+      })
+    );
+    const attributeLines = formatted
+      .split("\n")
+      .filter((line) => /(?:class|role|aria-roledescription|tabindex)=/.test(line));
+    const indentation = attributeLines.map((line) => line.match(/^[ \t]*/)?.[0] ?? "");
+
+    expect(attributeLines).toHaveLength(4);
+    expect(attributeLines.map((line) => line.trim())).toEqual([
+      'class="carousel"',
+      'role="region"',
+      'aria-roledescription="carousel"',
+      'tabindex="0"'
+    ]);
+    expect(new Set(indentation).size).toBe(1);
+    expect(formatted).toContain("<div\n");
+    expect(formatted).toMatch(/\n\s+><\/div>/);
+  });
+
   it("keeps repeated formatting idempotent inside whitespace-sensitive pre and code elements", () => {
     const source = `
       import { defineHtml } from "@elfui/core";
@@ -1328,6 +1364,65 @@ describe("ElfUI language service", () => {
 
     expect(diagnostics.some((item) => item.includes("toggleTheme"))).toBe(false);
     expect(diagnostics.some((item) => item.includes("title"))).toBe(false);
+  });
+
+  it("does not treat the reserved component key binding as a declared prop", () => {
+    const source = `
+      import { defineHtml, useComponents } from "@elfui/core";
+
+      interface SceneProps {
+        scene: string;
+      }
+
+      const Scene = {} as {
+        readonly __elfProps?: Readonly<SceneProps>;
+      };
+      useComponents({ Scene });
+      const activeScene = {
+        value: { id: "intro", scene: "overview" },
+        peek: () => ({ id: "intro", scene: "overview" })
+      };
+
+      export const App = defineHtml(\`
+        <Scene :key=\${activeScene.value.id} :scene=\${activeScene.value.scene}></Scene>
+      \`);
+    `;
+    const document = TextDocument.create("file:///ReservedKey.ts", "typescript", 0, source);
+    const diagnostics = readDiagnosticMessages(createElfDiagnostics(document));
+
+    expect(diagnostics.some((item) => item.includes("Argument of type '\"key\"'"))).toBe(false);
+    expect(
+      diagnostics.filter((item) => item.includes("Property 'value' does not exist"))
+    ).toEqual([]);
+  });
+
+  it("keeps quoted template ref access and unchecked array access diagnostics", () => {
+    const source = `
+      import { defineHtml, useRef } from "@elfui/core";
+
+      interface Category {
+        id: string;
+        items: Array<{ id: string }>;
+      }
+
+      const categories: Category[] = [];
+      const activeCategoryId = useRef("intro");
+
+      export const App = defineHtml(\`
+        <a
+          v-for="category in categories"
+          :href="category.items[0].id"
+          :class="{ active: category.id === activeCategoryId.value }"
+        ></a>
+      \`);
+    `;
+    const document = TextDocument.create("file:///StrictTemplate.ts", "typescript", 0, source);
+    const diagnostics = readDiagnosticMessages(createElfDiagnostics(document));
+
+    expect(diagnostics.some((item) => item.includes("Object is possibly 'undefined'"))).toBe(true);
+    expect(diagnostics.some((item) => item.includes("Property 'value' does not exist"))).toBe(
+      true
+    );
   });
 
   it("does not report packaged lib false positives in macro template diagnostics", () => {

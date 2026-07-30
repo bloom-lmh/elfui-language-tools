@@ -137,6 +137,55 @@ const cases = [
     }
   ],
   [
+    "highlights defineHtml with multiline generic arguments",
+    () => {
+      const tokens = tokenize(
+        [
+          "defineHtml<",
+          "  Props,",
+          "  Emits,",
+          "  Slots",
+          ">(",
+          "  `",
+          '    <section class="generic-template">',
+          "      <button>Save</button>",
+          "    </section>",
+          "  `",
+          ");"
+        ].join("\n")
+      );
+
+      expectScope(findToken(tokens, "section"), "entity.name.tag.html", "generic template tag");
+      expectScope(findToken(tokens, "class"), "entity.other.attribute-name.html", "generic template attr");
+      expectScope(findToken(tokens, "button"), "entity.name.tag.html", "generic template child");
+    }
+  ],
+  [
+    "highlights explicitly named bare HTML and CSS templates",
+    () => {
+      const htmlTokens = tokenize(
+        'export const labPanelHtml = `<aside class="panel">${title}</aside>`;'
+      );
+      const cssTokens = tokenize(
+        "export const labPanelStyles = `\n  :host {\n    color: red;\n  }\n`;"
+      );
+
+      expectScope(findToken(htmlTokens, "aside"), "entity.name.tag.html", "bare HTML tag");
+      expectScope(findToken(htmlTokens, "class"), "entity.other.attribute-name.html", "bare HTML attr");
+      expectScope(findToken(htmlTokens, "title"), "meta.template.expression.ts", "bare HTML interpolation");
+      expectScope(findToken(cssTokens, "color"), "support.type.property-name.css", "bare CSS property");
+    }
+  ],
+  [
+    "does not classify unrelated bare template strings",
+    () => {
+      expectNoMacroScope(
+        tokenize("const message = `Hello ${name}`;"),
+        "unrelated bare template string"
+      );
+    }
+  ],
+  [
     "keeps escaped nested templates inside defineHtml attributes",
     () => {
       const tokens = tokenize(

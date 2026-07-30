@@ -22,6 +22,7 @@ import {
   getLanguageService as getHtmlLanguageService,
   TokenType,
   type HTMLDocument,
+  type HTMLFormatConfiguration,
   type Node as HTMLNode
 } from "vscode-html-languageservice";
 import {
@@ -62,6 +63,7 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 
 interface ElfFormattingOptions extends LspFormattingOptions {
   elfuiExternalFormatter?: boolean;
+  wrapAttributes?: HTMLFormatConfiguration["wrapAttributes"];
   wrapLineLength?: number;
 }
 
@@ -981,6 +983,8 @@ const createMacroDiagnostics = (
       .forEach((diagnostic) => {
         if (isDiagnosticInsideTemplateComment(document, components, diagnostic)) {
           suppressedCommentDiagnosticCount += 1;
+        } else if (isReservedComponentKeyDiagnostic(diagnostic)) {
+          suppressedKnownDiagnosticCount += 1;
         } else if (isResolvedVForLocalUnknownDiagnostic(document, components, diagnostic)) {
           suppressedVForDiagnosticCount += 1;
         } else if (
@@ -1052,6 +1056,12 @@ const isDiagnosticInsideTemplateComment = (
     ? isOffsetInsideEmbeddedComment(document.uri, region, offset - region.contentStart)
     : false;
 };
+
+const isReservedComponentKeyDiagnostic = (diagnostic: Diagnostic): boolean =>
+  diagnostic.code === "ELF_TEMPLATE_TYPE" &&
+  /^Template component prop expression "[\s\S]*?" at line \d+, column \d+: Argument of type '\"key\"' is not assignable to parameter of type /.test(
+    readDiagnosticMessage(diagnostic)
+  );
 
 const mapMacroDiagnostic = (document: TextDocument, diagnostic: ElfDiagnostic): Diagnostic => {
   const source = document.getText();
@@ -7035,7 +7045,7 @@ const formatEmbeddedRegion = (
     region.kind === "template"
       ? htmlLanguageService.format(formattingDocument, virtualRange, {
           ...formatOptions,
-          wrapAttributes: "auto"
+          wrapAttributes: options.wrapAttributes ?? "auto"
         })
       : cssLanguageService.format(formattingDocument, virtualRange, formatOptions);
 

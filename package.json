@@ -205,6 +205,24 @@
           "minimum": 20,
           "description": "Maximum line width for embedded ElfUI HTML/CSS formatting. When unset, ElfUI follows prettier.printWidth, then editor.wordWrapColumn."
         },
+        "elfui.languageFeatures.formatting.wrapAttributes": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "enum": [
+            null,
+            "auto",
+            "force",
+            "force-aligned",
+            "force-expand-multiline",
+            "aligned-multiple",
+            "preserve",
+            "preserve-aligned"
+          ],
+          "description": "Attribute wrapping for embedded ElfUI HTML. When unset, prettier.singleAttributePerLine=true maps to force-expand-multiline; otherwise the HTML formatter uses auto."
+        },
         "elfui.languageFeatures.workspace.maxScanFiles": {
           "type": "number",
           "default": 10000,

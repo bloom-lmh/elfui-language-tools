@@ -862,6 +862,7 @@ suite("ElfUI Language Features Smoke", function () {
       document
     );
     const previousPrintWidth = formattingConfiguration.inspect("printWidth")?.workspaceValue;
+    const previousWrapAttributes = formattingConfiguration.inspect("wrapAttributes")?.workspaceValue;
     try {
       await editorConfiguration.update(
         "formatOnSave",
@@ -877,7 +878,12 @@ suite("ElfUI Language Features Smoke", function () {
       await editorConfiguration.update("insertSpaces", true, vscode.ConfigurationTarget.Workspace);
       await formattingConfiguration.update(
         "printWidth",
-        48,
+        160,
+        vscode.ConfigurationTarget.Workspace
+      );
+      await formattingConfiguration.update(
+        "wrapAttributes",
+        "force-expand-multiline",
         vscode.ConfigurationTarget.Workspace
       );
       await editor.edit((editBuilder) => {
@@ -889,10 +895,11 @@ suite("ElfUI Language Features Smoke", function () {
 
       await waitFor(
         () =>
-          /defineHtml\(`\n {4}<section>\n {8}<button/.test(
+          /defineHtml\(`\n {4}<section>\n {8}<button\n {12}type="button"/.test(
             document.getText()
           ) &&
           /\n {12}aria-label="Save the current record"/.test(document.getText()) &&
+          /\n {8}>\{\{ count \}\}<\/button>/.test(document.getText()) &&
           /\n {8}<pre class="code-content"><code>\n {9,}<span class="code-line"/.test(
             document.getText()
           ) &&
@@ -949,6 +956,11 @@ suite("ElfUI Language Features Smoke", function () {
       await formattingConfiguration.update(
         "printWidth",
         previousPrintWidth,
+        vscode.ConfigurationTarget.Workspace
+      );
+      await formattingConfiguration.update(
+        "wrapAttributes",
+        previousWrapAttributes,
         vscode.ConfigurationTarget.Workspace
       );
     }

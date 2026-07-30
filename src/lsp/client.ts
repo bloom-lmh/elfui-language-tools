@@ -11,8 +11,13 @@ import {
 } from "vscode-languageclient/node";
 
 import { BoundedLatencyRecorder, type LatencyDistribution } from "../shared/performance";
+import { resolveAttributeWrapping, type ElfAttributeWrapping } from "./formatting";
 
 const supportedLanguages = ["typescript", "typescriptreact", "javascript", "javascriptreact"];
+type ElfDocumentFormattingOptions = vscode.FormattingOptions & {
+  wrapAttributes?: ElfAttributeWrapping;
+  wrapLineLength?: number;
+};
 const clientFeaturePerformance = {
   codeAction: new BoundedLatencyRecorder(),
   completion: new BoundedLatencyRecorder(),
@@ -28,13 +33,14 @@ export interface LanguageClientPerformanceSummary {
 export const resolveDocumentFormattingOptions = (
   document: vscode.TextDocument,
   options: vscode.FormattingOptions
-): vscode.FormattingOptions => {
-  const elfuiPrintWidth = vscode.workspace
-    .getConfiguration("elfui.languageFeatures.formatting", document.uri)
-    .get<number | null>("printWidth");
-  const prettierPrintWidth = vscode.workspace
-    .getConfiguration("prettier", document.uri)
-    .get<number>("printWidth");
+): ElfDocumentFormattingOptions => {
+  const elfuiFormatting = vscode.workspace.getConfiguration(
+    "elfui.languageFeatures.formatting",
+    document.uri
+  );
+  const prettier = vscode.workspace.getConfiguration("prettier", document.uri);
+  const elfuiPrintWidth = elfuiFormatting.get<number | null>("printWidth");
+  const prettierPrintWidth = prettier.get<number>("printWidth");
   const editorWordWrapColumn = vscode.workspace
     .getConfiguration("editor", document.uri)
     .get<number>("wordWrapColumn");
@@ -43,13 +49,19 @@ export const resolveDocumentFormattingOptions = (
     prettierPrintWidth,
     editorWordWrapColumn
   ].find(isValidPrintWidth);
+  const configuredAttributeWrapping = elfuiFormatting.get<string | null>("wrapAttributes");
+  const wrapAttributes = resolveAttributeWrapping(
+    configuredAttributeWrapping,
+    prettier.get<boolean>("singleAttributePerLine", false)
+  );
 
-  return wrapLineLength === undefined
-    ? options
-    : {
-        ...options,
-        wrapLineLength: Math.round(wrapLineLength)
-      };
+  return {
+    ...options,
+    ...(wrapAttributes ? { wrapAttributes } : {}),
+    ...(wrapLineLength === undefined
+      ? {}
+      : { wrapLineLength: Math.round(wrapLineLength) })
+  };
 };
 
 export const readLanguageClientPerformanceSummary = (): LanguageClientPerformanceSummary => ({

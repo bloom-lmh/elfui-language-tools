@@ -33,14 +33,11 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 - Treat `elfui`, `elfui-docs`, and `elfui-kit` as read-only compatibility inputs unless a future
   task explicitly authorizes changes in those repositories.
 
-Current maintained baseline: `0.4.3` fully released.
+Current maintained baseline: `0.4.4` fully released.
 
-Current maintenance cycle: release `0.4.4` is in progress for the completed editor-experience
-maintenance covering embedded-template attribute formatting, macro diagnostic false positives,
-multiline generic grammar highlighting, and explicitly named bare HTML/CSS template strings.
-Versioning and all local release gates are complete. Feature and release commits plus `main` are
-pushed to Gitee and GitHub. Marketplace publication remains blocked after a second credential
-verification failure; `v0.4.4` and the GitHub Release intentionally remain pending.
+Current maintenance cycle: Language Tools `0.4.4` passed the complete local and GitHub release
+gates, is published to the VS Code Marketplace, and has matching Gitee/GitHub tags plus a public
+GitHub Release with the verified VSIX asset.
 
 ## 2. 已经做的工作
 
@@ -219,18 +216,18 @@ Latest confirmed release baseline for `0.4.3`:
 
 ## Release State
 
-- Released version: `0.4.3`.
-- Release `0.4.4` is in progress. Feature commit `ff0cb82` and release commit `488ef6a` are pushed
-  to Gitee and GitHub `main`; package versions are aligned at `0.4.4`, and the complete local
-  release gate plus VSIX packaging are successful.
-- Local release artifact: `.local-vsix/elfui-language-features-0.4.4.vsix` (3,058,552 bytes).
-- Marketplace publication remains blocked: two local `vsce` attempts failed credential
-  verification with `TF400813`, including the latest retry. The GitHub repository has no
-  `VSCE_PAT` Actions secret; do not create or push `v0.4.4` until an authorized credential
-  publishes the verified local VSIX.
-- Pending release continuation: authenticate with `vsce login SWUST-WEBLAB-LMH` or provide
-  `VSCE_PAT`, publish the verified `0.4.4` VSIX, create/push `v0.4.4` to Gitee and GitHub, wait for
-  the GitHub Release workflow, then record the final release URL and asset size here.
+- Released version: `0.4.4`.
+- Feature commit `ff0cb82`, release commit `488ef6a`, and tag `v0.4.4` are pushed to Gitee and
+  GitHub. Package versions remain aligned at `0.4.4`.
+- Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.4`; the public Gallery
+  API confirms `0.4.4` with update timestamp `2026-07-30T16:04:26.24Z`.
+- GitHub workflow `30559905440` completed successfully and created the public Release:
+  `https://github.com/bloom-lmh/elfui-language-tools/releases/tag/v0.4.4`.
+- GitHub Release asset: `elfui-language-features-0.4.4.vsix` (3,058,357 bytes).
+- Local release artifact: `.local-vsix/elfui-language-features-0.4.4.vsix` (3,058,552 bytes),
+  SHA-256 `B3F4A72659A5C11D122E71E26D920562392BA2C33AB161271CC59C521B10E53B`.
+- The one-time Marketplace PAT was not persisted in the process environment or `.vsce`; because it
+  was disclosed outside the credential store, it must remain revoked after this release.
 - The repeated-save formatting fix, cyan italic component-tag default, regression coverage,
   version bump, full local release gate, and Marketplace publication are complete.
 - Release commit `d1ee25e` and tag `v0.4.3` are pushed to Gitee and GitHub.

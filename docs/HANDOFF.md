@@ -39,8 +39,8 @@ Current maintenance cycle: release `0.4.4` is in progress for the completed edit
 maintenance covering embedded-template attribute formatting, macro diagnostic false positives,
 multiline generic grammar highlighting, and explicitly named bare HTML/CSS template strings.
 Versioning and all local release gates are complete. Feature and release commits plus `main` are
-pushed to Gitee and GitHub. Marketplace publication is blocked by an unavailable valid publisher
-PAT; `v0.4.4` and the GitHub Release intentionally remain pending.
+pushed to Gitee and GitHub. Marketplace publication remains blocked after a second credential
+verification failure; `v0.4.4` and the GitHub Release intentionally remain pending.
 
 ## 2. 已经做的工作
 
@@ -224,9 +224,10 @@ Latest confirmed release baseline for `0.4.3`:
   to Gitee and GitHub `main`; package versions are aligned at `0.4.4`, and the complete local
   release gate plus VSIX packaging are successful.
 - Local release artifact: `.local-vsix/elfui-language-features-0.4.4.vsix` (3,058,552 bytes).
-- Marketplace publication is blocked: the local `vsce` credential failed with `TF400813`, and the
-  GitHub repository has no `VSCE_PAT` Actions secret. Marketplace remains at `0.4.3`; do not create
-  or push `v0.4.4` until an authorized PAT publishes the verified local VSIX.
+- Marketplace publication remains blocked: two local `vsce` attempts failed credential
+  verification with `TF400813`, including the latest retry. The GitHub repository has no
+  `VSCE_PAT` Actions secret; do not create or push `v0.4.4` until an authorized credential
+  publishes the verified local VSIX.
 - Pending release continuation: authenticate with `vsce login SWUST-WEBLAB-LMH` or provide
   `VSCE_PAT`, publish the verified `0.4.4` VSIX, create/push `v0.4.4` to Gitee and GitHub, wait for
   the GitHub Release workflow, then record the final release URL and asset size here.

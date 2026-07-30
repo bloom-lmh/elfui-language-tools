@@ -1,6 +1,6 @@
 # ElfUI Language Tools Maintenance Handoff
 
-Last updated: 2026-07-29
+Last updated: 2026-07-30
 
 This repository, `E:\dev_projects\elfui-official\elfui-language-tools`, is the
 only maintained home for the ElfUI VS Code extension. Do not modify the retired
@@ -35,9 +35,9 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 Current maintained baseline: `0.4.2` released.
 
-Current maintenance cycle: compiler-level incremental template diagnostics are implemented,
-released in ElfUI beta.21, and consumed by the released Language Tools 0.4.2. The completed plan is
-`docs/plans/2026-07-29-compiler-incremental-diagnostics-integration-plan.md`.
+Current maintenance cycle: repeated save formatting for whitespace-sensitive nested `pre` /
+`code` markup is fixed and fully verified. The completed plan is
+`docs/plans/2026-07-29-embedded-formatting-idempotency-fix.md`.
 
 ## 2. 已经做的工作
 
@@ -101,6 +101,13 @@ released in ElfUI beta.21, and consumed by the released Language Tools 0.4.2. Th
 - Published all seven ElfUI `0.1.0-beta.21` packages after the complete Linux release gate passed,
   then pinned Language Tools to `@elfui/compiler@0.1.0-beta.21`.
 - Packaged Language Tools 0.4.2 at 2.92 MiB and published it to the VS Code Marketplace.
+- Made full-document embedded HTML formatting remove accumulated host indentation before invoking
+  the HTML formatter and normalize markup-line indentation inside multiline `pre` content.
+  Repeated formatting and save formatting are now idempotent for the reported nested
+  `pre > code > span` case.
+- Changed the managed ElfUI component-tag name default to Dracula Cyan (`#8BE9FD`) with italic
+  TextMate styling while continuing to honor a configured custom foreground color. Tag
+  punctuation retains the active theme's styling.
 
 ## 3. 未作的工作（将要做的）
 
@@ -134,21 +141,26 @@ released in ElfUI beta.21, and consumed by the released Language Tools 0.4.2. Th
   window and are postponed by interactive requests, while unchanged repeats are cached.
 - The M10 CI pressure gate depends on checking out `bloom-lmh/elfui-kit`; upstream availability is
   therefore part of CI reliability.
-- The local VS Code Inno updater has held `vscode-updating` since 19:44 while 28 Code processes
-  remain open. Development and packaged Host reruns cannot launch until the update completes. The
-  isolated archive fallback reached the official download URL, but the current network path
-  stalled before receiving the archive.
+- The local VS Code test process still logs the recurring updater mutex warning, but development
+  and packaged Host suites both launch and complete successfully.
 
 ## Verification Snapshot
 
-Latest confirmed locally on 2026-07-29 for the `0.4.2` release candidate:
+Latest confirmed locally on 2026-07-30 for the unreleased formatting and highlighting fix:
 
 - `pnpm typecheck`: passed with unused-code checks enabled.
-- `pnpm test`: 7 files, 98 tests passed.
+- `pnpm test`: 7 files, 99 tests passed.
 - `pnpm smoke`: extension startup, Windows/Linux/macOS extraction selection, and 9/9 grammar
   cases passed.
-- `pnpm verify:m10`: 380 Kit source files, 27 macro components, cold index 50.1 ms, warm
-  496/496 cache reuse in 3.6 ms.
+- `pnpm verify:m10`: 387 Kit source files, 28 macro components, cold index 79.2 ms, warm
+  505/505 cache reuse in 3.3 ms.
+- `pnpm smoke:host`: 18/18 development-extension Host tests passed in 27 seconds, including
+  repeated save-format idempotency and cyan italic component-tag styling. Activation was
+  543.0 ms, active prewarm 63.5 ms, first completion 21.50 ms, warm completion p95 4.42 ms,
+  and warm formatting p95 1.48 ms.
+- `pnpm package:vsix`: 115 files, 2.92 MiB, below the 4 MiB budget.
+- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed in 24 seconds, including the same
+  formatting and highlighting coverage.
 - Corrected `pnpm benchmark:diagnostics` with npm beta.20: 117 Kit macro files; 59,061.0 ms cold,
   10.4 ms aggregate repeat, 58,945.3 ms compiler compilation, and 2.8 ms filtering.
 - Local incremental compiler integration: 51,915.7 ms cold and 3.9 ms aggregate repeat, a 12.1%
@@ -161,9 +173,6 @@ Latest confirmed locally on 2026-07-29 for the `0.4.2` release candidate:
   Host logs in 24 seconds. Activation was 524.9 ms, latest server startup 317.1 ms, prewarm
   74.3 ms, first completion 22.90 ms, warm completion p95 5.17 ms, and warm formatting p95
   1.19 ms.
-- `pnpm package:vsix`: 115 files, 2.92 MiB, below the 4 MiB budget.
-- Local `pnpm smoke:vsix`: blocked before extension launch by VS Code's external
-  `vscode-updating` mutex; the GitHub Linux workflow must supply the final packaged Host result.
 - Prior 0.4.1 `pnpm smoke:vsix` baseline: 18/18 packaged-extension Host tests passed on Windows
   with clean Host logs in 24 seconds. Activation was 511.3 ms, latest server startup 472.5 ms,
   prewarm 66.6 ms, first completion 24.78 ms, warm completion p95 3.74 ms, and warm formatting p95
@@ -176,6 +185,8 @@ Latest confirmed locally on 2026-07-29 for the `0.4.2` release candidate:
 ## Release State
 
 - Released version: `0.4.2`.
+- The repeated-save formatting fix, cyan italic component-tag default, regression coverage, and
+  patch changeset are complete locally but not yet released.
 - Editor maintenance commits `80c2daf` and `998f0a9`; formatting/highlighting/navigation fixes and
   interactive-priority diagnostic scheduling are fully verified and pushed to Gitee and GitHub
   `main`.
@@ -185,9 +196,7 @@ Latest confirmed locally on 2026-07-29 for the `0.4.2` release candidate:
   `elfui` repository. ElfUI release commit `5c918a7`, tag `v0.1.0-beta.21`, release workflow
   `30462473620`, all seven npm packages, and the GitHub prerelease are complete.
 - Corrected benchmark, Host fallback, and beta.21 dependency changes are verified through
-  typecheck, 98 tests, smoke/grammar, M10, diagnostics benchmarking, and VSIX packaging. Local Host
-  reruns remain blocked by the external VS Code updater; GitHub workflow `30463741357` supplied
-  the authoritative development and packaged Host results.
+  typecheck, unit tests, smoke/grammar, M10, diagnostics benchmarking, and VSIX packaging.
 - Previous release: Marketplace `0.4.0` published; `v0.4.0` pushed to Gitee/GitHub; GitHub Release
   workflow failed only at Linux VSIX extraction.
 - Release commit: `036ce90`; pushed to Gitee and GitHub `main`.

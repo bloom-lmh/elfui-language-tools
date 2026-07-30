@@ -165,14 +165,14 @@ interface ElfIntegrationReport {
 const componentTagColorScopes = [
   "support.class.component.elfui",
   "entity.name.tag.component.elfui",
-  "punctuation.definition.tag.elfui",
 ];
 
 const componentTagColorRule = {
   name: "ElfUI component tag color",
   scope: componentTagColorScopes,
   settings: {
-    foreground: "#4FC1FF",
+    fontStyle: "italic",
+    foreground: "#8BE9FD",
   },
 };
 
@@ -819,7 +819,7 @@ const applyComponentTagColor = async () => {
   );
   const color = configuration.get<string | null>(
     "componentTagColor",
-    "#4FC1FF",
+    "#8BE9FD",
   );
   const workbenchConfiguration = vscode.workspace.getConfiguration("editor");
   const customizations = workbenchConfiguration.get<Record<string, unknown>>(
@@ -835,6 +835,7 @@ const applyComponentTagColor = async () => {
     nextRules.push({
       ...componentTagColorRule,
       settings: {
+        ...componentTagColorRule.settings,
         foreground: color,
       },
     });

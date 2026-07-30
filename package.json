@@ -227,8 +227,8 @@
             "string",
             "null"
           ],
-          "default": "#4FC1FF",
-          "description": "Color used for ElfUI component tags in template strings. Set to null to stop managing the color."
+          "default": "#8BE9FD",
+          "description": "Color used for ElfUI component tag names in template strings. Set to null to stop managing the color."
         }
       }
     },

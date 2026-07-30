@@ -1205,6 +1205,63 @@ describe("ElfUI language service", () => {
     expect(narrow).toContain('aria-label="Save the current record"');
   });
 
+  it("keeps repeated formatting idempotent inside whitespace-sensitive pre and code elements", () => {
+    const source = `
+      import { defineHtml } from "@elfui/core";
+
+      const codeTick = "\`";
+      const codeArrow = "=>";
+      const codeButtonOpen = "<button>";
+      const codeButtonClose = "</button>";
+      const codeCount = "count";
+
+      export const View = defineHtml(\`
+        <article class="code-panel" aria-label="TypeScript single-file component code">
+          <div class="panel-header">
+            <span>Counter.ts</span>
+            <span class="panel-badge">TS · Macro</span>
+          </div>
+          <pre class="code-content"><code>
+            <span class="code-line" data-line="1"><span class="token-keyword">import</span> { defineHtml } <span class="token-keyword">from</span> "@elfui/core";</span>
+            <span class="code-line" data-line="2"><span class="token-keyword">const</span> count = useRef(0);</span>
+            <span class="code-line" data-line="3">const increment = (): void \${codeArrow} count.set(count.peek() + 1);</span>
+            <span class="code-line" data-line="4">defineStyle(\${codeTick}</span>
+            <span class="code-line indent-1 token-selector" data-line="5">button {</span>
+            <span class="code-line indent-2" data-line="6">width: 188px; height: 128px; border: 0;</span>
+            <span class="code-line indent-1 token-tag" data-line="13">\${codeButtonOpen}</span>
+            <span class="code-line indent-2 token-tag" data-line="14">\${codeCount}\${codeButtonClose}</span>
+            <span class="code-line" data-line="15">\${codeTick});</span>
+          </code></pre>
+        </article>
+      \`);
+    `;
+    const options = {
+      insertSpaces: true,
+      tabSize: 2,
+      wrapLineLength: 120
+    };
+    const format = (value: string) =>
+      applyTextEdits(value, createElfFormattingEdits(createDocument(value), options));
+    const driftedSource = source.replace(
+      /^([ \t]*)(<span class="code-line")/gm,
+      (_match, indent: string, tag: string) => `${indent}${" ".repeat(32)}${tag}`
+    );
+    const formattedOnce = format(driftedSource);
+    const formattedTwice = format(formattedOnce);
+    const formattedThreeTimes = format(formattedTwice);
+    const formattedLines = formattedOnce.split("\n");
+    const preLine = formattedLines.find((line) => line.includes('<pre class="code-content">')) ?? "";
+    const firstCodeLine =
+      formattedLines.find((line) => line.includes('class="code-line" data-line="1"')) ?? "";
+    const closingLine = formattedLines.find((line) => line.includes("</code></pre>")) ?? "";
+    const indentSize = (line: string) => line.match(/^[ \t]*/)?.[0].length ?? 0;
+
+    expect(formattedTwice).toBe(formattedOnce);
+    expect(formattedThreeTimes).toBe(formattedOnce);
+    expect(indentSize(firstCodeLine)).toBe(indentSize(preLine) + options.tabSize);
+    expect(indentSize(closingLine)).toBe(indentSize(preLine));
+  });
+
   it("reports macro template TypeScript diagnostics", () => {
     const source = `
       /// <!--@elf component-->

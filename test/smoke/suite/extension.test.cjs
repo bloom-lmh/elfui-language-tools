@@ -827,6 +827,10 @@ suite("ElfUI Language Features Smoke", function () {
         "  <section>",
         '    <button type="button" aria-label="Save the current record">{{ count }}</button>',
         "    <span>${count.value}</span>",
+        '    <pre class="code-content"><code>',
+        '                                  <span class="code-line" data-line="1"><span>const</span> count = useRef(0);</span>',
+        '                                  <span class="code-line" data-line="2"><HomeHero /></span>',
+        "            </code></pre>",
         "  </section>",
         "`);",
         "const styles = defineStyle(`:host{color:red;display:block;}`);",
@@ -889,10 +893,37 @@ suite("ElfUI Language Features Smoke", function () {
             document.getText()
           ) &&
           /\n {12}aria-label="Save the current record"/.test(document.getText()) &&
+          /\n {8}<pre class="code-content"><code>\n {9,}<span class="code-line"/.test(
+            document.getText()
+          ) &&
           /defineStyle\(`\n\s*:host \{\n\s*color: red;\n\s*display: block;\n\s*\}/.test(
             document.getText()
-          ),
+          ) &&
+          !document.isDirty,
         () => `embedded save formatting; current source:\n${document.getText()}`
+      );
+
+      await editor.edit((editBuilder) => {
+        editBuilder.insert(document.positionAt(document.getText().length), " ");
+      });
+      assert.equal(await document.save(), true, "Expected the repeated fixture save to succeed.");
+      await waitFor(
+        () =>
+          !document.isDirty &&
+          /\n {8}<pre class="code-content"><code>\n {12}<span class="code-line"/.test(
+            document.getText()
+          ),
+        () => `configured repeated save formatting; current source:\n${document.getText()}`
+      );
+
+      const stableFormatting = document.getText();
+      await editor.edit((editBuilder) => {
+        editBuilder.insert(document.positionAt(document.getText().length), " ");
+      });
+      assert.equal(await document.save(), true, "Expected the idempotency save to succeed.");
+      await waitFor(
+        () => (!document.isDirty && document.getText() === stableFormatting ? true : undefined),
+        () => `idempotent repeated save formatting; current source:\n${document.getText()}`
       );
     } finally {
       await editorConfiguration.update(
@@ -935,10 +966,10 @@ suite("ElfUI Language Features Smoke", function () {
 
     assert.deepEqual(rule.scope, [
       "support.class.component.elfui",
-      "entity.name.tag.component.elfui",
-      "punctuation.definition.tag.elfui"
+      "entity.name.tag.component.elfui"
     ]);
     assert.equal(rule.settings.foreground, "#4299e1");
+    assert.equal(rule.settings.fontStyle, "italic");
   });
 
   test("covers macro aliases, models and typed slot scopes", async () => {

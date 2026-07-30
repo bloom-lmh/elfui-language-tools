@@ -7022,8 +7022,12 @@ const formatEmbeddedRegion = (
           insertSpaces: options.insertSpaces,
           tabSize: options.tabSize
         };
+  const formattingSource =
+    region.kind === "template" && !sourceRange
+      ? normalizeTemplateFormattingSource(virtualDocument.getText(), options)
+      : virtualDocument.getText();
   const protectedTemplate =
-    region.kind === "template" ? protectTemplateExpressions(virtualDocument.getText()) : undefined;
+    region.kind === "template" ? protectTemplateExpressions(formattingSource) : undefined;
   const formattingDocument = protectedTemplate
     ? TextDocument.create(virtualDocument.uri, virtualDocument.languageId, virtualDocument.version, protectedTemplate.source)
     : virtualDocument;
@@ -7333,6 +7337,70 @@ const formatEmbeddedCodeBlock = (
   }
 
   return `\n${indentLines(trimmedContent, contentIndent)}\n${closingIndent}`;
+};
+
+const normalizeTemplateFormattingSource = (
+  content: string,
+  options: ElfFormattingOptions
+): string => {
+  const dedented = removeCommonFormattingIndent(content);
+  return normalizePreformattedMarkupIndent(dedented, createIndentUnit(options));
+};
+
+const removeCommonFormattingIndent = (content: string): string => {
+  const newLine = content.includes("\r\n") ? "\r\n" : "\n";
+  const lines = content.split(/\r?\n/);
+  const contentLines = lines.filter((line) => line.trim());
+
+  if (contentLines.length === 0) {
+    return content;
+  }
+
+  const commonIndent = Math.min(
+    ...contentLines.map((line) => line.match(/^[ \t]*/)?.[0].length ?? 0)
+  );
+
+  if (commonIndent === 0) {
+    return content;
+  }
+
+  return lines
+    .map((line) => {
+      const lineIndent = line.match(/^[ \t]*/)?.[0].length ?? 0;
+      return line.slice(Math.min(lineIndent, commonIndent));
+    })
+    .join(newLine);
+};
+
+const normalizePreformattedMarkupIndent = (content: string, indentUnit: string): string => {
+  const newLine = content.includes("\r\n") ? "\r\n" : "\n";
+  const lines = content.split(/\r?\n/);
+  let preIndent: string | undefined;
+
+  return lines
+    .map((line) => {
+      const trimmed = line.trim();
+
+      if (preIndent === undefined) {
+        if (/<pre(?:\s|>)/i.test(line) && !/<\/pre\s*>/i.test(line)) {
+          preIndent = line.match(/^[ \t]*/)?.[0] ?? "";
+        }
+        return line;
+      }
+
+      const closesPre = /<\/pre\s*>/i.test(line);
+      const normalizedLine =
+        trimmed.startsWith("<") && trimmed
+          ? `${closesPre ? preIndent : `${preIndent}${indentUnit}`}${trimmed}`
+          : line;
+
+      if (closesPre) {
+        preIndent = undefined;
+      }
+
+      return normalizedLine;
+    })
+    .join(newLine);
 };
 
 const createIndentUnit = (options: ElfFormattingOptions) =>

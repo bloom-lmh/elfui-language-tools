@@ -35,9 +35,10 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 Current maintained baseline: `0.4.4` fully released.
 
-Current maintenance cycle: `0.4.5` is versioned and has passed the complete local release gate for
-Prettier-compatible embedded HTML wrapping. Release commit/tag, both remote pushes, Marketplace
-publication, GitHub workflow/Release verification, and final public-state checks are pending.
+Current maintenance cycle: `0.4.5` is versioned, has passed the complete local release gate, and
+release commit `0be9121` is pushed to Gitee and GitHub `main`. Marketplace publication is blocked
+because this machine has no valid VSCE PAT (`TF400813`). Per release policy, tag creation, the
+GitHub workflow/Release, and final public-state checks remain pending until Marketplace succeeds.
 
 ## 2. 已经做的工作
 
@@ -245,8 +246,12 @@ Latest confirmed release baseline for `0.4.3`:
 - Released version: `0.4.4`.
 - Pending release: `0.4.5` is versioned and fully verified locally. Candidate artifact:
   `.local-vsix/elfui-language-features-0.4.5.vsix` (3,059,278 bytes), SHA-256
-  `186F781A1D385B3F44FCD5883088E01ECF27A700B438A2BD39C344435132080B`. Commit, tag, pushes,
-  Marketplace publication, and GitHub Release remain pending.
+  `186F781A1D385B3F44FCD5883088E01ECF27A700B438A2BD39C344435132080B`.
+- Release commit `0be9121` is pushed to Gitee and GitHub `main`. GitHub required-rule bypass was
+  accepted for the direct maintained-main push.
+- Local Marketplace publication failed before upload with `TF400813` because no valid VSCE PAT is
+  available. No `v0.4.5` tag or GitHub Release exists yet; both intentionally wait for successful
+  Marketplace publication.
 - Feature commit `ff0cb82`, release commit `488ef6a`, and tag `v0.4.4` are pushed to Gitee and
   GitHub. Package versions remain aligned at `0.4.4`.
 - Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.4`; the public Gallery

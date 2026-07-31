@@ -33,12 +33,12 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 - Treat `elfui`, `elfui-docs`, and `elfui-kit` as read-only compatibility inputs unless a future
   task explicitly authorizes changes in those repositories.
 
-Current maintained baseline: `0.4.4` fully released.
+Current maintained baseline: `0.4.5` fully released.
 
-Current maintenance cycle: `0.4.5` is versioned, has passed the complete local release gate, and
-release commit `0be9121` is pushed to Gitee and GitHub `main`. Marketplace publication succeeded
-with a one-time PAT that was not persisted; public Gallery propagation, tag creation/push, the
-GitHub workflow/Release, and final public-state checks remain pending.
+Current maintenance cycle: `0.4.5` is fully released. The complete local and GitHub gates passed,
+Marketplace public discovery returns `0.4.5`, annotated tag `v0.4.5` is pushed to Gitee and
+GitHub, and the public GitHub Release contains the verified VSIX asset. Only this final handoff
+sync remains to be committed and pushed.
 
 ## 2. 已经做的工作
 
@@ -243,8 +243,8 @@ Latest confirmed release baseline for `0.4.3`:
 
 ## Release State
 
-- Released version: `0.4.4`.
-- Pending release: `0.4.5` is versioned and fully verified locally. Candidate artifact:
+- Released version: `0.4.5`.
+- Local release artifact:
   `.local-vsix/elfui-language-features-0.4.5.vsix` (3,059,278 bytes), SHA-256
   `186F781A1D385B3F44FCD5883088E01ECF27A700B438A2BD39C344435132080B`.
 - Release commit `0be9121` is pushed to Gitee and GitHub `main`. GitHub required-rule bypass was
@@ -252,9 +252,12 @@ Latest confirmed release baseline for `0.4.3`:
 - An initial Marketplace attempt failed before upload with `TF400813`; a user-supplied one-time
   PAT then published `SWUST-WEBLAB-LMH.elfui-language-features v0.4.5` successfully. The PAT was
   not written to `.vsce` or the repository, the process environment was cleared, and the clipboard
-  was overwritten. Public Gallery propagation is pending.
-- No `v0.4.5` tag or GitHub Release exists yet; tag creation is the next release step now that the
-  authoritative Marketplace publish command succeeded.
+  was overwritten. Public Gallery discovery now confirms `0.4.5` as the latest of 38 versions.
+- Annotated tag `v0.4.5` points to Marketplace-publication record commit `bec5703` and is pushed to
+  Gitee and GitHub.
+- GitHub workflow `30644574802` completed successfully and created the public Release:
+  `https://github.com/bloom-lmh/elfui-language-tools/releases/tag/v0.4.5`.
+- GitHub Release asset: `elfui-language-features-0.4.5.vsix` (3,059,081 bytes).
 - Feature commit `ff0cb82`, release commit `488ef6a`, and tag `v0.4.4` are pushed to Gitee and
   GitHub. Package versions remain aligned at `0.4.4`.
 - Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.4`; the public Gallery

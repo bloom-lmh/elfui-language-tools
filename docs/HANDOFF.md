@@ -1,6 +1,6 @@
 # ElfUI Language Tools Maintenance Handoff
 
-Last updated: 2026-07-30
+Last updated: 2026-07-31
 
 This repository, `E:\elfui-language-tools`, is the
 only maintained home for the ElfUI VS Code extension. Do not modify the retired
@@ -35,9 +35,9 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 
 Current maintained baseline: `0.4.4` fully released.
 
-Current maintenance cycle: Language Tools `0.4.4` passed the complete local and GitHub release
-gates, is published to the VS Code Marketplace, and has matching Gitee/GitHub tags plus a public
-GitHub Release with the verified VSIX asset.
+Current maintenance cycle: `0.4.5` is versioned and has passed the complete local release gate for
+Prettier-compatible embedded HTML wrapping. Release commit/tag, both remote pushes, Marketplace
+publication, GitHub workflow/Release verification, and final public-state checks are pending.
 
 ## 2. 已经做的工作
 
@@ -111,6 +111,13 @@ GitHub Release with the verified VSIX asset.
 - Embedded HTML formatting now maps `prettier.singleAttributePerLine: true` to the HTML language
   service's `force-expand-multiline` strategy. Users can override it explicitly with
   `elfui.languageFeatures.formatting.wrapAttributes`.
+- Added a `prettier` embedded-HTML wrapping strategy for the default
+  `prettier.singleAttributePerLine: false` case. It reuses protected template expressions, keeps
+  short tags compact, expands over-width start tags to one attribute per line, follows
+  `prettier.bracketSameLine`, and stays idempotent across repeated document/save formatting.
+- Extended unit and real development/packaged Host coverage to assert the reported Button layout:
+  long start tags expand, short multi-attribute `slot`/`span` tags remain on one line, and the
+  closing bracket is placed on its own line when configured.
 - Component `:key` bindings no longer surface the beta.21 compiler's reserved-attribute prop-name
   false positive. Diagnostics within the key expression remain active.
 - TextMate highlighting now supports multiline generic arguments in `defineHtml<...>(...)` and
@@ -159,6 +166,25 @@ GitHub Release with the verified VSIX asset.
   under lower contention before treating a timeout-only result as a regression.
 
 ## Verification Snapshot
+
+Latest confirmed locally on 2026-07-31 for the `0.4.5` release candidate:
+
+- `pnpm typecheck`: passed; it also passed inside both development Host build and VSIX packaging.
+- `pnpm test`: 7 files, 105 tests passed in 25.65 seconds with the original timeout thresholds.
+- `pnpm smoke`: extension startup and 12/12 grammar cases passed.
+- `pnpm verify:m10`: passed with 417 Kit source files, 125 style files, 25 macro components,
+  98.2 ms cold indexing, and 542/542 warm cache reuse in 24.3 ms.
+- `pnpm smoke:host`: 18/18 passed, including Prettier-style embedded save formatting and three
+  stable saves. Activation was 551.26 ms, active prewarm 72.32 ms, first completion 43.71 ms,
+  warm completion p95 34.49 ms, and warm formatting p95 6.79 ms. The suite passed all enforced
+  budgets despite transient Windows process contention during metadata generation.
+- `pnpm package:vsix`: 115 files and 3,059,278 bytes (2.92 MiB), below the 4 MiB budget. SHA-256:
+  `186F781A1D385B3F44FCD5883088E01ECF27A700B438A2BD39C344435132080B`.
+- `pnpm smoke:vsix`: 18/18 packaged-extension Host tests passed. Activation was 533.27 ms,
+  active prewarm 72.79 ms, first completion 28.28 ms, warm completion p95 4.71 ms, and warm
+  formatting p95 1.20 ms.
+- `git diff --check`: passed; the working tree contains only this maintenance cycle's tracked
+  edits and its new changeset.
 
 Latest confirmed locally on 2026-07-30 for the `0.4.4` release candidate:
 
@@ -217,6 +243,10 @@ Latest confirmed release baseline for `0.4.3`:
 ## Release State
 
 - Released version: `0.4.4`.
+- Pending release: `0.4.5` is versioned and fully verified locally. Candidate artifact:
+  `.local-vsix/elfui-language-features-0.4.5.vsix` (3,059,278 bytes), SHA-256
+  `186F781A1D385B3F44FCD5883088E01ECF27A700B438A2BD39C344435132080B`. Commit, tag, pushes,
+  Marketplace publication, and GitHub Release remain pending.
 - Feature commit `ff0cb82`, release commit `488ef6a`, and tag `v0.4.4` are pushed to Gitee and
   GitHub. Package versions remain aligned at `0.4.4`.
 - Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.4`; the public Gallery

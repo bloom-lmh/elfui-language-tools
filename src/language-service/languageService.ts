@@ -62,8 +62,9 @@ import {
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 interface ElfFormattingOptions extends LspFormattingOptions {
+  bracketSameLine?: boolean;
   elfuiExternalFormatter?: boolean;
-  wrapAttributes?: HTMLFormatConfiguration["wrapAttributes"];
+  wrapAttributes?: HTMLFormatConfiguration["wrapAttributes"] | "prettier";
   wrapLineLength?: number;
 }
 
@@ -7045,13 +7046,25 @@ const formatEmbeddedRegion = (
     region.kind === "template"
       ? htmlLanguageService.format(formattingDocument, virtualRange, {
           ...formatOptions,
-          wrapAttributes: options.wrapAttributes ?? "auto"
+          wrapAttributes:
+            options.wrapAttributes === "prettier"
+              ? "auto"
+              : (options.wrapAttributes ?? "auto")
         })
       : cssLanguageService.format(formattingDocument, virtualRange, formatOptions);
 
   if (!sourceRange) {
+    const formattedFormattingSource = applyVirtualTextEdits(
+      formattingDocument.getText(),
+      formattingDocument,
+      edits
+    );
+    const formattedTemplateSource =
+      region.kind === "template" && options.wrapAttributes === "prettier"
+        ? formatPrettierStyleStartTags(formattedFormattingSource, options)
+        : formattedFormattingSource;
     const formattedContent = restoreTemplateExpressions(
-      applyVirtualTextEdits(formattingDocument.getText(), formattingDocument, edits),
+      formattedTemplateSource,
       protectedTemplate,
       options
     );
@@ -7078,6 +7091,128 @@ const formatEmbeddedRegion = (
       newText: restoreTemplateExpressions(edit.newText, protectedTemplate)
     })
   );
+};
+
+interface TemplateStartTagLayout {
+  attributes: string[];
+  closeText: string;
+  end: number;
+  name: string;
+  start: number;
+}
+
+/**
+ * Reproduces Prettier's all-or-nothing start-tag layout without bundling the full formatter:
+ * compact tags stay on one line, while over-width tags place every attribute on its own line.
+ */
+const formatPrettierStyleStartTags = (
+  source: string,
+  options: ElfFormattingOptions
+): string => {
+  const indentUnit = createIndentUnit(options);
+  const printWidth = options.wrapLineLength ?? 80;
+  const replacements = collectTemplateStartTagLayouts(source).flatMap((tag) => {
+    const lineStart = Math.max(0, source.lastIndexOf("\n", tag.start) + 1);
+    const beforeTag = source.slice(lineStart, tag.start);
+    const baseIndent = /^[\t ]*$/.test(beforeTag)
+      ? beforeTag
+      : (beforeTag.match(/^[\t ]*/)?.[0] ?? "");
+    const flatTag = `<${tag.name}${tag.attributes
+      .map((attribute) => ` ${attribute}`)
+      .join("")}${tag.closeText}`;
+    let newText = flatTag;
+
+    if (tag.attributes.length > 0 && tag.start - lineStart + flatTag.length > printWidth) {
+      const attributeIndent = `${baseIndent}${indentUnit}`;
+      const attributeLines = tag.attributes.map(
+        (attribute) => `${attributeIndent}${attribute}`
+      );
+
+      if (options.bracketSameLine) {
+        attributeLines[attributeLines.length - 1] = `${attributeLines.at(-1)}${tag.closeText}`;
+        newText = [`<${tag.name}`, ...attributeLines].join("\n");
+      } else {
+        newText = [`<${tag.name}`, ...attributeLines, `${baseIndent}${tag.closeText}`].join(
+          "\n"
+        );
+      }
+    }
+
+    return source.slice(tag.start, tag.end) === newText
+      ? []
+      : [{ end: tag.end, newText, start: tag.start }];
+  });
+
+  return replacements
+    .sort((left, right) => right.start - left.start)
+    .reduce(
+      (current, replacement) =>
+        `${current.slice(0, replacement.start)}${replacement.newText}${current.slice(
+          replacement.end
+        )}`,
+      source
+    );
+};
+
+const collectTemplateStartTagLayouts = (source: string): TemplateStartTagLayout[] => {
+  const scanner = htmlLanguageService.createScanner(source);
+  const tags: TemplateStartTagLayout[] = [];
+  let current:
+    | Omit<TemplateStartTagLayout, "closeText" | "end">
+    | undefined;
+  let attributeStart: number | undefined;
+
+  const finishAttribute = (end: number) => {
+    if (!current || attributeStart === undefined) {
+      return;
+    }
+
+    const attribute = source.slice(attributeStart, end).trim();
+    if (attribute) {
+      current.attributes.push(attribute);
+    }
+    attributeStart = undefined;
+  };
+
+  for (let token = scanner.scan(); token !== TokenType.EOS; token = scanner.scan()) {
+    const tokenOffset = scanner.getTokenOffset();
+
+    if (token === TokenType.StartTagOpen) {
+      current = { attributes: [], name: "", start: tokenOffset };
+      attributeStart = undefined;
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    if (token === TokenType.StartTag) {
+      current.name = scanner.getTokenText();
+      continue;
+    }
+
+    if (token === TokenType.AttributeName) {
+      finishAttribute(tokenOffset);
+      attributeStart = tokenOffset;
+      continue;
+    }
+
+    if (token === TokenType.StartTagClose || token === TokenType.StartTagSelfClose) {
+      finishAttribute(tokenOffset);
+      if (current.name) {
+        tags.push({
+          ...current,
+          closeText: scanner.getTokenText(),
+          end: scanner.getTokenEnd()
+        });
+      }
+      current = undefined;
+      attributeStart = undefined;
+    }
+  }
+
+  return tags;
 };
 
 interface ProtectedTemplateExpressions {

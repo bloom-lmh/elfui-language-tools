@@ -2,7 +2,7 @@
   "name": "elfui-language-features",
   "displayName": "ElfUI Language Tools",
   "description": "VS Code language features for ElfUI macro components. Chain builder support is provided by the optional ElfUI Chain Language Tools extension.",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "license": "MIT",
   "type": "commonjs",
   "publisher": "SWUST-WEBLAB-LMH",
@@ -213,6 +213,7 @@
           "default": null,
           "enum": [
             null,
+            "prettier",
             "auto",
             "force",
             "force-aligned",
@@ -221,7 +222,7 @@
             "preserve",
             "preserve-aligned"
           ],
-          "description": "Attribute wrapping for embedded ElfUI HTML. When unset, prettier.singleAttributePerLine=true maps to force-expand-multiline; otherwise the HTML formatter uses auto."
+          "description": "Attribute wrapping for embedded ElfUI HTML. The prettier strategy keeps short start tags compact, expands over-width start tags to one attribute per line, and follows prettier.bracketSameLine. When unset, prettier.singleAttributePerLine=true maps to force-expand-multiline; otherwise prettier is used."
         },
         "elfui.languageFeatures.workspace.maxScanFiles": {
           "type": "number",

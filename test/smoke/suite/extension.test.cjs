@@ -825,8 +825,8 @@ suite("ElfUI Language Features Smoke", function () {
         "const count = useRef(0);",
         "const view = defineHtml(`",
         "  <section>",
-        '    <button type="button" aria-label="Save the current record">{{ count }}</button>',
-        "    <span>${count.value}</span>",
+        '    <button type="button" class="primary-action" aria-label="Save the current record">{{ count }}</button>',
+        '    <span class="count" aria-live="polite">${count.value}</span>',
         '    <pre class="code-content"><code>',
         '                                  <span class="code-line" data-line="1"><span>const</span> count = useRef(0);</span>',
         '                                  <span class="code-line" data-line="2"><HomeHero /></span>',
@@ -878,12 +878,12 @@ suite("ElfUI Language Features Smoke", function () {
       await editorConfiguration.update("insertSpaces", true, vscode.ConfigurationTarget.Workspace);
       await formattingConfiguration.update(
         "printWidth",
-        160,
+        80,
         vscode.ConfigurationTarget.Workspace
       );
       await formattingConfiguration.update(
         "wrapAttributes",
-        "force-expand-multiline",
+        "prettier",
         vscode.ConfigurationTarget.Workspace
       );
       await editor.edit((editBuilder) => {
@@ -898,8 +898,12 @@ suite("ElfUI Language Features Smoke", function () {
           /defineHtml\(`\n {4}<section>\n {8}<button\n {12}type="button"/.test(
             document.getText()
           ) &&
+          /\n {12}class="primary-action"/.test(document.getText()) &&
           /\n {12}aria-label="Save the current record"/.test(document.getText()) &&
           /\n {8}>\{\{ count \}\}<\/button>/.test(document.getText()) &&
+          /\n {8}<span class="count" aria-live="polite">\$\{count\.value\}<\/span>/.test(
+            document.getText()
+          ) &&
           /\n {8}<pre class="code-content"><code>\n {9,}<span class="code-line"/.test(
             document.getText()
           ) &&

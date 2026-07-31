@@ -89,7 +89,7 @@ describe("language service configuration", () => {
 
   it("maps Prettier singleAttributePerLine to expanded multiline attributes", () => {
     expect(resolveAttributeWrapping(undefined, true)).toBe("force-expand-multiline");
-    expect(resolveAttributeWrapping(null, false)).toBeUndefined();
+    expect(resolveAttributeWrapping(null, false)).toBe("prettier");
   });
 
   it("keeps an explicit ElfUI attribute wrapping strategy authoritative", () => {

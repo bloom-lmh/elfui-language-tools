@@ -1241,6 +1241,53 @@ describe("ElfUI language service", () => {
     expect(formatted).toMatch(/\n\s+><\/div>/);
   });
 
+  it("uses Prettier-style wrapping for long and short embedded HTML start tags", () => {
+    const source = [
+      'import { defineHtml } from "@elfui/core";',
+      "",
+      "export const Button = defineHtml(`",
+      '<button ref="button" part="button" :type=${normalizedNativeType()} :disabled=${props.disabled || props.loading} :aria-busy=${props.loading} :aria-label=${props.ariaLabel || null} :autofocus=${props.autofocus} :form=${props.form || null} @click=${handleClick}>',
+      '<slot v-if=${props.loading} name="loading">',
+      '<span v-if=${props.loadingIcon} class="prop-icon" aria-hidden="true">${props.loadingIcon}</span>',
+      '<span v-else class="spinner" aria-hidden="true"></span>',
+      "</slot>",
+      "</button>",
+      "`);",
+      ""
+    ].join("\n");
+    const document = createDocument(source);
+    const options = {
+      bracketSameLine: false,
+      insertSpaces: true,
+      tabSize: 2,
+      wrapAttributes: "prettier" as const,
+      wrapLineLength: 100
+    };
+    const formatted = applyTextEdits(
+      source,
+      createElfFormattingEdits(document, options)
+    );
+    const formattedTwice = applyTextEdits(
+      formatted,
+      createElfFormattingEdits(createDocument(formatted), options)
+    );
+    const sameLineBracket = applyTextEdits(
+      source,
+      createElfFormattingEdits(document, { ...options, bracketSameLine: true })
+    );
+
+    expect(formatted).toContain("  <button\n    ref=\"button\"");
+    expect(formatted).toContain("    @click=${handleClick}\n  >");
+    expect(formatted).toContain(
+      '    <slot v-if=${props.loading} name="loading">'
+    );
+    expect(formatted).toContain(
+      '      <span v-if=${props.loadingIcon} class="prop-icon" aria-hidden="true">${props.loadingIcon}</span>'
+    );
+    expect(formattedTwice).toBe(formatted);
+    expect(sameLineBracket).toContain("    @click=${handleClick}>");
+  });
+
   it("keeps repeated formatting idempotent inside whitespace-sensitive pre and code elements", () => {
     const source = `
       import { defineHtml } from "@elfui/core";

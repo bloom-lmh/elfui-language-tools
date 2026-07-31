@@ -1,5 +1,11 @@
 # elfui-language-features
 
+## 0.4.5
+
+### Patch Changes
+
+- Format embedded ElfUI HTML with Prettier-compatible start-tag wrapping and closing-bracket placement.
+
 ## 0.4.4
 
 ### Patch Changes

@@ -15,6 +15,7 @@ import { resolveAttributeWrapping, type ElfAttributeWrapping } from "./formattin
 
 const supportedLanguages = ["typescript", "typescriptreact", "javascript", "javascriptreact"];
 type ElfDocumentFormattingOptions = vscode.FormattingOptions & {
+  bracketSameLine?: boolean;
   wrapAttributes?: ElfAttributeWrapping;
   wrapLineLength?: number;
 };
@@ -54,9 +55,11 @@ export const resolveDocumentFormattingOptions = (
     configuredAttributeWrapping,
     prettier.get<boolean>("singleAttributePerLine", false)
   );
+  const bracketSameLine = prettier.get<boolean>("bracketSameLine", false);
 
   return {
     ...options,
+    bracketSameLine,
     ...(wrapAttributes ? { wrapAttributes } : {}),
     ...(wrapLineLength === undefined
       ? {}

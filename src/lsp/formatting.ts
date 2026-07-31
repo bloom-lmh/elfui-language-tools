@@ -1,4 +1,5 @@
 export const supportedAttributeWrapping = [
+  "prettier",
   "auto",
   "force",
   "force-aligned",
@@ -18,5 +19,5 @@ export const resolveAttributeWrapping = (
     return configured as ElfAttributeWrapping;
   }
 
-  return prettierSingleAttributePerLine ? "force-expand-multiline" : undefined;
+  return prettierSingleAttributePerLine ? "force-expand-multiline" : "prettier";
 };

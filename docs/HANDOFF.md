@@ -36,9 +36,9 @@ This file is the required state ledger for ongoing maintenance, not a one-time s
 Current maintained baseline: `0.4.4` fully released.
 
 Current maintenance cycle: `0.4.5` is versioned, has passed the complete local release gate, and
-release commit `0be9121` is pushed to Gitee and GitHub `main`. Marketplace publication is blocked
-because this machine has no valid VSCE PAT (`TF400813`). Per release policy, tag creation, the
-GitHub workflow/Release, and final public-state checks remain pending until Marketplace succeeds.
+release commit `0be9121` is pushed to Gitee and GitHub `main`. Marketplace publication succeeded
+with a one-time PAT that was not persisted; public Gallery propagation, tag creation/push, the
+GitHub workflow/Release, and final public-state checks remain pending.
 
 ## 2. 已经做的工作
 
@@ -249,9 +249,12 @@ Latest confirmed release baseline for `0.4.3`:
   `186F781A1D385B3F44FCD5883088E01ECF27A700B438A2BD39C344435132080B`.
 - Release commit `0be9121` is pushed to Gitee and GitHub `main`. GitHub required-rule bypass was
   accepted for the direct maintained-main push.
-- Local Marketplace publication failed before upload with `TF400813` because no valid VSCE PAT is
-  available. No `v0.4.5` tag or GitHub Release exists yet; both intentionally wait for successful
-  Marketplace publication.
+- An initial Marketplace attempt failed before upload with `TF400813`; a user-supplied one-time
+  PAT then published `SWUST-WEBLAB-LMH.elfui-language-features v0.4.5` successfully. The PAT was
+  not written to `.vsce` or the repository, the process environment was cleared, and the clipboard
+  was overwritten. Public Gallery propagation is pending.
+- No `v0.4.5` tag or GitHub Release exists yet; tag creation is the next release step now that the
+  authoritative Marketplace publish command succeeded.
 - Feature commit `ff0cb82`, release commit `488ef6a`, and tag `v0.4.4` are pushed to Gitee and
   GitHub. Package versions remain aligned at `0.4.4`.
 - Marketplace: published as `SWUST-WEBLAB-LMH.elfui-language-features v0.4.4`; the public Gallery

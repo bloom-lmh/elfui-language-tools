@@ -312,7 +312,7 @@
     "vscode-languageserver-textdocument": "latest"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^2.31.1",
     "@types/node": "25.8.0",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.5.2",
